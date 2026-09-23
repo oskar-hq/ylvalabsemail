@@ -18,7 +18,7 @@
   <nav class="mono">
     <a href="{{ url_for('compose') }}" class="{{ 'on' if request.endpoint == 'compose' }}">01 Verfassen</a>
     <a href="{{ url_for('history') }}" class="{{ 'on' if request.endpoint == 'history' }}">02 Verlauf</a>
-    <span class="who">{{ account.address or account.user }}</span>
+    {% if account.demo %}<span class="pill demo">Demo · kein Versand</span>{% else %}<span class="who">{{ account.address or account.user }}</span>{% endif %}
     <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="link mono">Abmelden</button></form>
   </nav>
 </header>

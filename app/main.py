@@ -44,6 +44,7 @@ SETTINGS = {
     "SEND_DELAY": float(env("SEND_DELAY", "1")),
     "MAX_RECIPIENTS": int(env("MAX_RECIPIENTS", "200")),
     "SESSION_HOURS": float(env("SESSION_HOURS", "12")),
+    "DEMO_MODE": env("DEMO_MODE", "false").lower() in ("1", "true", "yes"),
     "DATA_DIR": Path(env("DATA_DIR", str(ROOT / "data"))),
 }
 UPLOAD_DIR = SETTINGS["DATA_DIR"] / "uploads"
@@ -157,6 +158,7 @@ def csrf_token():
 
 
 app.jinja_env.globals["csrf_token"] = csrf_token
+app.jinja_env.globals["demo_enabled"] = SETTINGS["DEMO_MODE"]
 
 
 @app.before_request
@@ -219,6 +221,20 @@ def login():
     if current_account():
         return redirect(url_for("compose"))
     return render_template("login.html")
+
+
+@app.post("/demo")
+def demo_login():
+    """Demo-Modus: ohne Postfach alles ausprobieren, verschickt wird nichts."""
+    if not SETTINGS["DEMO_MODE"]:
+        abort(404)
+    sid = secrets.token_urlsafe(32)
+    with _sessions_lock:
+        _sessions[sid] = {"user": "demo", "password": "", "since": time.time(),
+                          "address": "demo@ylvalabs.de", "demo": True}
+    session.clear()
+    session["sid"] = sid
+    return redirect(url_for("compose"))
 
 
 @app.post("/logout")
@@ -401,6 +417,15 @@ def send():
         return jsonify(error="Bitte ein Bild hochladen oder eine andere Grafik wählen."), 400
 
     img = image_path(form)
+    if account.get("demo"):
+        if not test:
+            return jsonify(demo=True, would_send=len(rcpts))
+        # Statt zu senden: die fertige Mail als .eml-Datei zum Öffnen im Mailprogramm
+        msg = emailbuild.build_message(form, rcpts[0], SETTINGS, account["address"], img)
+        msg.replace_header("To", account["address"])
+        name = re.sub(r"[^\w\-]+", "-", form.get("subject", "mail")).strip("-")[:60] or "mail"
+        return Response(msg.as_bytes(), mimetype="message/rfc822",
+                        headers={"Content-Disposition": f'attachment; filename="{name}.eml"'})
     sent, failed, sent_msgs = [], [], []
     try:
         smtp = smtp_connect(account["user"], account["password"])

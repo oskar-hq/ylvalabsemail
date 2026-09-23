@@ -15,6 +15,13 @@
       <label><span class="label">Passwort</span><input name="password" type="password" autocomplete="current-password" required></label>
       <button class="btn primary" type="submit">Anmelden</button>
     </form>
+    {% if demo_enabled %}
+    <form method="post" action="{{ url_for('demo_login') }}" class="demo-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <p class="muted small">Noch kein Postfach? Im Demo-Modus kannst du alles ausprobieren. Verschickt wird dabei nichts.</p>
+      <button class="btn" type="submit">Demo ansehen</button>
+    </form>
+    {% endif %}
   </div>
   <div class="band" aria-hidden="true" style="--band:url('{{ url_for('static', filename='band.svg') }}')"></div>
 </main>

@@ -126,7 +126,8 @@
   </section>
 
   <div class="actions">
-    <button type="button" class="btn" id="testBtn">Testmail an mich</button>
+    {% if account.demo %}<span class="demo-note">Demo: Es wird nichts verschickt.</span>{% endif %}
+    <button type="button" class="btn" id="testBtn">{{ 'Als Datei laden' if account.demo else 'Testmail an mich' }}</button>
     <button type="button" class="btn primary" id="sendBtn">Senden</button>
   </div>
 </form>

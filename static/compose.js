@@ -218,9 +218,21 @@
     fd.append('mode', mode);
     try {
       const res = await fetch('/send', { method: 'POST', body: fd, headers: { 'X-CSRF-Token': csrf } });
+      if (res.ok && (res.headers.get('Content-Type') || '').startsWith('message/rfc822')) {
+        // Demo-Modus: fertige Mail als .eml herunterladen
+        const blob = await res.blob();
+        const name = (res.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1] || 'mail.eml';
+        const a = Object.assign(document.createElement('a'), { href: URL.createObjectURL(blob), download: name });
+        document.body.append(a); a.click(); a.remove();
+        setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+        await openDialog({ label: 'Demo', title: 'Mail als Datei geladen.', body: `<p>Öffne <b>${esc(name)}</b> per Doppelklick. Apple Mail oder Outlook zeigen dir die Mail dann genau so, wie Empfänger sie sehen.</p>`, ok: '', cancel: 'Schließen' });
+        return;
+      }
       const json = await res.json().catch(() => ({ error: `Serverfehler (${res.status})` }));
       if (res.status === 401) { location.href = '/login?next=/compose'; return; }
-      if (json.error) {
+      if (json.demo) {
+        await openDialog({ label: 'Demo', title: 'Im Demo-Modus wird nichts verschickt.', body: `<p>Mit einem echten Postfach ginge diese Mail jetzt an ${json.would_send} ${json.would_send === 1 ? 'Person' : 'Personen'}.</p>`, ok: '', cancel: 'Schließen' });
+      } else if (json.error) {
         await openDialog({ label: 'Fehler', title: 'Nicht gesendet.', body: `<p>${esc(json.error)}</p>`, ok: '', cancel: 'Schließen' });
       } else {
         const failed = (json.failed || []).map(f => `<li>${esc(f.email)}: ${esc(f.error)}</li>`).join('');

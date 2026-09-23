@@ -74,6 +74,7 @@ Zum Aktualisieren `git pull` ausführen und das Skript erneut starten. `.env` un
 | `COOKIE_SECURE` | `true`, sobald die App über HTTPS erreichbar ist |
 | `TRUST_PROXY` | `cloudflare` hinter einem Cloudflare Tunnel, `proxy` hinter einem anderen Reverse Proxy, sonst `none` |
 | `SESSION_HOURS` | Nach wie vielen Stunden man sich neu anmelden muss |
+| `DEMO_MODE` | `true` zeigt „Demo ansehen“ auf der Anmeldeseite: alles ausprobieren ohne Postfach, statt zu senden wird die Mail als `.eml`-Datei geladen. Vor dem Betrieb im Internet auf `false` setzen. |
 
 **Gmail / Microsoft 365:** Dort braucht man ein *App-Passwort*, oder SMTP-AUTH muss für das Postfach
 freigeschaltet sein. Das normale Passwort wird bei aktivierter Zwei-Faktor-Anmeldung abgelehnt.
