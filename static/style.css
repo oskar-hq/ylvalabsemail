@@ -11,6 +11,7 @@
   --gut:clamp(16px,4vw,56px);
 }
 *,*::before,*::after{box-sizing:border-box}
+[hidden]{display:none!important}
 html{-webkit-text-size-adjust:100%}
 body{margin:0;background:var(--paper);color:var(--ink);font:400 15px/1.55 var(--sans);-webkit-font-smoothing:antialiased}
 a{color:var(--ink);text-decoration:underline;text-underline-offset:3px}
