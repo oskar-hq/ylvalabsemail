@@ -87,7 +87,7 @@ def band_table(seed, cols=60, rows=6, cell=10):
                 cells.append(f'<td width="{cell}" height="{cell}" style="font-size:0;line-height:0"></td>')
         rows_html.append("<tr>" + "".join(cells) + "</tr>")
     width = cols * cell
-    return (f'<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="{width}" '
+    return (f'<table role="presentation" class="band" cellpadding="0" cellspacing="0" border="0" width="{width}" '
             f'style="width:{width}px;max-width:100%">' + "".join(rows_html) + "</table>")
 
 
