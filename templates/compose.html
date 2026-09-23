@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}Verfassen · Ylva Labs Mailer{% endblock %}
+{% block content %}
+<main class="compose">
+<form id="mail" class="editor" autocomplete="off" data-from-history="{{ 'true' if from_history else 'false' }}" onsubmit="return false">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+
+  <div class="editor-head">
+    <span class="label">01 · Verfassen</span>
+    <h1 class="title">Neue Mail.</h1>
+    <p class="draft-note mono muted" id="draftNote" hidden>Entwurf wiederhergestellt · <button type="button" class="link mono" id="resetDraft">Verwerfen</button></p>
+  </div>
+
+  <section class="block">
+    <h2 class="label">Vorlage</h2>
+    <div class="choices two">
+      {% for key, t in templates.items() %}
+      <label class="choice">
+        <input type="radio" name="template" value="{{ key }}" {{ 'checked' if fields.template == key }}>
+        <span class="thumb thumb-{{ key }}" aria-hidden="true"><i></i><i></i><i></i><i></i></span>
+        <span class="choice-name">{{ t.name }}</span>
+        <span class="choice-desc">{{ t.description }}</span>
+      </label>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="block">
+    <h2 class="label">Empfänger <span class="pill" id="rcptCount">0</span></h2>
+    <label class="field">
+      <textarea name="recipients" rows="3" placeholder="Anna Muster <anna@beispiel.de>, info@betrieb.de" spellcheck="false">{{ fields.recipients or '' }}</textarea>
+      <span class="hint">Komma, Semikolon oder eine Adresse pro Zeile. Jede Person bekommt eine eigene Mail und sieht die anderen nicht. Mit Namen davor wird <code>{vorname}</code> ausgefüllt.</span>
+      <span class="hint err" id="rcptErrors" hidden></span>
+    </label>
+  </section>
+
+  <section class="block">
+    <h2 class="label">Betreff</h2>
+    <label class="field"><input name="subject" type="text" value="{{ fields.subject or '' }}" placeholder="Neues aus dem KI-Lab" required></label>
+    <label class="field"><span class="sub">Vorschautext <em>optional</em></span>
+      <input name="preheader" type="text" value="{{ fields.preheader or '' }}" placeholder="Erscheint im Posteingang neben dem Betreff">
+    </label>
+  </section>
+
+  <section class="block">
+    <h2 class="label">Text</h2>
+    <label class="field"><span class="sub">Überschrift</span>
+      <textarea name="headline" rows="2" class="headline-input" placeholder="KI kann fast alles. Außer die letzten 10 % im Betrieb.">{{ fields.headline or '' }}</textarea>
+    </label>
+    <label class="field"><span class="sub">Anrede</span>
+      <input name="greeting" type="text" value="{{ fields.greeting or '' }}">
+    </label>
+    <label class="field"><span class="sub">Text</span>
+      <textarea name="body" rows="8" placeholder="Leerzeile = neuer Absatz">{{ fields.body or '' }}</textarea>
+      <span class="hint"><code>**fett**</code> · <code>[Linktext](https://…)</code> · Leerzeile = neuer Absatz · Platzhalter <code>{vorname}</code> <code>{name}</code></span>
+    </label>
+  </section>
+
+  <section class="block">
+    <h2 class="label">Bild</h2>
+    <div class="choices five">
+      <label class="choice gfx"><input type="radio" name="graphic" value="band_original" {{ 'checked' if fields.graphic == 'band_original' }}>
+        <span class="gfx-prev band-prev" style="background-image:url('{{ url_for('static', filename='band-original.svg') }}')"></span><span class="choice-name">Pixel-Band</span></label>
+      <label class="choice gfx"><input type="radio" name="graphic" value="band" {{ 'checked' if fields.graphic == 'band' }}>
+        <span class="gfx-prev band-prev" id="seedPrev"></span><span class="choice-name">Band-Variante</span></label>
+      <label class="choice gfx"><input type="radio" name="graphic" value="icon" {{ 'checked' if fields.graphic == 'icon' }}>
+        <span class="gfx-prev icon-prev">{{ icons['werkstatt'][1]|safe }}</span><span class="choice-name">Pixel-Icon</span></label>
+      <label class="choice gfx"><input type="radio" name="graphic" value="image" {{ 'checked' if fields.graphic == 'image' }}>
+        <span class="gfx-prev img-prev" id="imgPrev"><span class="mono">+ Bild</span></span><span class="choice-name">Eigenes Bild</span></label>
+      <label class="choice gfx"><input type="radio" name="graphic" value="none" {{ 'checked' if fields.graphic == 'none' }}>
+        <span class="gfx-prev none-prev"></span><span class="choice-name">Ohne</span></label>
+    </div>
+
+    <div class="gfx-opt" data-for="band">
+      <span class="sub">Variante <b id="seedLabel">{{ fields.band_seed }}</b> von 50</span>
+      <div class="row">
+        <input type="range" name="band_seed" min="1" max="50" value="{{ fields.band_seed }}">
+        <button type="button" class="btn small" id="shuffle">Zufall</button>
+      </div>
+    </div>
+    <div class="gfx-opt" data-for="icon">
+      <div class="icons">
+        {% for key, (label, svg) in icons.items() %}
+        <label class="icon-choice"><input type="radio" name="icon" value="{{ key }}" {{ 'checked' if fields.icon == key }}><span class="icon-svg">{{ svg|safe }}</span><span class="mono">{{ label }}</span></label>
+        {% endfor %}
+      </div>
+    </div>
+    <div class="gfx-opt" data-for="image">
+      <input type="hidden" name="image_id" value="{{ fields.image_id or '' }}">
+      <label class="drop" id="drop">
+        <input type="file" id="imageFile" accept="image/png,image/jpeg,image/gif">
+        <span id="dropText">Bild hierher ziehen oder <u>auswählen</u> · PNG, JPG, GIF · ideal 1200 px breit</span>
+      </label>
+      <label class="field"><span class="sub">Bildbeschreibung (Alt-Text)</span><input name="image_alt" type="text" value="{{ fields.image_alt or '' }}" placeholder="Wird angezeigt, wenn Bilder blockiert sind"></label>
+    </div>
+  </section>
+
+  <details class="block more" {{ 'open' if fields.body2 or fields.cta_text or (fields.info_label and fields.info_label[0]) }}>
+    <summary class="label">Mehr Inhalt · Zweiter Text, Infozeilen, Button</summary>
+    <label class="field"><span class="sub">Text nach dem Bild</span>
+      <textarea name="body2" rows="4">{{ fields.body2 or '' }}</textarea>
+    </label>
+    <div class="field"><span class="sub">Infozeilen</span>
+      <div id="infoRows">
+        {% for l in fields.info_label %}
+        <div class="info-row"><input name="info_label" type="text" placeholder="Termin" value="{{ l }}"><input name="info_value" type="text" placeholder="Offener Lab-Abend am 12.10. in Kiel." value="{{ fields.info_value[loop.index0] if fields.info_value|length > loop.index0 else '' }}"><button type="button" class="x" title="Zeile entfernen">×</button></div>
+        {% endfor %}
+      </div>
+      <button type="button" class="btn small" id="addInfo">+ Zeile</button>
+    </div>
+    <div class="field two-col">
+      <label><span class="sub">Button-Text</span><input name="cta_text" type="text" value="{{ fields.cta_text or '' }}" placeholder="Termin sichern"></label>
+      <label><span class="sub">Button-Link</span><input name="cta_url" type="url" value="{{ fields.cta_url or '' }}" placeholder="https://ylvalabs.de"></label>
+    </div>
+  </details>
+
+  <section class="block">
+    <h2 class="label">Abschluss</h2>
+    <label class="field"><span class="sub">Schlusssatz</span><textarea name="closing" rows="2">{{ fields.closing or '' }}</textarea></label>
+    <div class="field two-col">
+      <label><span class="sub">Absendername</span><input name="sender_name" type="text" value="{{ fields.sender_name or '' }}" placeholder="Vorname Nachname"></label>
+      <label><span class="sub">Antwort an <em>optional</em></span><input name="reply_to" type="email" value="{{ fields.reply_to or '' }}" placeholder="{{ account.address }}"></label>
+    </div>
+    <label class="field"><span class="sub">Fußzeile</span><input name="footer" type="text" value="{{ fields.footer or '' }}"></label>
+    {% if imap %}<label class="check"><input type="checkbox" name="save_sent" value="1" checked> Kopie im Ordner „Gesendet“ ablegen</label>{% endif %}
+  </section>
+
+  <div class="actions">
+    <button type="button" class="btn" id="testBtn">Testmail an mich</button>
+    <button type="button" class="btn primary" id="sendBtn">Senden</button>
+  </div>
+</form>
+
+<aside class="preview">
+  <div class="preview-bar">
+    <span class="label">Vorschau <span class="muted" id="previewFor"></span></span>
+    <div class="seg" role="group" aria-label="Ansicht">
+      <button type="button" class="on" data-w="600">Desktop</button>
+      <button type="button" data-w="375">Mobil</button>
+    </div>
+  </div>
+  <div class="inbox mono"><b id="pvSubject">Betreff</b><span id="pvPre"></span></div>
+  <div class="frame-wrap"><iframe id="frame" title="E-Mail-Vorschau" sandbox="allow-same-origin allow-popups"></iframe></div>
+</aside>
+</main>
+
+<dialog id="dlg">
+  <form method="dialog" class="dlg">
+    <span class="label" id="dlgLabel">Senden</span>
+    <h2 id="dlgTitle"></h2>
+    <div id="dlgBody"></div>
+    <div class="dlg-actions">
+      <button value="cancel" class="btn" id="dlgCancel">Abbrechen</button>
+      <button value="ok" class="btn primary" id="dlgOk">Jetzt senden</button>
+    </div>
+  </form>
+</dialog>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='compose.js') }}"></script>{% endblock %}

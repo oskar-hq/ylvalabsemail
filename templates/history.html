@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% block title %}Verlauf · Ylva Labs Mailer{% endblock %}
+{% block content %}
+<main class="page">
+  <span class="label">02 · Verlauf</span>
+  <h1 class="title">Gesendet.</h1>
+  {% if not items %}
+    <p class="muted">Noch nichts verschickt. <a href="{{ url_for('compose') }}">Erste Mail verfassen</a></p>
+  {% else %}
+  <div class="history">
+    {% for it in items %}
+    <details class="hist">
+      <summary>
+        <span class="mono muted">{{ it.date }}</span>
+        <span class="subj">{{ it.subject }}</span>
+        <span class="mono muted">{{ it.sent }} / {{ it.rcpt_count }} gesendet{% if it.failed %} · <em class="err">{{ it.failed|length }} Fehler</em>{% endif %}</span>
+      </summary>
+      <div class="hist-body">
+        <p class="muted small">An: {{ it.recipients }}</p>
+        {% for f in it.failed %}<p class="alert small">{{ f.email }}: {{ f.error }}</p>{% endfor %}
+        <div class="hist-actions">
+          <a class="btn primary" href="{{ url_for('compose', **{'from': it.id}) }}">Als Vorlage verwenden</a>
+          <a class="btn" href="{{ url_for('history_html', mail_id=it.id) }}" target="_blank">HTML öffnen</a>
+        </div>
+        <iframe sandbox="allow-same-origin allow-popups" loading="lazy" class="hist-frame" src="{{ url_for('history_html', mail_id=it.id) }}" title="Mail {{ it.id }}"></iframe>
+      </div>
+    </details>
+    {% endfor %}
+  </div>
+  {% endif %}
+</main>
+{% endblock %}

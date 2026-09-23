@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Anmelden · Ylva Labs Mailer{% endblock %}
+{% block body_class %}login-page{% endblock %}
+{% block content %}
+<main class="login">
+  <div class="login-card">
+    <span class="mark big" aria-hidden="true"><i class="d"></i><i class="d"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i class="d"></i><i class="d"></i></span>
+    <span class="label">Ylva Labs · Mailer</span>
+    <h1>Anmelden.</h1>
+    <p class="muted">Mit den Zugangsdaten deines E-Mail-Postfachs. Darüber werden die Mails auch verschickt.</p>
+    {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="alert">{{ m }}</p>{% endfor %}{% endwith %}
+    <form method="post">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <label><span class="label">E-Mail / Benutzer</span><input name="user" type="text" autocomplete="username" value="{{ user or '' }}" required autofocus></label>
+      <label><span class="label">Passwort</span><input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn primary" type="submit">Anmelden</button>
+    </form>
+  </div>
+  <div class="band" aria-hidden="true" style="--band:url('{{ url_for('static', filename='band.svg') }}')"></div>
+</main>
+{% endblock %}

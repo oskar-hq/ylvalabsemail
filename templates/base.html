@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="csrf-token" content="{{ csrf_token() }}">
+<title>{% block title %}Ylva Labs Mailer{% endblock %}</title>
+<link rel="icon" href="{{ url_for('static', filename='mark.svg') }}" type="image/svg+xml">
+<link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body class="{% block body_class %}{% endblock %}">
+{% if account %}
+<header class="top">
+  <a class="brand" href="{{ url_for('compose') }}">
+    <span class="mark" aria-hidden="true"><i class="d"></i><i class="d"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i class="d"></i><i class="d"></i></span>
+    <span class="mono">Ylva Labs · Mailer</span>
+  </a>
+  <nav class="mono">
+    <a href="{{ url_for('compose') }}" class="{{ 'on' if request.endpoint == 'compose' }}">01 Verfassen</a>
+    <a href="{{ url_for('history') }}" class="{{ 'on' if request.endpoint == 'history' }}">02 Verlauf</a>
+    <span class="who">{{ account.address or account.user }}</span>
+    <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="link mono">Abmelden</button></form>
+  </nav>
+</header>
+{% endif %}
+{% block content %}{% endblock %}
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,77 @@
+
+{% macro head(title) -%}
+<!DOCTYPE html>
+<html lang="de" xmlns="http://www.w3.org/1999/xhtml">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<meta name="supported-color-schemes" content="light dark">
+<title>{{ title }}</title>
+<!--[if mso]><style>table,td{mso-table-lspace:0pt;mso-table-rspace:0pt}</style><![endif]-->
+<style>
+@media (max-width:620px){.wrap{width:100%!important}.px{padding-left:24px!important;padding-right:24px!important}.h1{font-size:30px!important;line-height:34px!important}.fluid{width:100%!important;height:auto!important}}
+@media (prefers-color-scheme:dark){.bg{background:#15181c!important}.card{background:#1f2328!important}.ink{color:#f1f4f7!important}.body{color:#c9ced4!important}.tint{background:#2a2f35!important}.btn{background:#f1f4f7!important}.btn a{color:#1d2126!important}.body a{color:#f1f4f7!important}}
+</style>
+</head>
+{%- endmacro %}
+
+{% macro preheader(text) -%}
+{% if text %}<span style="display:none;font-size:1px;line-height:1px;max-height:0;max-width:0;opacity:0;overflow:hidden;mso-hide:all">{{ text }}</span>{% endif %}
+{%- endmacro %}
+
+{% macro logo_row(org_name, logo_mark) -%}
+<tr><td class="px" style="padding:32px 48px 0 48px">
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%"><tr>
+    <td valign="middle" width="30" style="width:30px">{{ logo_mark }}</td>
+    <td valign="middle" style="padding-left:10px;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:18px;font-weight:bold;letter-spacing:-0.3px;text-transform:uppercase;color:#1d2126" class="ink">{{ org_name }}</td>
+    <td valign="middle" align="right"></td>
+  </tr></table>
+</td></tr>
+{%- endmacro %}
+
+{% macro paragraphs(items, first_margin="24px") -%}
+{% for p in items %}<p class="body" style="margin:{{ first_margin if loop.first else '24px' }} 0 0 0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:24px;mso-line-height-rule:exactly;color:#5b636c">{{ p }}</p>
+{% endfor %}
+{%- endmacro %}
+
+{% macro icon_box(icon_html) -%}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" class="tint" style="background:#f1f4f7">
+  <tr><td align="center" style="padding:42px 0">{{ icon_html }}</td></tr>
+</table>
+{%- endmacro %}
+
+{% macro image(src, alt, width) -%}
+<img src="{{ src }}" alt="{{ alt }}" width="{{ width }}" class="fluid" style="display:block;width:{{ width }}px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none">
+{%- endmacro %}
+
+{% macro info_rows(rows) -%}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-top:1px solid #dfe3e7">
+{% for r in rows %}  <tr><td width="120" valign="top" style="width:120px;padding:14px 0{% if not loop.first %};border-top:1px solid #dfe3e7{% endif %}"><span class="ink" style="font-family:'Courier New',Courier,monospace;font-size:11px;line-height:16px;letter-spacing:1px;text-transform:uppercase;color:#1d2126">{{ r.label }}</span></td><td class="body" style="padding:14px 0{% if not loop.first %};border-top:1px solid #dfe3e7{% endif %};font-family:Helvetica,Arial,sans-serif;font-size:14px;line-height:21px;color:#5b636c">{{ r.value }}</td></tr>
+{% endfor %}</table>
+{%- endmacro %}
+
+{% macro button(text, url) -%}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0"><tr>
+  <td class="btn" bgcolor="#1d2126" style="background:#1d2126;border-radius:999px;mso-padding-alt:12px 22px">
+    <!--[if mso]><i style="letter-spacing:22px;mso-font-width:-100%;mso-text-raise:22pt">&nbsp;</i><![endif]-->
+    <a href="{{ url }}" target="_blank" style="display:inline-block;padding:12px 22px;font-family:'Courier New',Courier,monospace;font-size:12px;line-height:14px;letter-spacing:1px;text-transform:uppercase;color:#ffffff;text-decoration:none">{{ text }}</a>
+    <!--[if mso]><i style="letter-spacing:22px;mso-font-width:-100%">&nbsp;</i><![endif]-->
+  </td>
+</tr></table>
+{%- endmacro %}
+
+{% macro signature(closing, sender_name, org_name) -%}
+{% if closing %}<p class="body" style="margin:0 0 16px 0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:24px;color:#5b636c">{{ closing }}</p>{% endif %}
+  <p class="ink" style="margin:0;font-family:Helvetica,Arial,sans-serif;font-size:15px;line-height:22px;color:#1d2126">{% if sender_name %}{{ sender_name }}<br>{% endif %}<span style="color:#8a929c">{{ org_name }}</span></p>
+{%- endmacro %}
+
+{% macro footer(text) -%}
+{% if text %}
+<table role="presentation" cellpadding="0" cellspacing="0" border="0" width="600" class="wrap" style="width:600px;max-width:600px">
+<tr><td class="px" align="center" style="padding:28px 48px">
+  <p style="margin:0;font-family:'Courier New',Courier,monospace;font-size:11px;line-height:18px;letter-spacing:1px;text-transform:uppercase;color:#8a929c">{{ text }}</p>
+</td></tr>
+</table>
+{% endif %}
+{%- endmacro %}
