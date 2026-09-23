@@ -63,7 +63,8 @@ Zum Aktualisieren `git pull` ausführen und das Skript erneut starten. `.env` un
 | `SMTP_HOST` / `SMTP_PORT` | Postausgangsserver, z. B. `smtp.ionos.de` / `587` |
 | `SMTP_SECURITY` | `starttls` (Port 587), `ssl` (Port 465) oder `none` |
 | `FROM_ADDRESS` | Nur nötig, wenn der Login-Name keine E-Mail-Adresse ist |
-| `ALLOWED_USERS` | Optional: nur diese Konten dürfen sich anmelden |
+| `ALLOWED_DOMAINS` | Nur Postfächer dieser Domain dürfen sich anmelden, z. B. `ylvalabs.de` |
+| `ALLOWED_USERS` | Zusätzlich oder stattdessen: einzelne erlaubte Adressen |
 | `IMAP_HOST` / `IMAP_PORT` | Optional: legt eine Kopie im Ordner „Gesendet“ ab |
 | `IMAP_SENT_FOLDER` | Leer = automatisch erkennen |
 | `ORG_NAME` | Name im Logo und in der Signatur |
@@ -71,16 +72,44 @@ Zum Aktualisieren `git pull` ausführen und das Skript erneut starten. `.env` un
 | `SEND_DELAY` | Pause zwischen zwei Mails in Sekunden (Versandlimits des Providers) |
 | `MAX_RECIPIENTS` | Maximale Zahl an Empfängern pro Versand |
 | `COOKIE_SECURE` | `true`, sobald die App über HTTPS erreichbar ist |
+| `TRUST_PROXY` | `cloudflare` hinter einem Cloudflare Tunnel, `proxy` hinter einem anderen Reverse Proxy, sonst `none` |
 | `SESSION_HOURS` | Nach wie vielen Stunden man sich neu anmelden muss |
 
 **Gmail / Microsoft 365:** Dort braucht man ein *App-Passwort*, oder SMTP-AUTH muss für das Postfach
 freigeschaltet sein. Das normale Passwort wird bei aktivierter Zwei-Faktor-Anmeldung abgelehnt.
 
+## Zugriff über das Internet (mail.ylvalabs.de)
+
+Empfohlen ist ein **Cloudflare Tunnel** mit **Cloudflare Access** davor:
+
+- Am Router wird **kein Port geöffnet**, und die IP-Adresse des Büros bleibt verborgen.
+- HTTPS gibt es automatisch.
+- Bevor jemand die Anmeldeseite überhaupt sieht, verlangt Cloudflare einen Einmal-Code per Mail an eine
+  `@ylvalabs.de`-Adresse. Bots und Passwort-Rater kommen gar nicht bis zur App.
+- Kostenlos bis 50 Personen.
+
+Einrichtung, einmalig:
+
+1. Kostenloses Konto auf cloudflare.com anlegen und `ylvalabs.de` hinzufügen. Cloudflare übernimmt
+   dabei die vorhandenen DNS-Einträge. Prüfen, dass die **MX-, SPF- (TXT) und DKIM-Einträge von Strato**
+   vollständig übernommen wurden, sonst kommen keine Mails mehr an.
+2. Bei Strato in der Domainverwaltung die Nameserver von `ylvalabs.de` auf die beiden Nameserver ändern, die Cloudflare anzeigt.
+3. In Cloudflare unter *Zero Trust → Networks → Tunnels* einen Tunnel anlegen und den angezeigten
+   Installationsbefehl im Container ausführen. Als *Public Hostname* `mail.ylvalabs.de` → `http://localhost:8080` eintragen.
+4. Unter *Zero Trust → Access → Applications* eine Anwendung für `mail.ylvalabs.de` anlegen, mit der Regel
+   *Include → Emails ending in → @ylvalabs.de*.
+5. In der `.env`: `COOKIE_SECURE=true`, `TRUST_PROXY=cloudflare`, `ALLOWED_DOMAINS=ylvalabs.de`, danach
+   `systemctl restart ylva-mailer`.
+
 ## Sicherheit
 
-- Die App ist für das **interne Netz** gedacht. Soll sie von außen erreichbar sein, gehört sie hinter
-  einen Reverse Proxy mit HTTPS (z. B. Nginx Proxy Manager, Caddy oder Traefik). Dann `COOKIE_SECURE=true` setzen.
-- Nach 5 falschen Anmeldungen innerhalb von 10 Minuten wird die IP-Adresse kurz gesperrt.
+- **Mehrere Postfächer:** Jede Person meldet sich mit ihrem eigenen Postfach an und verschickt darüber.
+  Jede Person sieht nur ihren eigenen Verlauf. Mit `ALLOWED_DOMAINS=ylvalabs.de` kommen nur Firmen-Postfächer rein.
+  Neue Kolleginnen und Kollegen brauchen also nur ein Strato-Postfach, in der App ist nichts einzurichten.
+- Sperre bei Fehlversuchen: 5 falsche Anmeldungen pro IP in 10 Minuten, 10 pro Postfach in 15 Minuten.
+  Jeder Fehlversuch wird mit IP-Adresse im Log vermerkt (`journalctl -u ylva-mailer`).
+- `TRUST_PROXY` nur setzen, wenn die App wirklich hinter Cloudflare oder einem Proxy läuft. Sonst könnte
+  man die Sperre mit gefälschten Headern umgehen.
 - Alle Formulare sind gegen CSRF geschützt, und Eingaben werden in der Mail sauber maskiert.
 - Nach einem Neustart des Dienstes muss man sich neu anmelden, weil das Passwort nur im Arbeitsspeicher liegt.
 

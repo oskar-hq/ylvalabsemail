@@ -35,6 +35,8 @@ SETTINGS = {
     "IMAP_SENT_FOLDER": env("IMAP_SENT_FOLDER"),
     "FROM_ADDRESS": env("FROM_ADDRESS"),
     "ALLOWED_USERS": [u.lower() for u in re.split(r"[,\s]+", env("ALLOWED_USERS")) if u],
+    "ALLOWED_DOMAINS": [d.lower().lstrip("@") for d in re.split(r"[,\s]+", env("ALLOWED_DOMAINS")) if d],
+    "TRUST_PROXY": env("TRUST_PROXY", "none").lower(),  # none | cloudflare | proxy
     "ORG_NAME": env("ORG_NAME", "Ylva Labs"),
     "DEFAULT_SENDER_NAME": env("DEFAULT_SENDER_NAME"),
     "DEFAULT_FOOTER": env("DEFAULT_FOOTER", "Ylva Labs · Schleswig-Holstein"),
@@ -74,7 +76,35 @@ app.config.update(
 # sich einfach neu an.
 _sessions = {}
 _sessions_lock = threading.Lock()
-_failed_logins = {}
+_failed_logins = {}  # Schlüssel: "ip:<adresse>" oder "user:<login>"
+LOCK_RULES = {"ip": (5, 600), "user": (10, 900)}  # max. Fehlversuche, Zeitfenster in Sekunden
+
+
+def client_ip():
+    """Echte Besucher-IP. Weitergeleitete Header zählen nur hinter einem bekannten Proxy,
+    sonst könnte man die Sperre mit einem gefälschten Header umgehen."""
+    if SETTINGS["TRUST_PROXY"] == "cloudflare" and request.headers.get("CF-Connecting-IP"):
+        return request.headers["CF-Connecting-IP"].strip()
+    if SETTINGS["TRUST_PROXY"] in ("cloudflare", "proxy") and request.headers.get("X-Forwarded-For"):
+        return request.headers["X-Forwarded-For"].split(",")[-1].strip()
+    return request.remote_addr or ""
+
+
+def recent_fails(key):
+    window = LOCK_RULES[key.split(":", 1)[0]][1]
+    with _sessions_lock:
+        fails = [t for t in _failed_logins.get(key, []) if time.time() - t < window]
+        _failed_logins[key] = fails
+    return fails
+
+
+def login_allowed(user):
+    user = user.lower()
+    if SETTINGS["ALLOWED_USERS"] and user in SETTINGS["ALLOWED_USERS"]:
+        return True
+    if SETTINGS["ALLOWED_DOMAINS"] and user.rsplit("@", 1)[-1] in SETTINGS["ALLOWED_DOMAINS"] and "@" in user:
+        return True
+    return not SETTINGS["ALLOWED_USERS"] and not SETTINGS["ALLOWED_DOMAINS"]
 
 
 def smtp_connect(user, password):
@@ -149,14 +179,14 @@ def security_headers(resp):
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        ip = request.headers.get("X-Forwarded-For", request.remote_addr or "").split(",")[0].strip()
-        fails = [t for t in _failed_logins.get(ip, []) if time.time() - t < 600]
-        if len(fails) >= 5:
-            flash("Zu viele Fehlversuche. Bitte in ein paar Minuten erneut versuchen.")
-            return render_template("login.html"), 429
         user = request.form.get("user", "").strip()
         password = request.form.get("password", "")
-        if SETTINGS["ALLOWED_USERS"] and user.lower() not in SETTINGS["ALLOWED_USERS"]:
+        keys = [f"ip:{client_ip()}", f"user:{user.lower()}"]
+        if any(len(recent_fails(k)) >= LOCK_RULES[k.split(":", 1)[0]][0] for k in keys):
+            flash("Zu viele Fehlversuche. Bitte in einigen Minuten erneut versuchen.")
+            return render_template("login.html", user=user), 429
+        count_fail = True
+        if not login_allowed(user):
             error = "Dieses Konto ist für den Mailer nicht freigegeben."
         else:
             try:
@@ -166,11 +196,18 @@ def login():
                 error = "Anmeldung fehlgeschlagen: Benutzername oder Passwort falsch."
             except Exception as exc:  # Netzwerk, TLS, falscher Host …
                 error = f"Mailserver nicht erreichbar ({exc.__class__.__name__}: {exc})."
+                count_fail = False  # Serverprobleme sollen niemanden aussperren
+        if error and count_fail:
+            with _sessions_lock:
+                for k in keys:
+                    _failed_logins.setdefault(k, []).append(time.time())
+            app.logger.warning("Fehlgeschlagene Anmeldung für %r von %s", user, client_ip())
         if error:
-            _failed_logins[ip] = fails + [time.time()]
             flash(error)
             return render_template("login.html", user=user), 401
-        _failed_logins.pop(ip, None)
+        with _sessions_lock:
+            for k in keys:
+                _failed_logins.pop(k, None)
         sid = secrets.token_urlsafe(32)
         with _sessions_lock:
             _sessions[sid] = {"user": user, "password": password, "since": time.time(),
