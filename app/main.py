@@ -57,6 +57,7 @@ SETTINGS = {
     "LEADS_MONTHLY_BUDGET_EUR": float(env("LEADS_MONTHLY_BUDGET_EUR", "20")),  # 0 = keine Grenze
     "LEADS_QUICK_MIN": int(env("LEADS_QUICK_MIN", "50")),  # ab dieser Punktzahl der Vorprüfung geht es weiter
     "LEADS_ANALYSE_MIN": int(env("LEADS_ANALYSE_MIN", "65")),  # ab dieser Punktzahl der Analyse wird geschrieben
+    "LEADS_FOLLOWUP_DAYS": int(env("LEADS_FOLLOWUP_DAYS", "7")),  # nach so vielen Tagen ohne Antwort nachfassen, 0 = nie
     "LEADS_SENDER_NAME": env("LEADS_SENDER_NAME", "Oskar Jacobsen"),
     "OUTREACH_USER": env("OUTREACH_USER"),
     "OUTREACH_PASSWORD": env("OUTREACH_PASSWORD"),

@@ -39,11 +39,13 @@
     runForm.addEventListener('input', () => {
       clearTimeout(timer);
       timer = setTimeout(async () => {
-        const q = new URLSearchParams({ vorpruefen: runForm.vorpruefen.value || 0, entwuerfe: runForm.entwuerfe.value || 0 });
+        const q = new URLSearchParams({ vorpruefen: runForm.vorpruefen.value || 0, entwuerfe: runForm.entwuerfe.value || 0,
+                                        erinnerungen: runForm.erinnerungen.checked ? '1' : '0' });
         try {
           const e = await (await fetch('/leads/schaetzung?' + q)).json();
           const budget = parseFloat(String(runForm.budget_eur.value).replace(',', '.')) || 0;
           est.innerHTML = `Geschätzt: <b>ca. ${euro(e.eur)}</b> · etwa ${e.analysen} Analysen · etwa ${e.entwuerfe} Entwürfe`
+            + (e.erinnerungen ? ` · ${e.erinnerungen} Erinnerungen` : '')
             + (e.eur > budget ? ' · <span class="err">Das Budget reicht dafür vermutlich nicht, der Lauf stoppt dann vorher.</span>' : '');
         } catch {}
       }, 250);
@@ -220,6 +222,46 @@
     dlg.showModal();
     return new Promise(res => dlg.addEventListener('close', () => res(dlg.returnValue === 'ok' ? $('[name=reason]', dlg).value : null), { once: true }));
   }
+
+  // Erinnerung (Nachfassen)
+  const fu = $('#followup');
+  const fuData = () => {
+    const fd = new FormData();
+    if (fu) for (const el of $$('input,textarea', fu)) if (!el.readOnly) fd.append(el.name, el.value);
+    return fd;
+  };
+  $$('[data-fu]').forEach(btn => btn.addEventListener('click', async () => {
+    const act = btn.dataset.fu;
+    try {
+      if (act === 'write') {
+        busy(btn, true, 'Schreibt …');
+        const r = await post(`${base}/erinnerung/schreiben`);
+        toast(`Erinnerung geschrieben. Kosten: ${euro(r.cost_eur)}`);
+        setTimeout(reload, 900);
+      } else if (act === 'save') {
+        busy(btn, true);
+        const r = await post(`${base}/erinnerung/speichern`, fuData());
+        toast(r.changed ? 'Gespeichert.' : 'Keine Änderung.');
+      } else if (act === 'send') {
+        busy(btn, true, 'Sendet …');
+        await post(`${base}/erinnerung/senden`, fuData());
+        reload();
+      } else if (act === 'mark') {
+        const dlg = $('#markDlg');
+        dlg.returnValue = '';
+        dlg.showModal();
+        dlg.addEventListener('close', async () => {
+          if (!['brief', 'telefon', 'email'].includes(dlg.returnValue)) return;
+          const fd = fuData(); fd.append('channel', dlg.returnValue);
+          try { await post(`${base}/erinnerung/erledigt`, fd); reload(); } catch (e) { toast(e.message, true); }
+        }, { once: true });
+      } else if (act === 'skip') {
+        await post(`${base}/erinnerung/auslassen`);
+        reload();
+      }
+    } catch (e) { toast(e.message, true); }
+    finally { busy(btn, false); }
+  }));
 
   $$('[data-interest]').forEach(btn => btn.addEventListener('click', async () => {
     const reason = await askReason(`Als „${btn.textContent}“ einordnen. Warum?`);

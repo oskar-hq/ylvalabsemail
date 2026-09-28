@@ -25,11 +25,14 @@ MODELS = {
 MODELS["chat"] = MODELS["entwurf"]
 MODELS["antwort"] = MODELS["analyse"]
 MODELS["lernen"] = MODELS["analyse"]
+MODELS["erinnerung"] = MODELS["analyse"]
 STAGE_LABELS = {"vorpruefung": "Vorprüfung", "analyse": "Analyse", "entwurf": "Entwurf schreiben",
-                "chat": "Chat / Überarbeiten", "antwort": "Antworten einordnen", "lernen": "Lernen"}
+                "chat": "Chat / Überarbeiten", "antwort": "Antworten einordnen", "lernen": "Lernen",
+                "erinnerung": "Erinnerung schreiben"}
 EFFORT = {"analyse": _env("AI_EFFORT_ANALYSE", "medium"), "entwurf": _env("AI_EFFORT", "high")}
-EFFORT.update(chat=EFFORT["entwurf"], antwort=EFFORT["analyse"], lernen=EFFORT["analyse"])
-MAX_TOKENS = {"vorpruefung": 1500, "analyse": 12000, "entwurf": 16000, "chat": 16000, "antwort": 8000, "lernen": 12000}
+EFFORT.update(chat=EFFORT["entwurf"], antwort=EFFORT["analyse"], lernen=EFFORT["analyse"], erinnerung=EFFORT["analyse"])
+MAX_TOKENS = {"vorpruefung": 1500, "analyse": 12000, "entwurf": 16000, "chat": 16000, "antwort": 8000, "lernen": 12000,
+              "erinnerung": 8000}
 
 # US-Dollar pro 1 Mio. Tokens (Eingabe, Ausgabe), Stand der Anthropic-Preisliste. Bei Preisänderungen hier anpassen.
 PRICES = {
@@ -291,6 +294,34 @@ In „lernpunkt“ formulierst du, was man aus dieser Rückmeldung allgemein fü
 Auswahl der Betriebe lernen kann. Leer, wenn es nur diesen einen Betrieb betrifft."""
     schema = _obj({"antwort": STR, **DRAFT_FIELDS, "lernpunkt": STR})
     return _call("chat", brain, prompt, schema, lead.get("id"))
+
+
+def write_followup(brain, lead, days):
+    """Kurze, freundliche Erinnerung, wenn nach einer Woche keine Antwort kam."""
+    channel = {"brief": "per Brief", "telefon": "am Telefon", "email": "per Mail"}.get(lead.get("channel"), "per Mail")
+    prompt = f"""Wir haben diesen Betrieb vor {days} Tagen {channel} kontaktiert und keine Antwort bekommen.
+Schreibe eine einzige, kurze Erinnerung.
+
+<betrieb>
+{_lead_block(lead)}
+Ansprechperson: {lead.get("contact_name") or "unbekannt"}
+Unsere Einschätzung: {lead.get("fit_reason") or "–"}
+</betrieb>
+
+<erste_nachricht>
+Betreff: {lead.get("subject") or ""}
+{lead.get("greeting") or ""}
+
+{lead.get("body") or ""}
+</erste_nachricht>
+
+Regeln:
+- Höchstens 60 Wörter, gleiche Anrede-Form (Du/Sie) wie in der ersten Nachricht.
+- Nicht drängeln, kein schlechtes Gewissen machen („Sie haben wohl übersehen …“ ist tabu).
+- Einen neuen, kleinen Gedanken oder ein konkretes Beispiel bringen, nicht die erste Nachricht wiederholen.
+- Ausdrücklich sagen, dass wir uns danach nicht mehr melden, wenn kein Interesse besteht.
+- „betreff“: „Re: “ plus der ursprüngliche Betreff."""
+    return _call("erinnerung", brain, prompt, _obj(dict(DRAFT_FIELDS)), lead.get("id"))
 
 
 # ---------------------------------------------------------------- Antworten und Lernen (mittel)

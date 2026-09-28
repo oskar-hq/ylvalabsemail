@@ -36,6 +36,40 @@
       </div>
       {% endif %}
 
+      {% set fu_due = is_due(lead) %}
+      {% if lead.status == 'versendet' and not lead.interest and (fu_due or lead.followup_body or lead.followup_count == 1) %}
+      {% set fu_open = (lead.followup_count or 0) == 0 %}
+      <form id="followup" class="draft followup {{ 'due' if fu_open }}">
+        <div class="draft-head">
+          <span class="label">Erinnerung ·
+            {% if lead.followup_count == 1 %}erledigt am {{ lead.followup_sent_at|kurzdatum }}
+            {% else %}seit {{ lead.sent_at|tage_seit }} Tagen keine Antwort{% endif %}</span>
+        </div>
+        {% if not lead.followup_body and fu_open %}
+        <p class="small">Einmal kurz nachfassen, freundlich und ohne Druck. Danach meldet ihr euch nicht mehr, außer der Betrieb antwortet.
+          {% if lead.channel != 'email' %}Die erste Nachricht ging {{ {'brief': 'per Brief', 'telefon': 'am Telefon'}.get(lead.channel, '') }} raus, ein Anruf passt vielleicht besser.{% endif %}</p>
+        <div class="draft-actions">
+          <button type="button" class="btn" data-fu="skip">Nicht nachfassen</button>
+          <button type="button" class="btn" data-fu="mark">Schon erledigt</button>
+          <button type="button" class="btn primary" data-fu="write" {{ 'disabled' if not st.ai }}>Erinnerung schreiben lassen · ca. {{ '%.1f'|format(reminder_ct)|replace('.', ',') }} ct</button>
+        </div>
+        {% else %}
+        <label class="field"><span class="sub">Betreff</span><input name="subject" type="text" value="{{ lead.followup_subject or '' }}" {{ 'readonly' if not fu_open }}></label>
+        <label class="field"><span class="sub">Anrede</span><input name="greeting" type="text" value="{{ lead.followup_greeting or '' }}" {{ 'readonly' if not fu_open }}></label>
+        <label class="field"><span class="sub">Text</span><textarea name="body" rows="6" {{ 'readonly' if not fu_open }}>{{ lead.followup_body or '' }}</textarea></label>
+        {% if fu_open %}
+        <div class="draft-actions">
+          <button type="button" class="btn" data-fu="skip">Nicht nachfassen</button>
+          <button type="button" class="btn" data-fu="save">Speichern</button>
+          <button type="button" class="btn" data-fu="mark">Als erledigt markieren</button>
+          <button type="button" class="btn primary" data-fu="send" {{ 'disabled' if not (st.email_enabled and lead.email and lead.channel == 'email') and not account.demo }}
+            title="{{ '' if st.email_enabled else 'Versand per Mail ist ausgeschaltet (OUTREACH_EMAIL).' }}">Per Mail senden</button>
+        </div>
+        {% endif %}
+        {% endif %}
+      </form>
+      {% endif %}
+
       {% if lead.body or lead.subject %}
       <form id="draft" class="draft">
         <div class="draft-head">

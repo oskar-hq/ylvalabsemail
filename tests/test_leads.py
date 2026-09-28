@@ -7,6 +7,7 @@ import sys
 import tempfile
 import threading
 import unittest
+from datetime import datetime, timedelta
 from email.message import EmailMessage
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -261,6 +262,50 @@ class AgentTest(unittest.TestCase):
         self.assertIsNone(run_id)
         self.assertIn("KI-Schlüssel", err)
 
+    def test_followup_due_and_written_in_run(self):
+        old = (datetime.now() - timedelta(days=8)).isoformat(timespec="seconds")
+        fresh = leaddb.now()
+        due = self.add("Alt", status="versendet", channel="email", email="a@alt.de", sent_at=old, message_id="<m1@y>",
+                       subject="Hallo", greeting="Moin,", body="B")
+        self.add("Neu", status="versendet", channel="email", email="n@neu.de", sent_at=fresh)
+        self.add("Geantwortet", status="beantwortet", interest="mittel", sent_at=old)
+        self.assertEqual(leaddb.tab_counts(self.c)["nachfassen"], 1)
+        self.assertEqual(leaddb.tab_counts(self.c)["versendet"], 1)
+        self.assertEqual(leaddb.tab_of(leaddb.get_lead(self.c, due)), "nachfassen")
+        with mock.patch.object(agent, "notify") as n:
+            self.assertEqual(agent.notify_due(self.c), 1)
+            self.assertEqual(agent.notify_due(self.c), 0)  # nur einmal Bescheid geben
+            self.assertEqual(n.call_count, 1)
+        self.add("Kandidat", website="https://k.example.org")
+        with mock.patch.object(ai, "available", return_value=True), \
+                mock.patch.object(ai, "write_followup", return_value={"betreff": "Re: Hallo", "anrede": "Moin,", "text": "Kurz."}) as wf:
+            run = self._run(check=1, drafts=0, budget=5, quick_score=10)
+        self.assertEqual(json.loads(run["counts"])["erinnerungen"], 1)
+        self.assertEqual(wf.call_args[0][2], leaddb.FOLLOWUP_DAYS)
+        self.assertEqual(leaddb.get_lead(self.c, due)["followup_body"], "Kurz.")
+
+    def test_followup_mail_threads_and_reply_matches(self):
+        old = (datetime.now() - timedelta(days=8)).isoformat(timespec="seconds")
+        lead_id = self.add("Alt", status="versendet", channel="email", email="a@alt.de", sent_at=old, message_id="<m1@y>",
+                           subject="Hallo", greeting="Moin,", body="B", followup_greeting="Moin,", followup_body="Kurz.")
+        sent = []
+        smtp = mock.Mock(send_message=lambda m: sent.append(m))
+        settings = dict(agent.CFG["settings"], OUTREACH_EMAIL=True, OUTREACH_USER="k@ylvalabs.de",
+                        OUTREACH_PASSWORD="x", IMAP_HOST="")
+        with mock.patch.dict(agent.CFG, {"settings": settings, "smtp_connect": lambda u, p: smtp}):
+            agent.send_outreach(self.c, leaddb.get_lead(self.c, lead_id), "t", followup=True)
+        msg = sent[0]
+        self.assertEqual(msg["Subject"], "Re: Hallo")
+        self.assertEqual(msg["In-Reply-To"], "<m1@y>")
+        lead = leaddb.get_lead(self.c, lead_id)
+        self.assertEqual(lead["followup_count"], 1)
+        self.assertEqual(leaddb.tab_of(lead), "versendet")
+        reply = EmailMessage()
+        reply["From"] = "x@woanders.de"
+        reply["In-Reply-To"] = lead["followup_message_id"]
+        reply.set_content("Ja gern")
+        self.assertEqual(agent._match_lead(self.c, reply), lead_id)
+
     def test_learned_filter(self):
         for i in range(5):
             self.add(f"F{i}", category="craft=hairdresser", category_label="Friseur", status="aussortiert", rejected_by="ki")
@@ -354,6 +399,13 @@ class ViewsTest(unittest.TestCase):
         self.assertEqual(leaddb.get_lead(c, lead_id)["status"], "versendet")
         self.assertEqual(leaddb.get_lead(c, lead_id)["body"], "Kurz.")  # ohne mitgeschickten Text nicht überschrieben
         self.assertEqual(self.client.get("/leads/gehirn").status_code, 200)
+        # Demo-Daten: ein Betrieb ist zum Nachfassen fällig
+        due = c.execute("SELECT id FROM leads WHERE name LIKE 'Steuerbüro%'").fetchone()[0]
+        self.assertIn("Erinnerung schreiben lassen", self.client.get(f"/leads/{due}").get_data(as_text=True))
+        r = self.client.post(f"/leads/{due}/erinnerung/auslassen", headers={"X-CSRF-Token": self.csrf})
+        self.assertTrue(r.get_json()["ok"])
+        self.assertEqual(leaddb.get_lead(c, due)["followup_count"], -1)
+        self.assertEqual(leaddb.tab_of(leaddb.get_lead(c, due)), "versendet")
         self.assertEqual(self.client.get("/sw.js").headers["Service-Worker-Allowed"], "/")
         self.assertEqual(len(webpush.b64u_decode(self.client.get("/push/key").get_json()["key"])), 65)
 

@@ -235,6 +235,8 @@ i.new{display:inline-block;width:8px;height:8px;border-radius:50%;background:var
 .small-frame{height:620px}
 .flash{animation:flash 1.2s ease-out}
 @keyframes flash{from{background:var(--ice)}}
+.followup.due{border-top:2px solid var(--spore)}
+.followup p{margin:0 0 14px;color:var(--body)}
 .reply-box{border:1px solid var(--blue);padding:16px 18px;margin-bottom:28px}
 .reply-box .reply-summary{margin:0 0 8px;font-size:16px}
 .reply-box p{margin:0 0 6px}

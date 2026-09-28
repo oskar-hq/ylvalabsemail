@@ -83,7 +83,8 @@ def seed(conn):
              json.dumps({"groesse": "Beispieldaten", "zeitfresser": d.get("zeitfresser", []), "pages": [], "emails": []}),
              d.get("contact_name"), d.get("subject"), d.get("greeting"), d.get("body"),
              d.get("channel", "email") if d["status"] in ("versendet", "beantwortet") else None,
-             at if d["status"] in ("versendet", "beantwortet") else None,
+             ((datetime.now() - timedelta(days=9)).isoformat(timespec="seconds") if d["status"] == "versendet"
+              else at if d["status"] == "beantwortet" else None),  # „versendet“ ist schon zum Nachfassen fällig
              at if d.get("reply") else None, 1 if d["status"] in ("entwurf",) or d.get("interest") == "qualified" else 0,
              "ki" if d["status"] == "aussortiert" else None))
         if not cur.rowcount:

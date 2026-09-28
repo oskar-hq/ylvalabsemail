@@ -50,10 +50,15 @@ Danach geht es so weiter:
 1. **Prüfen:** Ihr lest den Entwurf, ändert ihn selbst oder sagt der KI im **Chat**, was anders werden soll
    (jede Überarbeitung zeigt ihre Kosten). Dann gebt ihr ihn frei: per Mail senden, als Brief drucken oder
    als „per Telefon“ markieren.
-2. **Antworten lesen:** Die App liest das Akquise-Postfach, das ist kostenlos. Nur echte Antworten ordnet die
+2. **Nachfassen:** Kommt nach 7 Tagen keine Antwort, landet der Betrieb kostenlos im Reiter **Nachfassen**,
+   und ihr bekommt Bescheid. Die Erinnerung (höchstens 60 Wörter, ohne Druck, mit dem Satz, dass danach
+   Schluss ist) schreibt die KI auf Knopfdruck oder im nächsten Lauf, für ca. 2 Cent. Auch sie geht erst nach
+   eurer Freigabe raus, per Mail im selben Gesprächsverlauf, oder ihr ruft an. Pro Betrieb gibt es genau eine
+   Erinnerung (`LEADS_FOLLOWUP_DAYS`, 0 schaltet es ab).
+3. **Antworten lesen:** Die App liest das Akquise-Postfach, das ist kostenlos. Nur echte Antworten ordnet die
    KI als **Qualified**, **Mittel** oder **Kein Interesse** ein (ca. 1–2 Cent pro Antwort) und benachrichtigt
    euch. Wer keine Nachrichten mehr möchte, kommt auf eine Sperrliste.
-3. **Lernen:** Alles, was ihr ändert, aussortiert oder im Chat sagt, und jede Antwort einer Firma landet im
+4. **Lernen:** Alles, was ihr ändert, aussortiert oder im Chat sagt, und jede Antwort einer Firma landet im
    **Gehirn**. Am Ende jedes Laufs (oder per „Jetzt lernen“) schreibt die KI daraus den Abschnitt „Gelernt“
    fort. Branchen, bei denen es oft klappt, kommen häufiger dran, andere aber weiterhin ab und zu (15 % Zufall).
 

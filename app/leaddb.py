@@ -2,7 +2,7 @@
 import json
 import re
 import sqlite3
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -14,6 +14,7 @@ TABS = [
     ("mittel", "Mittel", "Vielleicht später, Rückfrage oder unklar."),
     ("kein_interesse", "Kein Interesse", "Abgesagt oder möchte nicht mehr kontaktiert werden."),
     ("entwurf", "Zur Prüfung", "Nachricht ist fertig und wartet auf eure Freigabe."),
+    ("nachfassen", "Nachfassen", "Keine Antwort seit einer Woche. Einmal kurz erinnern oder anrufen."),
     ("versendet", "Versendet", "Raus, wir warten auf Antwort."),
     ("arbeit", "In Bearbeitung", "Gefunden, noch nicht fertig recherchiert."),
     ("aussortiert", "Aussortiert", "Passt nicht, von der KI oder von euch aussortiert."),
@@ -82,7 +83,26 @@ CREATE INDEX IF NOT EXISTS ai_usage_at ON ai_usage(at);
 MIGRATIONS = [
     "ALTER TABLE leads ADD COLUMN quick_score INTEGER",
     "ALTER TABLE leads ADD COLUMN quick_reason TEXT",
+    # Erinnerung: count 0 = noch keine, 1 = verschickt, -1 = bewusst nicht nachfassen
+    "ALTER TABLE leads ADD COLUMN followup_count INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE leads ADD COLUMN followup_subject TEXT",
+    "ALTER TABLE leads ADD COLUMN followup_greeting TEXT",
+    "ALTER TABLE leads ADD COLUMN followup_body TEXT",
+    "ALTER TABLE leads ADD COLUMN followup_sent_at TEXT",
+    "ALTER TABLE leads ADD COLUMN followup_message_id TEXT",
 ]
+
+FOLLOWUP_DAYS = 7  # wird beim Start aus LEADS_FOLLOWUP_DAYS gesetzt, 0 = aus
+
+
+def followup_cutoff():
+    return (datetime.now() - timedelta(days=FOLLOWUP_DAYS)).isoformat(timespec="seconds")
+
+
+def is_due(lead):
+    return bool(FOLLOWUP_DAYS and lead["status"] == "versendet" and not lead.get("interest")
+                and (lead.get("followup_count") or 0) == 0 and lead.get("sent_at")
+                and lead["sent_at"] <= followup_cutoff())
 
 
 def now():
@@ -150,6 +170,8 @@ def tab_of(lead):
         return "kein_interesse"
     if lead["status"] in ("kandidat", "recherche", "fehler", "vorgeprueft", "analysiert"):
         return "arbeit"
+    if is_due(lead):
+        return "nachfassen"
     return lead["status"]
 
 
@@ -158,15 +180,22 @@ TAB_SQL = {
     "mittel": "interest='mittel' OR (status='beantwortet' AND interest IS NULL)",
     "kein_interesse": "interest='kein_interesse' OR status='gesperrt'",
     "entwurf": "status='entwurf' AND interest IS NULL",
-    "versendet": "status='versendet' AND interest IS NULL",
+    "nachfassen": "status='versendet' AND interest IS NULL AND IFNULL(followup_count,0)=0 AND :days > 0"
+                  " AND sent_at <= :cutoff",
+    "versendet": "status='versendet' AND interest IS NULL AND NOT (IFNULL(followup_count,0)=0 AND :days > 0"
+                 " AND sent_at <= :cutoff)",
     "arbeit": "status IN ('recherche','fehler','vorgeprueft','analysiert')",
     # Was schon der kostenlose Grobfilter aussortiert hat, bleibt aus der Liste raus (nur gezählt)
     "aussortiert": "status='aussortiert' AND interest IS NULL AND IFNULL(rejected_by,'') != 'filter'",
 }
 
 
+def _tab_args():
+    return {"days": FOLLOWUP_DAYS, "cutoff": followup_cutoff()}
+
+
 def tab_counts(conn):
-    counts = {key: conn.execute(f"SELECT COUNT(*) FROM leads WHERE {TAB_SQL[key]}").fetchone()[0]
+    counts = {key: conn.execute(f"SELECT COUNT(*) FROM leads WHERE {TAB_SQL[key]}", _tab_args()).fetchone()[0]
               for key, _, _ in TABS}
     counts["kandidaten"] = conn.execute("SELECT COUNT(*) FROM leads WHERE status='kandidat'").fetchone()[0]
     counts["grobfilter"] = conn.execute("SELECT COUNT(*) FROM leads WHERE rejected_by='filter'").fetchone()[0]
@@ -174,9 +203,10 @@ def tab_counts(conn):
 
 
 def tab_leads(conn, key, limit=300):
-    order = {"entwurf": "fit_score DESC, updated_at DESC",
+    order = {"entwurf": "fit_score DESC, updated_at DESC", "nachfassen": "sent_at",
              "arbeit": "IFNULL(fit_score, quick_score) DESC, updated_at DESC"}.get(key, "updated_at DESC")
-    rows = conn.execute(f"SELECT * FROM leads WHERE {TAB_SQL[key]} ORDER BY {order} LIMIT ?", (limit,)).fetchall()
+    rows = conn.execute(f"SELECT * FROM leads WHERE {TAB_SQL[key]} ORDER BY {order} LIMIT :limit",
+                        {**_tab_args(), "limit": limit}).fetchall()
     return [dict(r) for r in rows]
 
 # ---------------------------------------------------------------- Gehirn

@@ -47,6 +47,11 @@ def ago(ts):
     return "gerade eben" if secs < 60 else f"seit {secs // 60} Min." if secs < 3600 else f"seit {secs // 3600} Std."
 
 
+@bp.app_template_filter("tage_seit")
+def _tage_seit(value):
+    return (datetime.now() - datetime.fromisoformat(value)).days if value else 0
+
+
 @bp.app_template_filter("kurzdatum")
 def _kurzdatum(value):
     return fmt_date(value)
@@ -55,7 +60,7 @@ def _kurzdatum(value):
 @bp.app_context_processor
 def _leads_globals():
     return {"lead_status_labels": leaddb.STATUS_LABELS, "interest_labels": leaddb.INTEREST_LABELS,
-            "tab_of": leaddb.tab_of}
+            "tab_of": leaddb.tab_of, "is_due": leaddb.is_due, "followup_days": leaddb.FOLLOWUP_DAYS}
 
 
 def money(usd):
@@ -118,7 +123,8 @@ def run():
         params = {"vorpruefen": max(1, min(500, int(request.form.get("vorpruefen", 0)))),
                   "entwuerfe": max(0, min(50, int(request.form.get("entwuerfe", 0)))),
                   "budget_eur": max(0.05, min(100.0, float(request.form.get("budget_eur", "0").replace(",", ".")))),
-                  "suchen": request.form.get("suchen") == "1"}
+                  "suchen": request.form.get("suchen") == "1",
+                  "erinnerungen": request.form.get("erinnerungen") == "1"}
     except ValueError:
         return jsonify(error="Bitte Zahlen eingeben."), 400
     run_id, error = agent.start_run(params, who())
@@ -141,7 +147,7 @@ def estimate():
         check, drafts = int(request.args.get("vorpruefen", 0)), int(request.args.get("entwuerfe", 0))
     except ValueError:
         abort(400)
-    return jsonify(agent.estimate(db(), max(0, check), max(0, drafts)))
+    return jsonify(agent.estimate(db(), max(0, check), max(0, drafts), request.args.get("erinnerungen") == "1"))
 
 
 @bp.get("/leads/kosten")
@@ -175,6 +181,7 @@ def detail(lead_id):
     events = [dict(e, meta=json.loads(e["meta"]) if e["meta"] else {}) for e in
               db().execute("SELECT * FROM lead_events WHERE lead_id=? ORDER BY id", (lead_id,))]
     return render_template("lead.html", account=g.account, lead=lead, events=events, st=status_payload(),
+                           reminder_ct=ai.eur(agent.avg_cost_usd(db(), "erinnerung")) * 100,
                            tab=leaddb.tab_of(lead), tabs=leaddb.TABS, demo=SETTINGS["DEMO_MODE"])
 
 
@@ -352,6 +359,89 @@ def retry(lead_id):
         return jsonify(error="Ohne KI-Schlüssel kann nichts geprüft werden."), 400
     leaddb.kv_set(db(), "request:lead", lead_id)
     agent.wake()
+    return jsonify(ok=True)
+
+# ---------------------------------------------------------------- Erinnerung (Nachfassen)
+
+
+def _followup_fields():
+    return {f"followup_{k}": request.form.get(k, "").strip() for k in ("subject", "greeting", "body")}
+
+
+def _save_followup(lead):
+    if "body" not in request.form:
+        return False
+    fields = _followup_fields()
+    if fields == {k: lead[k] or "" for k in fields}:
+        return False
+    leaddb.update_lead(db(), lead["id"], **fields)
+    leaddb.add_event(db(), lead["id"], "edit", "Erinnerung von Hand geändert.", author=who())
+    return True
+
+
+@bp.post("/leads/<int:lead_id>/erinnerung/schreiben")
+@login_required
+def followup_write(lead_id):
+    lead = lead_or_404(lead_id)
+    if not ai.available():
+        return jsonify(error="Ohne KI-Schlüssel kann die Erinnerung nicht geschrieben werden. Ihr könnt sie aber selbst tippen."), 400
+    left = agent.month_budget_left_eur(db())
+    if left is not None and left <= 0:
+        return jsonify(error="Das Monatsbudget ist aufgebraucht."), 400
+    before = leaddb._sum(db(), "lead_id = ? AND stage = 'erinnerung'", (lead_id,))["usd"]
+    try:
+        agent.write_followup(db(), lead["id"])
+    except ai.AIError as exc:
+        return jsonify(error=str(exc)), 502
+    spent = leaddb._sum(db(), "lead_id = ? AND stage = 'erinnerung'", (lead_id,))["usd"] - before
+    return jsonify(ok=True, cost_eur=money(spent))
+
+
+@bp.post("/leads/<int:lead_id>/erinnerung/speichern")
+@login_required
+def followup_save(lead_id):
+    return jsonify(ok=True, changed=_save_followup(lead_or_404(lead_id)))
+
+
+@bp.post("/leads/<int:lead_id>/erinnerung/senden")
+@login_required
+def followup_send(lead_id):
+    _save_followup(lead_or_404(lead_id))
+    lead = lead_or_404(lead_id)
+    if (lead["followup_count"] or 0) != 0:
+        return jsonify(error="Die Erinnerung ist schon raus."), 400
+    if g.account.get("demo"):
+        leaddb.update_lead(db(), lead_id, followup_count=1, followup_sent_at=leaddb.now())
+        leaddb.add_event(db(), lead_id, "sent", "Demo: Erinnerung als versendet markiert (nichts verschickt).", author=who())
+        return jsonify(ok=True)
+    try:
+        agent.send_outreach(db(), lead, who(), followup=True)
+    except Exception as exc:
+        return jsonify(error=str(exc)), 502
+    return jsonify(ok=True)
+
+
+@bp.post("/leads/<int:lead_id>/erinnerung/erledigt")
+@login_required
+def followup_mark(lead_id):
+    _save_followup(lead_or_404(lead_id))
+    channel = request.form.get("channel")
+    labels = {"brief": "per Brief", "telefon": "am Telefon", "email": "per Mail (selbst verschickt)"}
+    if channel not in labels:
+        abort(400)
+    leaddb.update_lead(db(), lead_id, followup_count=1, followup_sent_at=leaddb.now(), unread=0)
+    leaddb.add_event(db(), lead_id, "sent", f"Nachgefasst {labels[channel]}.", author=who())
+    return jsonify(ok=True)
+
+
+@bp.post("/leads/<int:lead_id>/erinnerung/auslassen")
+@login_required
+def followup_skip(lead_id):
+    lead = lead_or_404(lead_id)
+    leaddb.update_lead(db(), lead_id, followup_count=-1, unread=0)
+    leaddb.add_event(db(), lead_id, "status", "Nicht nachfassen.", author=who())
+    leaddb.add_signal(db(), "nachfassen", f"Das Team möchte bei {lead['name']} ({lead['category_label']}) nicht nachfassen.",
+                      lead_id)
     return jsonify(ok=True)
 
 # ---------------------------------------------------------------- Gehirn

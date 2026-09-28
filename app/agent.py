@@ -48,6 +48,7 @@ def init(settings, smtp_connect, sent_folder, db_path, data_dir):
     CFG.update(settings=settings, smtp_connect=smtp_connect, sent_folder=sent_folder, db_path=db_path,
                data_dir=data_dir)
     ai.on_usage = _record_usage
+    leaddb.FOLLOWUP_DAYS = settings["LEADS_FOLLOWUP_DAYS"]
     if settings["LEADS_WORKER"] and not STATE["running"]:
         STATE["running"] = True
         threading.Thread(target=_loop, name="leads-worker", daemon=True).start()
@@ -317,7 +318,7 @@ def stage_write(c, lead_id, brain):
 
 # Grobe Kosten pro Aufruf in US-Dollar, bis genug eigene Messwerte da sind
 DEFAULT_COST_USD = {"vorpruefung": 0.004, "analyse": 0.04, "entwurf": 0.06, "chat": 0.06, "antwort": 0.02,
-                    "lernen": 0.04}
+                    "lernen": 0.04, "erinnerung": 0.02}
 ANALYSE_FACTOR = 3  # höchstens so viele Analysen pro gewünschtem Entwurf
 RUN = {"id": None, "cancel": False, "progress": ""}
 _local = threading.local()
@@ -332,7 +333,13 @@ def avg_cost_usd(c, stage):
     return avg if n >= 5 and avg else DEFAULT_COST_USD[stage]
 
 
-def estimate(c, check, drafts):
+def due_followups(c, without_text=False):
+    rows = c.execute("SELECT * FROM leads WHERE status='versendet' AND interest IS NULL AND IFNULL(followup_count,0)=0 "
+                     "AND ? > 0 AND sent_at <= ? ORDER BY sent_at", (leaddb.FOLLOWUP_DAYS, leaddb.followup_cutoff()))
+    return [dict(r) for r in rows if not (without_text and r["followup_body"])]
+
+
+def estimate(c, check, drafts, followups=True):
     """Was kostet ein Lauf ungefähr? Aus den bisherigen Durchschnittswerten."""
     q_rate, a_rate = leaddb.pass_rates(c)
     # Analysiert wird nur, bis genug Entwürfe beisammen sind
@@ -340,7 +347,9 @@ def estimate(c, check, drafts):
     written = min(analyses * a_rate, drafts)
     usd = (check * avg_cost_usd(c, "vorpruefung") + analyses * avg_cost_usd(c, "analyse")
            + written * avg_cost_usd(c, "entwurf") + avg_cost_usd(c, "lernen"))
-    return {"eur": ai.eur(usd), "analysen": round(analyses), "entwuerfe": round(written),
+    reminders = len(due_followups(c, without_text=True)) if followups else 0
+    usd += reminders * avg_cost_usd(c, "erinnerung")
+    return {"eur": ai.eur(usd), "analysen": round(analyses), "entwuerfe": round(written), "erinnerungen": reminders,
             "per_stage_eur": {s: ai.eur(avg_cost_usd(c, s)) for s in DEFAULT_COST_USD},
             "q_rate": q_rate, "a_rate": a_rate}
 
@@ -408,7 +417,7 @@ def execute_run(c, run_id):
     p = json.loads(run["params"])
     check, drafts, budget = int(p["vorpruefen"]), int(p["entwuerfe"]), float(p["budget_eur"])
     counts = {"neu_gefunden": 0, "grobfilter": 0, "vorgeprueft": 0, "vorpruefung_durch": 0, "analysiert": 0,
-              "analyse_durch": 0, "entwuerfe": 0}
+              "analyse_durch": 0, "entwuerfe": 0, "erinnerungen": 0}
     RUN.update(id=run_id, cancel=False)
     _local.run_id = run_id
     c.execute("UPDATE runs SET status='laeuft' WHERE id=?", (run_id,))
@@ -454,6 +463,15 @@ def execute_run(c, run_id):
             _progress(f"Stufe 4/4 · Schreibt Entwurf {i + 1}/{len(best)}: {row['name']}")
             counts["entwuerfe"] += stage_write(c, row["id"], brain)
 
+        # Erinnerungen für Betriebe, die seit einer Woche nicht geantwortet haben (mittleres Modell, kurz)
+        if p.get("erinnerungen", True):
+            due = due_followups(c, without_text=True)
+            for i, lead in enumerate(due):
+                check_budget(c, run_id, budget, "erinnerung")
+                _progress(f"Erinnerung {i + 1}/{len(due)}: {lead['name']}")
+                write_followup(c, lead["id"])
+                counts["erinnerungen"] += 1
+
         # Zum Schluss aus den Rückmeldungen seit dem letzten Lauf lernen
         if c.execute("SELECT 1 FROM signals WHERE processed=0").fetchone():
             check_budget(c, run_id, budget, "lernen")
@@ -471,7 +489,9 @@ def execute_run(c, run_id):
     finally:
         _local.run_id = None
         cost = ai.eur(leaddb._sum(c, "run_id = ?", (run_id,))["usd"])
-        summary = (f"{counts['entwuerfe']} neue Entwürfe, {counts['vorgeprueft']} vorgeprüft, "
+        summary = (f"{counts['entwuerfe']} neue Entwürfe, "
+                   + (f"{counts['erinnerungen']} Erinnerungen, " if counts["erinnerungen"] else "")
+                   + f"{counts['vorgeprueft']} vorgeprüft, "
                    f"{counts['analysiert']} analysiert. Kosten: {cost:.2f} €.".replace(f"{cost:.2f}", f"{cost:.2f}".replace(".", ",")))
         c.execute("UPDATE runs SET ended_at=?, status=?, message=?, counts=? WHERE id=?",
                   (leaddb.now(), status, " ".join(x for x in (message, summary) if x), _json(counts), run_id))
@@ -493,13 +513,51 @@ def lead_form(lead):
     }
 
 
-def send_outreach(c, lead, sent_by):
+def write_followup(c, lead_id):
+    """Erinnerung schreiben (kostet eine kleine KI-Anfrage). Verschickt wird sie erst nach Freigabe."""
+    lead = leaddb.get_lead(c, lead_id)
+    result = ai.write_followup(leaddb.brain(c), lead, leaddb.FOLLOWUP_DAYS)
+    leaddb.update_lead(c, lead_id, followup_subject=result["betreff"], followup_greeting=result["anrede"],
+                       followup_body=result["text"], unread=1)
+    leaddb.add_event(c, lead_id, "draft", f"Erinnerung geschrieben ({ai.MODELS['erinnerung']}).")
+    return result
+
+
+def notify_due(c):
+    """Kostenlos: einmal Bescheid geben, wenn Betriebe zum Nachfassen fällig werden."""
+    told = set(leaddb.kv_get(c, "followup_notified", []))
+    new = [lead for lead in due_followups(c) if lead["id"] not in told]
+    if not new:
+        return 0
+    leaddb.kv_set(c, "followup_notified", sorted(told | {lead["id"] for lead in new}))
+    names = ", ".join(lead["name"] for lead in new[:3]) + (" …" if len(new) > 3 else "")
+    notify(c, f"Nachfassen: {len(new)} Betrieb{'e' if len(new) != 1 else ''}",
+           f"Seit {leaddb.FOLLOWUP_DAYS} Tagen keine Antwort: {names}", "/leads?tab=nachfassen")
+    return len(new)
+
+
+def followup_form(lead):
+    subject = lead["followup_subject"] or ""
+    original = lead["subject"] or ""
+    if not subject.lower().startswith("re:"):
+        subject = f"Re: {original}" if original else subject
+    return {**lead_form(lead), "subject": subject, "greeting": lead["followup_greeting"] or "",
+            "body": lead["followup_body"] or ""}
+
+
+def send_outreach(c, lead, sent_by, followup=False):
     if not (S("OUTREACH_EMAIL") and outreach_configured()):
         raise RuntimeError("Der Versand per Mail ist ausgeschaltet (OUTREACH_EMAIL).")
     if not lead["email"]:
         raise RuntimeError("Für diesen Betrieb ist keine E-Mail-Adresse bekannt.")
+    if followup and not lead["followup_body"]:
+        raise RuntimeError("Es gibt noch keinen Text für die Erinnerung.")
     rcpt = {"name": lead["contact_name"] or "", "first": "", "email": lead["email"]}
-    msg = emailbuild.build_message(lead_form(lead), rcpt, CFG["settings"], outreach_address())
+    form = followup_form(lead) if followup else lead_form(lead)
+    msg = emailbuild.build_message(form, rcpt, CFG["settings"], outreach_address())
+    if followup and lead["message_id"]:  # im selben Gesprächsverlauf wie die erste Mail
+        msg["In-Reply-To"] = lead["message_id"]
+        msg["References"] = lead["message_id"]
     smtp = CFG["smtp_connect"](S("OUTREACH_USER"), S("OUTREACH_PASSWORD"))
     try:
         smtp.send_message(msg)
@@ -517,6 +575,11 @@ def send_outreach(c, lead, sent_by):
                 imap.logout()
         except Exception as exc:
             log.warning("Ablage im Ordner „Gesendet“ fehlgeschlagen: %s", exc)
+    if followup:
+        leaddb.update_lead(c, lead["id"], followup_count=1, followup_sent_at=leaddb.now(),
+                           followup_message_id=msg["Message-ID"], unread=0)
+        leaddb.add_event(c, lead["id"], "sent", f"Erinnerung per Mail an {lead['email']} versendet.", author=sent_by)
+        return
     leaddb.update_lead(c, lead["id"], status="versendet", channel="email", sent_at=leaddb.now(),
                        message_id=msg["Message-ID"], unread=0)
     leaddb.add_event(c, lead["id"], "sent", f"Per Mail an {lead['email']} versendet.", author=sent_by)
@@ -550,7 +613,7 @@ def _message_text(msg):
 def _match_lead(c, msg):
     refs = " ".join(filter(None, (msg.get("In-Reply-To"), msg.get("References"))))
     for mid in re.findall(r"<[^>]+>", refs):
-        row = c.execute("SELECT id FROM leads WHERE message_id=?", (mid,)).fetchone()
+        row = c.execute("SELECT id FROM leads WHERE message_id=? OR followup_message_id=?", (mid, mid)).fetchone()
         if row:
             return row["id"]
     sender = parseaddr(msg.get("From", ""))[1].lower()
@@ -678,6 +741,7 @@ def tick():
                 if time.time() - last > S("INBOX_MINUTES") * 60:
                     leaddb.kv_set(c, "last_inbox", time.time())
                     check_inbox(c)
+            notify_due(c)
             run = c.execute("SELECT id FROM runs WHERE status='wartet' ORDER BY id LIMIT 1").fetchone()
             if run:
                 execute_run(c, run["id"])
