@@ -58,17 +58,36 @@ def _leads_globals():
             "tab_of": leaddb.tab_of}
 
 
+def money(usd):
+    return round(ai.eur(usd), 2)
+
+
 def status_payload():
     st = agent.status()
     c = db()
+    costs = leaddb.cost_summary(c)
+    run = c.execute("SELECT * FROM runs WHERE status IN ('wartet','laeuft') ORDER BY id DESC LIMIT 1").fetchone()
+    run_cost = leaddb._sum(c, "run_id = ?", (run["id"],)) if run else None
+    cap = SETTINGS["LEADS_MONTHLY_BUDGET_EUR"]
     return {
         "activity": st["activity"], "since": ago(st["since"]), "error": st["error"],
         "warnings": st["warnings"], "email_enabled": st["email_enabled"], "ai": ai.available(),
-        "auto": leaddb.kv_get(c, "auto", True), "counts": leaddb.tab_counts(c),
+        "counts": leaddb.tab_counts(c),
         "unread": c.execute("SELECT COUNT(*) FROM leads WHERE unread=1").fetchone()[0],
         "last_search": leaddb.kv_get(c, "last_search"),
-        "paused": time.time() < leaddb.kv_get(c, "pause_until", 0),
+        "run": dict(run, params=json.loads(run["params"])) if run else None,
+        "run_eur": money(run_cost["usd"]) if run_cost else 0, "run_tokens": (run_cost["tin"] + run_cost["tout"]) if run_cost else 0,
+        "today_eur": money(costs["today"]["usd"]), "month_eur": money(costs["month"]["usd"]),
+        "month_tokens": costs["month"]["tin"] + costs["month"]["tout"], "cap_eur": cap,
+        "last_run": costs["last_run"], "last_run_eur": money(costs["last_run_cost"]["usd"]) if costs["last_run_cost"] else None,
     }
+
+
+def run_defaults():
+    est = agent.estimate(db(), SETTINGS["LEADS_RUN_CHECK"], SETTINGS["LEADS_RUN_DRAFTS"])
+    return {"check": SETTINGS["LEADS_RUN_CHECK"], "drafts": SETTINGS["LEADS_RUN_DRAFTS"],
+            "budget": SETTINGS["LEADS_RUN_BUDGET_EUR"], "estimate": est, "models": ai.MODELS,
+            "factor": agent.ANALYSE_FACTOR}
 
 # ---------------------------------------------------------------- Übersicht
 
@@ -83,7 +102,7 @@ def overview():
     sections = [(k, label, hint, leaddb.tab_leads(db(), k, limit=300 if tab == k else 8))
                 for k, label, hint in leaddb.TABS if tab in ("alle", k)]
     return render_template("leads.html", account=g.account, tab=tab, tabs=leaddb.TABS, sections=sections,
-                           st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+                           st=status_payload(), rd=run_defaults(), demo=SETTINGS["DEMO_MODE"])
 
 
 @bp.get("/leads/status.json")
@@ -95,24 +114,54 @@ def status_json():
 @bp.post("/leads/run")
 @login_required
 def run():
-    action = request.form.get("action")
-    if action not in ("search", "next"):
-        abort(400)
-    if not ai.available():
-        return jsonify(error="Ohne KI-Schlüssel (ANTHROPIC_API_KEY) kann nichts recherchiert werden."), 400
-    leaddb.kv_set(db(), "pause_until", 0)
-    agent.request(action)
-    return jsonify(ok=True, message="Suche gestartet." if action == "search" else "Die nächste Firma wird geprüft.")
+    try:
+        params = {"vorpruefen": max(1, min(500, int(request.form.get("vorpruefen", 0)))),
+                  "entwuerfe": max(0, min(50, int(request.form.get("entwuerfe", 0)))),
+                  "budget_eur": max(0.05, min(100.0, float(request.form.get("budget_eur", "0").replace(",", ".")))),
+                  "suchen": request.form.get("suchen") == "1"}
+    except ValueError:
+        return jsonify(error="Bitte Zahlen eingeben."), 400
+    run_id, error = agent.start_run(params, who())
+    if error:
+        return jsonify(error=error), 400
+    return jsonify(ok=True, run_id=run_id, message="Lauf gestartet. Ihr bekommt Bescheid, wenn er fertig ist.")
 
 
-@bp.post("/leads/auto")
+@bp.post("/leads/stop")
 @login_required
-def auto():
-    on = request.form.get("on") == "1"
-    leaddb.kv_set(db(), "auto", on)
-    if on:
-        agent.request("next")
-    return jsonify(ok=True, auto=on)
+def stop():
+    agent.stop_run()
+    return jsonify(ok=True, message="Wird nach dem aktuellen Schritt gestoppt.")
+
+
+@bp.get("/leads/schaetzung")
+@login_required
+def estimate():
+    try:
+        check, drafts = int(request.args.get("vorpruefen", 0)), int(request.args.get("entwuerfe", 0))
+    except ValueError:
+        abort(400)
+    return jsonify(agent.estimate(db(), max(0, check), max(0, drafts)))
+
+
+@bp.get("/leads/kosten")
+@login_required
+def costs():
+    c = db()
+    runs = []
+    for r in c.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 30").fetchall():
+        runs.append({**dict(r), "counts": json.loads(r["counts"]) if r["counts"] else {},
+                     "params": json.loads(r["params"]) if r["params"] else {},
+                     "eur": money(leaddb._sum(c, "run_id = ?", (r["id"],))["usd"])})
+    summary = leaddb.cost_summary(c)
+    stages = [{**s, "label": ai.STAGE_LABELS.get(s["stage"], s["stage"]), "eur": money(s["usd"]),
+               "per_call_ct": ai.eur(s["usd"] / s["n"]) * 100 if s["n"] else 0} for s in summary["stages"]]
+    drafts_month = c.execute("SELECT COUNT(*) FROM lead_events WHERE kind='draft' AND at >= ?",
+                             (datetime.now().strftime("%Y-%m-01"),)).fetchone()[0]
+    return render_template("costs.html", account=g.account, st=status_payload(), runs=runs, stages=stages,
+                           summary=summary, money=money, drafts_month=drafts_month, prices=ai.PRICES,
+                           eur_rate=ai.EUR_PER_USD, models=ai.MODELS, stage_labels=ai.STAGE_LABELS,
+                           demo=SETTINGS["DEMO_MODE"])
 
 # ---------------------------------------------------------------- Einzelne Firma
 
@@ -197,6 +246,7 @@ def chat(lead_id):
         return jsonify(reply=reply, subject=lead["subject"], greeting=lead["greeting"], body=lead["body"])
     chat_events = [dict(e) for e in db().execute(
         "SELECT author, text FROM lead_events WHERE lead_id=? AND kind IN ('feedback','ai') ORDER BY id", (lead_id,))]
+    before = leaddb._sum(db(), "lead_id = ? AND stage = 'chat'", (lead_id,))["usd"]
     try:
         result = ai.revise(leaddb.brain(db()), lead,
                            {"subject": lead["subject"] or "", "greeting": lead["greeting"] or "", "body": lead["body"] or ""},
@@ -209,7 +259,9 @@ def chat(lead_id):
     if result["lernpunkt"]:
         signal += f" Allgemein: {result['lernpunkt']}"
     leaddb.add_signal(db(), "feedback", signal, lead_id)
-    return jsonify(reply=result["antwort"], subject=result["betreff"], greeting=result["anrede"], body=result["text"])
+    spent = leaddb._sum(db(), "lead_id = ? AND stage = 'chat'", (lead_id,))["usd"] - before
+    return jsonify(reply=result["antwort"], subject=result["betreff"], greeting=result["anrede"], body=result["text"],
+                   cost_eur=money(spent))
 
 
 @bp.post("/leads/<int:lead_id>/send")
@@ -296,8 +348,9 @@ def note(lead_id):
 def retry(lead_id):
     lead_or_404(lead_id)
     leaddb.update_lead(db(), lead_id, status="kandidat", rejected_by=None)
+    if not ai.available():
+        return jsonify(error="Ohne KI-Schlüssel kann nichts geprüft werden."), 400
     leaddb.kv_set(db(), "request:lead", lead_id)
-    leaddb.kv_set(db(), "pause_until", 0)
     agent.wake()
     return jsonify(ok=True)
 
@@ -317,6 +370,16 @@ def brain():
     return render_template("brain.html", account=g.account, content=leaddb.brain(db()), versions=versions,
                            stats=leaddb.branche_stats(db()), pending=pending, saved=request.args.get("saved"),
                            st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+
+
+@bp.post("/leads/gehirn/lernen")
+@login_required
+def learn_now():
+    if not ai.available():
+        return jsonify(error="Ohne KI-Schlüssel kann nichts gelernt werden."), 400
+    leaddb.kv_set(db(), "request:reflect", True)
+    agent.wake()
+    return jsonify(ok=True, message="Die KI wertet die Rückmeldungen jetzt aus. Das dauert etwa eine Minute.")
 
 
 @bp.get("/leads/gehirn/<int:version_id>")

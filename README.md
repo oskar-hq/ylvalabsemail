@@ -27,21 +27,35 @@ Damit gehen aufwendige HTML-Designs, die normale Mailprogramme nicht bauen könn
 
 ## KI-Akquise (Bereich „Leads“)
 
-Unter **03 Leads** arbeitet eine KI für euch in der Akquise. Kein Schritt geht ohne euch raus:
+Unter **03 Leads** arbeitet eine KI für euch in der Akquise. Sie läuft **nie von selbst**: Ihr startet
+jeden Lauf von Hand, mit Anzahl, höchstens so vielen Entwürfen und einem **Budget in Euro**. Vor dem Start
+zeigt die Seite, was der Lauf ungefähr kostet. Während er läuft, seht ihr Tokens und Kosten live, und ihr
+könnt ihn jederzeit stoppen. Dazu gibt es ein Monatsbudget als harte Grenze (`LEADS_MONTHLY_BUDGET_EUR`).
 
-1. **Suchen:** Sie holt Betriebe im Umkreis von 50 km um Kappeln aus OpenStreetMap (Handwerk, Pflege,
-   Landwirtschaft, Dienstleister, Handel, Industrie, Gastgewerbe), und zwar nur solche mit Webseite oder E-Mail.
-2. **Recherchieren:** Sie liest Startseite, Impressum, Kontakt und „Über uns“ und bewertet, wie gut der Betrieb
-   zu euch passt (0–100), mit Begründung und vermuteten Zeitfressern.
-3. **Schreiben:** Passt der Betrieb, schreibt sie eine persönliche Nachricht und schickt euch eine
-   **Benachrichtigung** aufs Handy und per Mail.
-4. **Prüfen:** Ihr lest den Entwurf, ändert ihn selbst oder sagt der KI im **Chat**, was anders werden soll.
-   Dann gebt ihr ihn frei: per Mail senden, als Brief drucken oder als „per Telefon“ markieren.
-5. **Antworten lesen:** Sie liest das Akquise-Postfach, ordnet Antworten als **Qualified**, **Mittel** oder
-   **Kein Interesse** ein und benachrichtigt euch. Wer keine Nachrichten mehr möchte, kommt auf eine Sperrliste.
-6. **Lernen:** Alles, was ihr ändert, aussortiert oder im Chat sagt, und jede Antwort einer Firma landet im
-   **Gehirn**. Die KI schreibt daraus den Abschnitt „Gelernt“ fort. Branchen, bei denen es oft klappt,
-   kommen bei der Suche häufiger dran, andere aber weiterhin ab und zu (15 % Zufall).
+Ein Lauf arbeitet sich **von günstig nach teuer** vor. Nur wer eine Stufe besteht, kommt in die nächste,
+damit nicht jede Webseite die teure Komplettanalyse bekommt:
+
+| Stufe | Was passiert | Modell | ca. Kosten pro Betrieb |
+|---|---|---|---|
+| 1 · Suchen und Grobfilter | Betriebe aus OpenStreetMap im Umkreis von 50 km um Kappeln. Regeln sortieren ohne KI aus: Ketten, keine Webseite, nur Social-Media-Seite, Kleinstbranchen, Sperrliste und Branchen, die schon fünfmal nicht gepasst haben | keins | kostenlos |
+| 2 · Vorprüfung | Nur die Startseite, grobe Punktzahl 0–100. Ab 50 geht es weiter | `claude-haiku-4-5` | ca. 0,3 Cent |
+| 3 · Analyse | Startseite und Unterseiten (Impressum, Kontakt, Über uns). Passung, Zeitfresser, Ansprechperson. Ab 65 geht es weiter | `claude-sonnet-5` | ca. 3 Cent |
+| 4 · Entwurf | Schreibt die Nachricht, nur für die besten der Analyse, und benachrichtigt euch | `claude-opus-5` | ca. 5 Cent |
+
+Die Cent-Beträge sind Startwerte. Sobald es echte Messwerte gibt, rechnet die Schätzung mit euren
+Durchschnitten. Unter **Kosten im Detail** steht, was jede Stufe und jeder Lauf gekostet hat.
+
+Danach geht es so weiter:
+
+1. **Prüfen:** Ihr lest den Entwurf, ändert ihn selbst oder sagt der KI im **Chat**, was anders werden soll
+   (jede Überarbeitung zeigt ihre Kosten). Dann gebt ihr ihn frei: per Mail senden, als Brief drucken oder
+   als „per Telefon“ markieren.
+2. **Antworten lesen:** Die App liest das Akquise-Postfach, das ist kostenlos. Nur echte Antworten ordnet die
+   KI als **Qualified**, **Mittel** oder **Kein Interesse** ein (ca. 1–2 Cent pro Antwort) und benachrichtigt
+   euch. Wer keine Nachrichten mehr möchte, kommt auf eine Sperrliste.
+3. **Lernen:** Alles, was ihr ändert, aussortiert oder im Chat sagt, und jede Antwort einer Firma landet im
+   **Gehirn**. Am Ende jedes Laufs (oder per „Jetzt lernen“) schreibt die KI daraus den Abschnitt „Gelernt“
+   fort. Branchen, bei denen es oft klappt, kommen häufiger dran, andere aber weiterhin ab und zu (15 % Zufall).
 
 Die Übersicht ist nach Stand sortiert: *Qualified* ganz oben, dann *Mittel*, *Kein Interesse*,
 *Zur Prüfung*, *Versendet*, *In Bearbeitung* und *Aussortiert*. Jeder Reiter lässt sich einzeln anklicken.
@@ -72,11 +86,13 @@ kein Apple-Entwicklerkonto.
 1. Server einrichten wie unter *Installation auf Proxmox* und *Zugriff über das Internet* beschrieben.
 2. In der Anthropic Console (console.anthropic.com) ein Konto anlegen, Guthaben aufladen und einen
    API-Schlüssel erzeugen. Ihn in der `.env` als `ANTHROPIC_API_KEY` eintragen. Abgerechnet wird nach
-   Verbrauch: pro recherchiertem Betrieb grob einige Cent.
+   Verbrauch. Ein Lauf mit 30 Vorprüfungen und 5 Entwürfen kostet grob 0,50 bis 1 €. Tipp: In der
+   Anthropic Console zusätzlich ein Ausgabenlimit setzen.
 3. Ein eigenes Postfach für die Akquise anlegen (z. B. `kontakt@ylvalabs.de`) und als `OUTREACH_USER` /
    `OUTREACH_PASSWORD` eintragen. `IMAP_HOST` muss gesetzt sein, damit Antworten gelesen werden.
 4. `NOTIFY_EMAILS` und `BASE_URL` setzen, Dienst neu starten.
-5. Unter **03 Leads → Gehirn ansehen** die Texte prüfen und anpassen, dann **Betriebe suchen** klicken.
+5. Unter **03 Leads → Gehirn ansehen** die Texte prüfen und anpassen, dann den ersten **Lauf starten**,
+   am besten klein (z. B. 10 Vorprüfungen, 2 Entwürfe, 1 € Budget).
 
 Alle Einstellungen stehen kommentiert in `.env.example`. Mit `DEMO_MODE=true` lassen sich unter
 „Leads“ Beispieldaten laden, um die Oberfläche ohne Schlüssel auszuprobieren.

@@ -98,4 +98,22 @@ def seed(conn):
                              meta={"subject": "Re: " + d["subject"]})
             leaddb.add_event(conn, lead_id, "classify", d["reply_summary"],
                              meta={"grund": d["grund"], "naechster_schritt": d["schritt"]})
+    # Ein Beispiel-Lauf mit Kosten, damit die Kostenanzeige etwas zeigt
+    if not conn.execute("SELECT 1 FROM runs").fetchone():
+        at = (t0 + timedelta(days=5)).isoformat(timespec="seconds")
+        cur = conn.execute(
+            "INSERT INTO runs (started_at, ended_at, started_by, params, status, message, counts) VALUES (?,?,?,?,?,?,?)",
+            (at, at, "oskar@ylvalabs.de", json.dumps({"vorpruefen": 30, "entwuerfe": 5, "budget_eur": 2.0, "suchen": True}),
+             "fertig", "2 neue Entwürfe, 30 vorgeprüft, 6 analysiert. Kosten: 0,42 € (Beispiel).",
+             json.dumps({"neu_gefunden": 412, "grobfilter": 131, "vorgeprueft": 30, "vorpruefung_durch": 11,
+                         "analysiert": 6, "analyse_durch": 4, "entwuerfe": 2})))
+        run_id = cur.lastrowid
+        rows = [("vorpruefung", "claude-haiku-4-5", 30, 3100, 160, 0.0039),
+                ("analyse", "claude-sonnet-5", 6, 9800, 2100, 0.0406),
+                ("entwurf", "claude-opus-5", 2, 3300, 1500, 0.054),
+                ("lernen", "claude-sonnet-5", 1, 4200, 1600, 0.0244)]
+        for stage, model, n, tin, tout, usd in rows:
+            for _ in range(n):
+                conn.execute("INSERT INTO ai_usage (at, run_id, stage, model, input_tokens, output_tokens, cost_usd)"
+                             " VALUES (?,?,?,?,?,?,?)", (at, run_id, stage, model, tin, tout, usd))
     conn.commit()

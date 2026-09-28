@@ -103,6 +103,27 @@ def normalize_url(url):
     return url
 
 
+SOCIAL_HOSTS = ("facebook.com", "instagram.com", "linkedin.com", "xing.com", "google.com", "business.site",
+                "wixsite.com", "jimdosite.com", "tiktok.com", "youtube.com")
+# Offensichtlich zu klein oder nicht vor Ort entscheidend. Ohne KI, also kostenlos.
+SMALL_CATEGORIES = {"craft=hairdresser", "craft=beautician", "craft=tailor", "craft=key_cutter", "craft=shoemaker",
+                    "craft=photographer", "amenity=driving_school"}
+
+
+def rough_filter(tags, website, host):
+    """Kostenloser Grobfilter vor jeder KI. Gibt einen Grund zurück, wenn der Betrieb rausfällt."""
+    if tags.get("brand") or tags.get("brand:wikidata") or tags.get("operator:wikidata"):
+        return "Filiale einer Kette (laut Kartendaten)"
+    if not website:
+        return "Keine Webseite, die KI hätte nichts zu lesen"
+    if any(host == h or host.endswith("." + h) for h in SOCIAL_HOSTS):
+        return "Nur eine Social-Media- oder Baukasten-Seite, vermutlich sehr klein"
+    for key, value in tags.items():
+        if f"{key}={value}" in SMALL_CATEGORIES:
+            return f"Branche meist ohne nennenswerte Verwaltung ({LABELS.get(value, value)})"
+    return None
+
+
 def parse_elements(elements, lat, lon, radius_km):
     """Overpass-Antwort -> Liste von Firmen (nur mit Webseite oder E-Mail)."""
     found, seen = [], set()
@@ -126,6 +147,7 @@ def parse_elements(elements, lat, lon, radius_km):
             continue
         seen.add(dedupe)
         branche, category, label = classify(tags)
+        filter_reason = rough_filter(tags, website, host)
         street = " ".join(x for x in (tags.get("addr:street"), tags.get("addr:housenumber")) if x)
         city = " ".join(x for x in (tags.get("addr:postcode"), tags.get("addr:city")) if x)
         found.append({
@@ -134,6 +156,7 @@ def parse_elements(elements, lat, lon, radius_km):
             "address": ", ".join(x for x in (street, city) if x), "city": tags.get("addr:city", ""),
             "lat": plat, "lon": plon, "distance_km": round(dist, 1), "website": website, "email": email,
             "phone": (tags.get("phone") or tags.get("contact:phone") or "").split(";")[0].strip(),
+            "filter_reason": filter_reason,
         })
     return found
 

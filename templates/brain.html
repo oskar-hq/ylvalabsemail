@@ -34,7 +34,8 @@
       </div>
       <div class="side-block">
         <span class="label">Wartet aufs Lernen</span>
-        <p class="small">{{ pending }} neue Rückmeldung{{ '' if pending == 1 else 'en' }}. Die KI wertet sie aus, sobald drei zusammen sind oder nach 20 Minuten.</p>
+        <p class="small">{{ pending }} neue Rückmeldung{{ '' if pending == 1 else 'en' }}. Die KI wertet sie am Ende jedes Laufs aus oder jetzt gleich (kostet ca. 3–5 Cent).</p>
+        {% if pending %}<button class="btn small" id="learnNow">Jetzt lernen</button>{% endif %}
       </div>
       <div class="side-block">
         <span class="label">Fassungen</span>
@@ -47,3 +48,4 @@
   </div>
 </main>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='leads.js') }}"></script>{% endblock %}

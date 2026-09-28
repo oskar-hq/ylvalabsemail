@@ -50,8 +50,13 @@ SETTINGS = {
     "LEADS_WORKER": env("LEADS_WORKER", "true").lower() in ("1", "true", "yes"),
     "LEADS_CENTER": tuple(float(x) for x in env("LEADS_CENTER", "54.6614,9.9311").split(",")),  # Kappeln
     "LEADS_RADIUS_KM": float(env("LEADS_RADIUS_KM", "50")),
-    "LEADS_PER_DAY": int(env("LEADS_PER_DAY", "5")),
-    "LEADS_MAX_OPEN_DRAFTS": int(env("LEADS_MAX_OPEN_DRAFTS", "5")),
+    # Vorschläge für den Start-Dialog eines Laufs
+    "LEADS_RUN_CHECK": int(env("LEADS_RUN_CHECK", "30")),
+    "LEADS_RUN_DRAFTS": int(env("LEADS_RUN_DRAFTS", "5")),
+    "LEADS_RUN_BUDGET_EUR": float(env("LEADS_RUN_BUDGET_EUR", "2")),
+    "LEADS_MONTHLY_BUDGET_EUR": float(env("LEADS_MONTHLY_BUDGET_EUR", "20")),  # 0 = keine Grenze
+    "LEADS_QUICK_MIN": int(env("LEADS_QUICK_MIN", "50")),  # ab dieser Punktzahl der Vorprüfung geht es weiter
+    "LEADS_ANALYSE_MIN": int(env("LEADS_ANALYSE_MIN", "65")),  # ab dieser Punktzahl der Analyse wird geschrieben
     "LEADS_SENDER_NAME": env("LEADS_SENDER_NAME", "Oskar Jacobsen"),
     "OUTREACH_USER": env("OUTREACH_USER"),
     "OUTREACH_PASSWORD": env("OUTREACH_PASSWORD"),

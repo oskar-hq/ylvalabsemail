@@ -30,43 +30,76 @@
 
   $$('dialog [data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
 
-  // ---------------------------------------------------------------- KI steuern
-  $$('[data-run]').forEach(btn => btn.addEventListener('click', async () => {
-    busy(btn, true);
-    try { toast((await post('/leads/run', { action: btn.dataset.run })).message); }
-    catch (e) { toast(e.message, true); }
-    finally { setTimeout(() => busy(btn, false), 1500); }
-  }));
-
-  const autoToggle = $('#autoToggle');
-  autoToggle?.addEventListener('change', async () => {
-    try {
-      await post('/leads/auto', { on: autoToggle.checked ? '1' : '0' });
-      toast(autoToggle.checked ? 'Automatik an: Die KI sucht und schreibt selbstständig weiter.' : 'Automatik aus.');
-    } catch (e) { autoToggle.checked = !autoToggle.checked; toast(e.message, true); }
+  // ---------------------------------------------------------------- Läufe und Kosten
+  const euro = (v) => v.toFixed(2).replace('.', ',') + ' €';
+  const runForm = $('#runForm');
+  if (runForm) {
+    const est = $('#estimate');
+    let timer;
+    runForm.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(async () => {
+        const q = new URLSearchParams({ vorpruefen: runForm.vorpruefen.value || 0, entwuerfe: runForm.entwuerfe.value || 0 });
+        try {
+          const e = await (await fetch('/leads/schaetzung?' + q)).json();
+          const budget = parseFloat(String(runForm.budget_eur.value).replace(',', '.')) || 0;
+          est.innerHTML = `Geschätzt: <b>ca. ${euro(e.eur)}</b> · etwa ${e.analysen} Analysen · etwa ${e.entwuerfe} Entwürfe`
+            + (e.eur > budget ? ' · <span class="err">Das Budget reicht dafür vermutlich nicht, der Lauf stoppt dann vorher.</span>' : '');
+        } catch {}
+      }, 250);
+    });
+    runForm.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const btn = $('button.primary', runForm);
+      busy(btn, true, 'Startet …');
+      try {
+        const fd = new FormData(runForm);
+        toast((await post('/leads/run', fd)).message);
+        setTimeout(() => location.reload(), 1200);
+      } catch (e) { toast(e.message, true); busy(btn, false); }
+    });
+  }
+  $('#stopRun')?.addEventListener('click', async (ev) => {
+    busy(ev.target, true, 'Stoppt …');
+    try { toast((await post('/leads/stop')).message); } catch (e) { toast(e.message, true); busy(ev.target, false); }
   });
 
-  // Aktivität live anzeigen; bei neuen Einträgen Hinweis zum Neuladen
+  $('#learnNow')?.addEventListener('click', async (ev) => {
+    busy(ev.target, true);
+    try { toast((await post('/leads/gehirn/lernen')).message); setTimeout(() => location.reload(), 60000); }
+    catch (e) { toast(e.message, true); busy(ev.target, false); }
+  });
+
+  // Aktivität und Kosten live; wenn ein Lauf endet oder neue Einträge da sind: Hinweis bzw. neu laden
   const agentBox = $('#agent');
   if (agentBox) {
     const initial = agentBox.dataset.counts;
+    const wasRunning = !!agentBox.dataset.running;
     setInterval(async () => {
       if (document.hidden) return;
       try {
         const resp = await fetch('/leads/status.json', { headers: { Accept: 'application/json' } });
         if (!resp.ok) return;
         const st = await resp.json();
-        $('#activity').textContent = st.activity;
-        $('#since').textContent = st.since;
-        $('.agent .dot').className = 'dot ' + (st.activity !== 'Wartet' ? 'busy' : (!st.ai || st.paused ? 'off' : ''));
+        if (wasRunning && !st.run) { location.reload(); return; }
+        if (!wasRunning && st.run) { location.reload(); return; }
+        const text = st.activity !== 'Wartet' ? st.activity : (st.run ? 'Startet gleich …' : 'Aus. Läuft nur, wenn ihr einen Lauf startet.');
+        $('#activity').textContent = text;
+        if ($('#progress')) $('#progress').textContent = st.activity;
+        $('#runEur').textContent = euro(st.run_eur);
+        $('#runTokens').textContent = st.run_tokens.toLocaleString('de-DE') + ' Tokens';
+        $('#todayEur').textContent = euro(st.today_eur);
+        $('#monthEur').textContent = euro(st.month_eur);
+        if ($('#monthBar') && st.cap_eur) $('#monthBar').style.width = Math.min(100, st.month_eur / st.cap_eur * 100) + '%';
+        $('.agent .dot').className = 'dot ' + (st.run || st.activity !== 'Wartet' ? 'busy' : (!st.ai ? 'off' : ''));
         if (JSON.stringify(st.counts) !== JSON.stringify(JSON.parse(initial)) && !$('#reloadHint')) {
           const a = document.createElement('a');
           a.id = 'reloadHint'; a.href = location.href; a.className = 'btn small primary';
           a.textContent = 'Neue Einträge · neu laden';
-          $('.agent-actions').append(a);
+          $('.agent-line').append(a);
         }
       } catch {}
-    }, 15000);
+    }, wasRunning ? 4000 : 15000);
   }
 
   // ---------------------------------------------------------------- Push
@@ -223,7 +256,7 @@
     try {
       const r = await post(`${base}/chat`, fd);
       pending.remove();
-      bubble('ai', 'KI · jetzt', r.reply);
+      bubble('ai', `KI · jetzt · ${euro(r.cost_eur || 0)}`, r.reply);
       if (draft) {
         for (const [name, key] of [['subject', 'subject'], ['greeting', 'greeting'], ['body', 'body']]) {
           const el = $(`[name=${name}]`, draft);
