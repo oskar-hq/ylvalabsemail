@@ -1,0 +1,146 @@
+{% extends "base.html" %}
+{% block title %}{{ lead.name }} · Leads{% endblock %}
+{% set editable = lead.status in ('entwurf', 'aussortiert', 'fehler') and not lead.interest %}
+{% set chat = events|selectattr('kind', 'in', ['feedback', 'ai'])|list %}
+{% set replies = events|selectattr('kind', 'equalto', 'reply')|list %}
+{% set classified = events|selectattr('kind', 'equalto', 'classify')|list %}
+{% block content %}
+<main class="page wide" data-lead="{{ lead.id }}">
+  <p class="crumbs mono"><a href="{{ url_for('leads.overview') }}">← Leads</a> <span class="muted">/</span>
+    <a href="{{ url_for('leads.overview', tab=tab) }}">{{ (tabs|selectattr(0, 'equalto', tab)|first)[1] }}</a></p>
+
+  <header class="lead-head">
+    <h1 class="title">{{ lead.name }}</h1>
+    <p class="muted">{{ lead.category_label }}{% if lead.address %} · {{ lead.address }}{% endif %} · {{ lead.distance_km }} km von Kappeln</p>
+    <p>
+      <span class="pill st-{{ tab }}">{{ interest_labels.get(lead.interest) or lead_status_labels.get(lead.status, lead.status) }}</span>
+      {% if lead.fit_score is not none %}<span class="pill">Passung {{ lead.fit_score }}/100</span>{% endif %}
+      {% if lead.channel %}<span class="pill">{{ {'email': 'per Mail', 'brief': 'per Brief', 'telefon': 'Telefon'}[lead.channel] }}{% if lead.sent_at %} · {{ lead.sent_at|kurzdatum }}{% endif %}</span>{% endif %}
+    </p>
+  </header>
+
+  <div class="lead-grid">
+    <section class="lead-main">
+      {% if replies %}
+      {% set last = replies[-1] %}
+      {% set cls = classified[-1] if classified else none %}
+      <div class="reply-box">
+        <span class="label">Antwort von {{ last.author }} · {{ last.at|kurzdatum }}</span>
+        {% if cls %}
+        <p class="reply-summary"><b>{{ cls.text }}</b></p>
+        {% if cls.meta.grund %}<p class="small"><span class="muted">Grund:</span> {{ cls.meta.grund }}</p>{% endif %}
+        {% if cls.meta.naechster_schritt %}<p class="small"><span class="muted">Nächster Schritt:</span> {{ cls.meta.naechster_schritt }}</p>{% endif %}
+        {% endif %}
+        <details class="more"><summary class="small">Originaltext</summary><div class="quote">{{ last.text }}</div></details>
+        {% if lead.email %}<a class="btn small primary" href="mailto:{{ lead.email }}?subject={{ ('Re: ' ~ (lead.subject or ''))|urlencode }}">Selbst antworten</a>{% endif %}
+      </div>
+      {% endif %}
+
+      {% if lead.body or lead.subject %}
+      <form id="draft" class="draft">
+        <div class="draft-head">
+          <span class="label">{% if editable %}Entwurf{% else %}Gesendete Nachricht{% endif %} · an {{ lead.contact_name ~ ' · ' if lead.contact_name }}{{ lead.email or 'keine E-Mail-Adresse bekannt' }}</span>
+          <div class="seg" role="tablist"><button type="button" class="on" data-view="edit">Text</button><button type="button" data-view="preview">Vorschau</button></div>
+        </div>
+        <div data-pane="edit">
+          <label class="field"><span class="sub">Betreff</span><input name="subject" type="text" value="{{ lead.subject or '' }}" {{ 'readonly' if not editable }}></label>
+          <label class="field"><span class="sub">Anrede</span><input name="greeting" type="text" value="{{ lead.greeting or '' }}" {{ 'readonly' if not editable }}></label>
+          <label class="field"><span class="sub">Text <em>· Grußformel und Unterschrift kommen automatisch dazu</em></span><textarea name="body" rows="12" {{ 'readonly' if not editable }}>{{ lead.body or '' }}</textarea></label>
+        </div>
+        <div data-pane="preview" hidden>
+          <div class="frame-wrap small-frame"><iframe id="leadFrame" title="Vorschau" sandbox="allow-same-origin allow-popups" data-src="{{ url_for('leads.preview', lead_id=lead.id) }}"></iframe></div>
+        </div>
+        {% if editable %}
+        <div class="draft-actions">
+          <button type="button" class="btn" data-act="save">Speichern</button>
+          <a class="btn" href="{{ url_for('leads.letter', lead_id=lead.id) }}" target="_blank" data-act="letter">Als Brief drucken</a>
+          <button type="button" class="btn" data-act="mark">Als versendet markieren</button>
+          <button type="button" class="btn primary" data-act="send" {{ 'disabled' if not (st.email_enabled and lead.email) and not account.demo }}
+            title="{{ '' if st.email_enabled else 'Versand per Mail ist ausgeschaltet (OUTREACH_EMAIL).' }}">Per Mail senden</button>
+        </div>
+        {% endif %}
+      </form>
+      {% elif lead.status in ('kandidat', 'recherche') %}
+      <p class="note">Dieser Betrieb ist noch nicht recherchiert. {% if lead.status == 'recherche' %}Die KI ist gerade dabei.{% endif %}</p>
+      {% endif %}
+
+      <section class="chat-wrap">
+        <span class="label">Chat mit der KI zu diesem Betrieb</span>
+        <div class="chat" id="chat">
+          {% for e in chat %}<div class="msg {{ 'me' if e.kind == 'feedback' else 'ai' }}"><span class="mono muted">{{ 'KI' if e.kind == 'ai' else e.author }} · {{ e.at|kurzdatum }}</span><p>{{ e.text }}</p></div>
+          {% else %}<p class="muted small" id="chatEmpty">Sagt der KI, was ihr ändern wollt, z. B. „kürzer“, „erwähne die Tourenplanung“ oder „der Betrieb duzt, bitte auch duzen“. Sie überarbeitet den Entwurf und merkt sich, was allgemein gilt.</p>{% endfor %}
+        </div>
+        <form id="chatForm" class="chat-form">
+          <textarea name="text" rows="2" placeholder="Was soll anders werden?" required></textarea>
+          <button class="btn primary">Senden</button>
+        </form>
+      </section>
+    </section>
+
+    <aside class="lead-side">
+      {% if lead.fit_reason %}
+      <div class="side-block">
+        <span class="label">Einschätzung der KI</span>
+        {% if lead.fit_score is not none %}<div class="meter" title="{{ lead.fit_score }}/100"><i style="width:{{ lead.fit_score }}%"></i></div>{% endif %}
+        <p>{{ lead.fit_reason }}</p>
+        {% if lead.research.groesse %}<p class="small"><span class="muted">Größe:</span> {{ lead.research.groesse }}</p>{% endif %}
+        {% if lead.research.zeitfresser %}<p class="small muted">Vermutete Zeitfresser</p><ul class="small tight">{% for z in lead.research.zeitfresser %}<li>{{ z }}</li>{% endfor %}</ul>{% endif %}
+      </div>
+      {% endif %}
+
+      <div class="side-block">
+        <span class="label">Einordnen</span>
+        {% if lead.interest_reason %}<p class="small"><span class="muted">Grund:</span> {{ lead.interest_reason }}</p>{% endif %}
+        <div class="btn-row">
+          {% for key, label in interest_labels.items() %}<button class="btn small {{ 'primary' if lead.interest == key }}" data-interest="{{ key }}">{{ label }}</button>{% endfor %}
+        </div>
+        <div class="btn-row">
+          {% if lead.status not in ('aussortiert',) and not lead.interest %}<button class="btn small" data-act="reject">Passt nicht</button>{% endif %}
+          {% if lead.status in ('aussortiert', 'fehler') %}<button class="btn small" data-act="retry">Neu prüfen lassen</button>{% endif %}
+        </div>
+      </div>
+
+      <div class="side-block">
+        <span class="label">Kontakt</span>
+        <dl class="facts small">
+          {% if lead.contact_name %}<dt>Person</dt><dd>{{ lead.contact_name }}</dd>{% endif %}
+          <dt>E-Mail</dt><dd>{% if lead.email %}<a href="mailto:{{ lead.email }}">{{ lead.email }}</a>{% else %}–{% endif %}</dd>
+          {% if lead.phone %}<dt>Telefon</dt><dd><a href="tel:{{ lead.phone|replace(' ', '') }}">{{ lead.phone }}</a></dd>{% endif %}
+          {% if lead.website %}<dt>Webseite</dt><dd><a href="{{ lead.website }}" target="_blank" rel="noopener">{{ lead.website|replace('https://', '')|replace('http://', '') }}</a></dd>{% endif %}
+          {% if lead.research.pages %}<dt>Gelesen</dt><dd>{% for p in lead.research.pages %}<a href="{{ p }}" target="_blank" rel="noopener">{{ p|replace('https://', '')|truncate(38, true) }}</a><br>{% endfor %}</dd>{% endif %}
+        </dl>
+      </div>
+
+      <div class="side-block">
+        <span class="label">Verlauf</span>
+        <ol class="timeline small">
+          {% for e in events|reverse if e.kind not in ('feedback', 'ai') %}
+          <li class="k-{{ e.kind }}"><span class="mono muted">{{ e.at|kurzdatum }} · {{ e.author }}</span>
+            {% if e.kind == 'reply' %}<details><summary>Antwort erhalten{% if e.meta.subject %}: {{ e.meta.subject }}{% endif %}</summary><div class="quote">{{ e.text }}</div></details>
+            {% else %}<p>{{ e.text }}</p>{% endif %}</li>
+          {% else %}<li class="muted">Noch nichts passiert.</li>{% endfor %}
+        </ol>
+        <form id="noteForm" class="note-form"><input name="text" type="text" placeholder="Notiz, z. B. „Telefonat am Montag“"><button class="btn small">Notiz</button></form>
+      </div>
+    </aside>
+  </div>
+</main>
+
+<dialog id="markDlg"><form class="dlg" method="dialog">
+  <h2>Wie ist die Nachricht rausgegangen?</h2>
+  <p class="small">Die KI merkt sich, welchen Weg ihr genommen habt. Antworten per Mail an das Akquise-Postfach werden trotzdem erkannt.</p>
+  <div class="dlg-actions">
+    <button class="btn" value="cancel">Abbrechen</button>
+    <button class="btn" value="telefon">Telefon</button>
+    <button class="btn" value="email">Mail (selbst)</button>
+    <button class="btn primary" value="brief">Brief</button>
+  </div>
+</form></dialog>
+<dialog id="reasonDlg"><form class="dlg" method="dialog">
+  <h2 id="reasonTitle">Warum passt der Betrieb nicht?</h2>
+  <p class="small muted">Ein Satz reicht. Daraus lernt die KI, welche Betriebe sie künftig auslässt.</p>
+  <input type="text" name="reason" placeholder="z. B. Filiale einer Kette, zu klein, keine Verwaltung">
+  <div class="dlg-actions"><button class="btn" value="cancel">Abbrechen</button><button class="btn primary" value="ok">Übernehmen</button></div>
+</form></dialog>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='leads.js') }}"></script>{% endblock %}

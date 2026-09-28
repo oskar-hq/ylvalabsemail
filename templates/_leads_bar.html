@@ -1,0 +1,23 @@
+<div class="agent" id="agent" data-counts="{{ st.counts|tojson|forceescape }}">
+  <div class="agent-line">
+    <span class="dot {{ 'busy' if st.activity != 'Wartet' else ('off' if not st.ai or st.paused else '') }}" aria-hidden="true"></span>
+    <span><b>KI:</b> <span id="activity">{{ st.activity }}</span> <span class="muted small" id="since">{{ st.since }}</span></span>
+    <span class="muted small">· {{ st.counts.kandidaten }} Betriebe in der Warteschlange{% if st.last_search %} · letzte Suche {{ st.last_search.at|kurzdatum }}{% endif %}</span>
+  </div>
+  <div class="agent-actions">
+    <button class="btn small" data-run="search" {{ 'disabled' if not st.ai }}>Betriebe suchen</button>
+    <button class="btn small" data-run="next" {{ 'disabled' if not st.ai }}>Nächsten prüfen</button>
+    <label class="switch small"><input type="checkbox" id="autoToggle" {{ 'checked' if st.auto }}> Automatik</label>
+    <button class="btn small" id="pushBtn" hidden>Benachrichtigungen an</button>
+  </div>
+  {% for w in st.warnings %}<p class="note warn small">{{ w }}</p>{% endfor %}
+  {% if st.error %}<p class="note err small">Letzter Fehler: {{ st.error }}{% if st.paused %} · Die KI macht eine halbe Stunde Pause.{% endif %}</p>{% endif %}
+  {% if not st.email_enabled %}<p class="note small">Versand per Mail ist aus (<code>OUTREACH_EMAIL=false</code>). Freigegebene Nachrichten gehen als Brief raus oder dienen als Gesprächsleitfaden fürs Telefonat.</p>{% endif %}
+</div>
+<dialog id="iosDlg"><div class="dlg">
+  <h2>Erst zum Home-Bildschirm.</h2>
+  <p>Auf dem iPhone kommen Benachrichtigungen nur in der installierten Web-App an:</p>
+  <ol class="small"><li>In Safari unten auf <b>Teilen</b> tippen.</li><li><b>Zum Home-Bildschirm</b> wählen.</li><li>Die App „Ylva Leads“ öffnen, anmelden und hier auf <b>Benachrichtigungen an</b> tippen.</li></ol>
+  <p class="muted small">Braucht iOS 16.4 oder neuer. Kein App Store, kein Apple-Konto.</p>
+  <div class="dlg-actions"><button class="btn primary" data-close>Verstanden</button></div>
+</div></dialog>

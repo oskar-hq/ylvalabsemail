@@ -46,6 +46,20 @@ SETTINGS = {
     "SESSION_HOURS": float(env("SESSION_HOURS", "12")),
     "DEMO_MODE": env("DEMO_MODE", "false").lower() in ("1", "true", "yes"),
     "DATA_DIR": Path(env("DATA_DIR", str(ROOT / "data"))),
+    # KI-Akquise (Bereich „Leads“)
+    "LEADS_WORKER": env("LEADS_WORKER", "true").lower() in ("1", "true", "yes"),
+    "LEADS_CENTER": tuple(float(x) for x in env("LEADS_CENTER", "54.6614,9.9311").split(",")),  # Kappeln
+    "LEADS_RADIUS_KM": float(env("LEADS_RADIUS_KM", "50")),
+    "LEADS_PER_DAY": int(env("LEADS_PER_DAY", "5")),
+    "LEADS_MAX_OPEN_DRAFTS": int(env("LEADS_MAX_OPEN_DRAFTS", "5")),
+    "LEADS_SENDER_NAME": env("LEADS_SENDER_NAME", "Oskar Jacobsen"),
+    "OUTREACH_USER": env("OUTREACH_USER"),
+    "OUTREACH_PASSWORD": env("OUTREACH_PASSWORD"),
+    "OUTREACH_EMAIL": env("OUTREACH_EMAIL", "false").lower() in ("1", "true", "yes"),
+    "INBOX_MINUTES": float(env("INBOX_MINUTES", "10")),
+    "NOTIFY_EMAILS": [a for a in re.split(r"[,\s]+", env("NOTIFY_EMAILS")) if a],
+    "BASE_URL": env("BASE_URL"),
+    "OVERPASS_URL": env("OVERPASS_URL", "https://overpass-api.de/api/interpreter"),
 }
 UPLOAD_DIR = SETTINGS["DATA_DIR"] / "uploads"
 DB_PATH = SETTINGS["DATA_DIR"] / "mailer.db"
@@ -507,3 +521,11 @@ def history_html(mail_id):
 @app.get("/healthz")
 def healthz():
     return "ok"
+
+
+# ---------------------------------------------------------------- KI-Akquise
+from . import agent  # noqa: E402
+from .leads_views import bp as leads_bp  # noqa: E402
+
+app.register_blueprint(leads_bp)
+agent.init(SETTINGS, smtp_connect, imap_sent_folder, DB_PATH, SETTINGS["DATA_DIR"])

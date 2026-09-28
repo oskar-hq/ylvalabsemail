@@ -25,6 +25,62 @@ Damit gehen aufwendige HTML-Designs, die normale Mailprogramme nicht bauen könn
 - Optional wird eine Kopie im IMAP-Ordner „Gesendet“ abgelegt.
 - Jede Mail enthält auch eine Textversion. Das ist gut für die Zustellbarkeit und für Leute, die nur Text lesen.
 
+## KI-Akquise (Bereich „Leads“)
+
+Unter **03 Leads** arbeitet eine KI für euch in der Akquise. Kein Schritt geht ohne euch raus:
+
+1. **Suchen:** Sie holt Betriebe im Umkreis von 50 km um Kappeln aus OpenStreetMap (Handwerk, Pflege,
+   Landwirtschaft, Dienstleister, Handel, Industrie, Gastgewerbe), und zwar nur solche mit Webseite oder E-Mail.
+2. **Recherchieren:** Sie liest Startseite, Impressum, Kontakt und „Über uns“ und bewertet, wie gut der Betrieb
+   zu euch passt (0–100), mit Begründung und vermuteten Zeitfressern.
+3. **Schreiben:** Passt der Betrieb, schreibt sie eine persönliche Nachricht und schickt euch eine
+   **Benachrichtigung** aufs Handy und per Mail.
+4. **Prüfen:** Ihr lest den Entwurf, ändert ihn selbst oder sagt der KI im **Chat**, was anders werden soll.
+   Dann gebt ihr ihn frei: per Mail senden, als Brief drucken oder als „per Telefon“ markieren.
+5. **Antworten lesen:** Sie liest das Akquise-Postfach, ordnet Antworten als **Qualified**, **Mittel** oder
+   **Kein Interesse** ein und benachrichtigt euch. Wer keine Nachrichten mehr möchte, kommt auf eine Sperrliste.
+6. **Lernen:** Alles, was ihr ändert, aussortiert oder im Chat sagt, und jede Antwort einer Firma landet im
+   **Gehirn**. Die KI schreibt daraus den Abschnitt „Gelernt“ fort. Branchen, bei denen es oft klappt,
+   kommen bei der Suche häufiger dran, andere aber weiterhin ab und zu (15 % Zufall).
+
+Die Übersicht ist nach Stand sortiert: *Qualified* ganz oben, dann *Mittel*, *Kein Interesse*,
+*Zur Prüfung*, *Versendet*, *In Bearbeitung* und *Aussortiert*. Jeder Reiter lässt sich einzeln anklicken.
+Das **Gehirn** (was die KI über Ylva Labs, die Zielgruppe und den Stil weiß) seht und bearbeitet ihr unter
+„Gehirn ansehen“. Jede Fassung wird aufgehoben.
+
+### Rechtliches vorab (wichtig)
+
+Werbe-Mails an Firmen ohne deren vorherige Einwilligung sind in Deutschland nach **§ 7 UWG** unzulässig,
+auch im B2B-Bereich. Es drohen Abmahnungen, und das Postfach kann als Spam-Quelle gesperrt werden.
+Deshalb ist der Mailversand für den Erstkontakt **ausgeschaltet** (`OUTREACH_EMAIL=false`), bis ihr das
+geklärt habt, z. B. mit einer Anwältin oder der IHK. Bis dahin taugt jeder Entwurf als **Brief**
+(Knopf „Als Brief drucken“) oder als Leitfaden für einen **Anruf**. Beides ist im B2B-Bereich
+bei mutmaßlichem Interesse erlaubt. Antworten per Mail werden trotzdem erkannt.
+
+### Handy-App ohne App Store
+
+Die Leads-Seite ist eine installierbare Web-App mit Push-Benachrichtigungen. Dafür braucht ihr
+kein Apple-Entwicklerkonto.
+
+- **iPhone (ab iOS 16.4):** `https://mail.ylvalabs.de/leads` in Safari öffnen → *Teilen* → *Zum Home-Bildschirm*.
+  Die App „Ylva Leads“ öffnen, anmelden, **Benachrichtigungen an** tippen und erlauben.
+- **Android / Desktop:** Seite öffnen und **Benachrichtigungen an** klicken. Installieren geht über das Browser-Menü.
+- Voraussetzung ist HTTPS, also der Zugriff über das Internet (Cloudflare Tunnel, siehe unten).
+
+### Einrichten (einmalig)
+
+1. Server einrichten wie unter *Installation auf Proxmox* und *Zugriff über das Internet* beschrieben.
+2. In der Anthropic Console (console.anthropic.com) ein Konto anlegen, Guthaben aufladen und einen
+   API-Schlüssel erzeugen. Ihn in der `.env` als `ANTHROPIC_API_KEY` eintragen. Abgerechnet wird nach
+   Verbrauch: pro recherchiertem Betrieb grob einige Cent.
+3. Ein eigenes Postfach für die Akquise anlegen (z. B. `kontakt@ylvalabs.de`) und als `OUTREACH_USER` /
+   `OUTREACH_PASSWORD` eintragen. `IMAP_HOST` muss gesetzt sein, damit Antworten gelesen werden.
+4. `NOTIFY_EMAILS` und `BASE_URL` setzen, Dienst neu starten.
+5. Unter **03 Leads → Gehirn ansehen** die Texte prüfen und anpassen, dann **Betriebe suchen** klicken.
+
+Alle Einstellungen stehen kommentiert in `.env.example`. Mit `DEMO_MODE=true` lassen sich unter
+„Leads“ Beispieldaten laden, um die Oberfläche ohne Schlüssel auszuprobieren.
+
 ## Installation auf Proxmox
 
 ### Variante A: Docker (empfohlen)
@@ -120,6 +176,13 @@ Einrichtung, einmalig:
 app/main.py            Web-App: Login, Vorschau, Upload, Versand, Verlauf
 app/emailbuild.py      Formularfelder → HTML-Mail + Textversion (MIME)
 app/pixel.py           Pixel-Band und Pixel-Icons als mailtaugliche Tabellen
+app/leads_views.py     KI-Akquise: Übersicht, Firma mit Chat, Gehirn, Web-App und Push
+app/agent.py           Hintergrund-Arbeiter: suchen, recherchieren, Antworten lesen, lernen
+app/ai.py              Fragen an die KI (Claude) mit festen Antwortformaten
+app/finder.py          Betriebe aus OpenStreetMap, Webseiten lesen
+app/leaddb.py          Datenbank der Leads und das Gehirn (Startfassung: app/brain_seed.md)
+app/webpush.py         Push-Benachrichtigungen (VAPID, ohne App Store)
+tests/                 python -m unittest discover tests
 email_templates/       Die Mail-Vorlagen (Jinja2), Original-Band und Logo
 templates/, static/    Oberfläche im Stil der Brand Guidelines
 ```

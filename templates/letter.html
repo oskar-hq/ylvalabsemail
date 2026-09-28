@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Brief an {{ lead.name }}</title>
+<style>
+  @page{size:A4;margin:0}
+  *{box-sizing:border-box}
+  body{margin:0;background:#f1f4f7;font:11pt/1.5 Helvetica,Arial,sans-serif;color:#1d2126}
+  .sheet{width:210mm;min-height:297mm;margin:10mm auto;background:#fff;padding:20mm 20mm 20mm 25mm;position:relative}
+  .sender{font-size:8pt;color:#5b636c;border-bottom:.5pt solid #5b636c;display:inline-block;padding-bottom:1mm;margin-top:25mm}
+  .to{margin-top:4mm;min-height:35mm;white-space:pre-line}
+  .date{text-align:right;margin:8mm 0 10mm}
+  h1{font-size:11pt;margin:0 0 8mm}
+  p{margin:0 0 4mm}
+  .foot{position:absolute;left:25mm;right:20mm;bottom:12mm;font-size:8pt;color:#8a929c;border-top:.5pt solid #d8dde2;padding-top:3mm}
+  .bar{max-width:210mm;margin:10mm auto 0;display:flex;gap:8px;justify-content:flex-end;font:12px sans-serif}
+  .bar button{padding:8px 16px;border-radius:999px;border:1px solid #1d2126;background:#1d2126;color:#fff;cursor:pointer}
+  @media print{body{background:#fff}.sheet{margin:0}.bar{display:none}}
+</style>
+</head>
+<body>
+<div class="bar"><span>Brief für {{ lead.name }} · Text änderst du im Entwurf, dann neu laden.</span><button onclick="window.print()">Drucken</button></div>
+<div class="sheet">
+  <div class="sender">{{ footer }}</div>
+  <div class="to">{{ lead.name }}
+{% if lead.contact_name %}z. Hd. {{ lead.contact_name }}
+{% endif %}{{ (lead.address or '')|replace(', ', '\n') }}</div>
+  <div class="date">{{ today }}</div>
+  <h1>{{ lead.subject }}</h1>
+  <p>{{ lead.greeting }}</p>
+  {% for p in paragraphs %}<p>{{ p }}</p>{% endfor %}
+  <p>Viele Grüße</p>
+  <p>{{ sender_name }}<br>{{ org }}</p>
+  <div class="foot">{{ footer }} · info@ylvalabs.de · ylvalabs.de</div>
+</div>
+</body>
+</html>
