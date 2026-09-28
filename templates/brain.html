@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block title %}Gehirn · Leads{% endblock %}
+{% block content %}
+<main class="page wide">
+  <p class="crumbs mono"><a href="{{ url_for('leads.overview') }}">← Leads</a></p>
+  <span class="label">03 · Leads · Gehirn</span>
+  <h1 class="title">Was die KI weiß.</h1>
+  {% if saved == '1' %}<p class="note ok small">Gespeichert. Ab der nächsten Firma arbeitet die KI mit dieser Fassung.</p>
+  {% elif saved == '0' %}<p class="note small">Keine Änderung.</p>{% endif %}
+
+  <div class="brain-grid">
+    <form method="post" class="brain-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <p class="muted small">Das Gehirn bekommt die KI bei jeder Recherche, jedem Entwurf und jeder Antwort mit. Oben steht, was ihr vorgebt.
+        Den Abschnitt <b>Gelernt</b> schreibt die KI selbst fort, aus eurem Chat, euren Änderungen, aussortierten Betrieben und den Antworten der Firmen.
+        Ihr dürft ihn aber jederzeit korrigieren.</p>
+      <textarea name="content" rows="34" class="brain-text" spellcheck="true">{{ content }}</textarea>
+      <div class="row brain-save">
+        <input type="text" name="reason" placeholder="Was habt ihr geändert? (optional)">
+        <button class="btn primary">Speichern</button>
+      </div>
+    </form>
+
+    <aside>
+      <div class="side-block">
+        <span class="label">Was bisher funktioniert</span>
+        {% if stats %}
+        <div class="table-wrap"><table class="stats small">
+          <thead><tr><th>Branche</th><th title="Versendet">Raus</th><th title="Qualified">Q</th><th title="Mittel">M</th><th title="Kein Interesse">K</th><th title="Aussortiert">Aus</th></tr></thead>
+          <tbody>{% for s in stats %}<tr><td>{{ s.category_label or s.branche }}<br><span class="muted">{{ s.branche }}</span></td><td>{{ s.sent }}</td><td>{{ s.qualified }}</td><td>{{ s.mittel }}</td><td>{{ s.kein }}</td><td>{{ s.aussortiert }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+        <p class="muted small">Branchen mit mehr Qualified kommen bei der Suche öfter dran, andere aber weiterhin ab und zu.</p>
+        {% else %}<p class="muted small">Noch keine Daten.</p>{% endif %}
+      </div>
+      <div class="side-block">
+        <span class="label">Wartet aufs Lernen</span>
+        <p class="small">{{ pending }} neue Rückmeldung{{ '' if pending == 1 else 'en' }}. Die KI wertet sie am Ende jedes Laufs aus oder jetzt gleich (kostet ca. 3–5 Cent).</p>
+        {% if pending %}<button class="btn small" id="learnNow">Jetzt lernen</button>{% endif %}
+      </div>
+      <div class="side-block">
+        <span class="label">Fassungen</span>
+        <ol class="timeline small">
+          {% for v in versions %}<li><span class="mono muted">{{ v.at|kurzdatum }} · {{ v.author }}</span><p>{{ v.reason or '–' }} <a href="{{ url_for('leads.brain_version', version_id=v.id) }}" target="_blank">ansehen</a></p></li>
+          {% else %}<li class="muted">Noch die Startfassung.</li>{% endfor %}
+        </ol>
+      </div>
+    </aside>
+  </div>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='leads.js') }}"></script>{% endblock %}

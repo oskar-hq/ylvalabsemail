@@ -25,6 +25,83 @@ Damit gehen aufwendige HTML-Designs, die normale Mailprogramme nicht bauen könn
 - Optional wird eine Kopie im IMAP-Ordner „Gesendet“ abgelegt.
 - Jede Mail enthält auch eine Textversion. Das ist gut für die Zustellbarkeit und für Leute, die nur Text lesen.
 
+## KI-Akquise (Bereich „Leads“)
+
+Unter **03 Leads** arbeitet eine KI für euch in der Akquise. Sie läuft **nie von selbst**: Ihr startet
+jeden Lauf von Hand, mit Anzahl, höchstens so vielen Entwürfen und einem **Budget in Euro**. Vor dem Start
+zeigt die Seite, was der Lauf ungefähr kostet. Während er läuft, seht ihr Tokens und Kosten live, und ihr
+könnt ihn jederzeit stoppen. Dazu gibt es ein Monatsbudget als harte Grenze (`LEADS_MONTHLY_BUDGET_EUR`).
+
+Ein Lauf arbeitet sich **von günstig nach teuer** vor. Nur wer eine Stufe besteht, kommt in die nächste,
+damit nicht jede Webseite die teure Komplettanalyse bekommt:
+
+| Stufe | Was passiert | Modell | ca. Kosten pro Betrieb |
+|---|---|---|---|
+| 1 · Suchen und Grobfilter | Betriebe aus OpenStreetMap im Umkreis von 50 km um Kappeln. Regeln sortieren ohne KI aus: Ketten, keine Webseite, nur Social-Media-Seite, Kleinstbranchen, Sperrliste und Branchen, die schon fünfmal nicht gepasst haben | keins | kostenlos |
+| 2 · Vorprüfung | Nur die Startseite, grobe Punktzahl 0–100. Ab 50 geht es weiter | `claude-haiku-4-5` | ca. 0,3 Cent |
+| 3 · Analyse | Startseite und Unterseiten (Impressum, Kontakt, Über uns). Passung, Zeitfresser, Ansprechperson. Ab 65 geht es weiter | `claude-sonnet-5` | ca. 3 Cent |
+| 4 · Entwurf | Schreibt die Nachricht, nur für die besten der Analyse, und benachrichtigt euch | `claude-opus-5` | ca. 5 Cent |
+
+Die Cent-Beträge sind Startwerte. Sobald es echte Messwerte gibt, rechnet die Schätzung mit euren
+Durchschnitten. Unter **Kosten im Detail** steht, was jede Stufe und jeder Lauf gekostet hat.
+
+Danach geht es so weiter:
+
+1. **Prüfen:** Ihr lest den Entwurf, ändert ihn selbst oder sagt der KI im **Chat**, was anders werden soll
+   (jede Überarbeitung zeigt ihre Kosten). Dann gebt ihr ihn frei: per Mail senden, als Brief drucken oder
+   als „per Telefon“ markieren.
+2. **Nachfassen:** Kommt nach 7 Tagen keine Antwort, landet der Betrieb kostenlos im Reiter **Nachfassen**,
+   und ihr bekommt Bescheid. Die Erinnerung (höchstens 60 Wörter, ohne Druck, mit dem Satz, dass danach
+   Schluss ist) schreibt die KI auf Knopfdruck oder im nächsten Lauf, für ca. 2 Cent. Auch sie geht erst nach
+   eurer Freigabe raus, per Mail im selben Gesprächsverlauf, oder ihr ruft an. Pro Betrieb gibt es genau eine
+   Erinnerung (`LEADS_FOLLOWUP_DAYS`, 0 schaltet es ab).
+3. **Antworten lesen:** Die App liest das Akquise-Postfach, das ist kostenlos. Nur echte Antworten ordnet die
+   KI als **Qualified**, **Mittel** oder **Kein Interesse** ein (ca. 1–2 Cent pro Antwort) und benachrichtigt
+   euch. Wer keine Nachrichten mehr möchte, kommt auf eine Sperrliste.
+4. **Lernen:** Alles, was ihr ändert, aussortiert oder im Chat sagt, und jede Antwort einer Firma landet im
+   **Gehirn**. Am Ende jedes Laufs (oder per „Jetzt lernen“) schreibt die KI daraus den Abschnitt „Gelernt“
+   fort. Branchen, bei denen es oft klappt, kommen häufiger dran, andere aber weiterhin ab und zu (15 % Zufall).
+
+Die Übersicht ist nach Stand sortiert: *Qualified* ganz oben, dann *Mittel*, *Kein Interesse*,
+*Zur Prüfung*, *Versendet*, *In Bearbeitung* und *Aussortiert*. Jeder Reiter lässt sich einzeln anklicken.
+Das **Gehirn** (was die KI über Ylva Labs, die Zielgruppe und den Stil weiß) seht und bearbeitet ihr unter
+„Gehirn ansehen“. Jede Fassung wird aufgehoben.
+
+### Rechtliches vorab (wichtig)
+
+Werbe-Mails an Firmen ohne deren vorherige Einwilligung sind in Deutschland nach **§ 7 UWG** unzulässig,
+auch im B2B-Bereich. Es drohen Abmahnungen, und das Postfach kann als Spam-Quelle gesperrt werden.
+Deshalb ist der Mailversand für den Erstkontakt **ausgeschaltet** (`OUTREACH_EMAIL=false`), bis ihr das
+geklärt habt, z. B. mit einer Anwältin oder der IHK. Bis dahin taugt jeder Entwurf als **Brief**
+(Knopf „Als Brief drucken“) oder als Leitfaden für einen **Anruf**. Beides ist im B2B-Bereich
+bei mutmaßlichem Interesse erlaubt. Antworten per Mail werden trotzdem erkannt.
+
+### Handy-App ohne App Store
+
+Die Leads-Seite ist eine installierbare Web-App mit Push-Benachrichtigungen. Dafür braucht ihr
+kein Apple-Entwicklerkonto.
+
+- **iPhone (ab iOS 16.4):** `https://mail.ylvalabs.de/leads` in Safari öffnen → *Teilen* → *Zum Home-Bildschirm*.
+  Die App „Ylva Leads“ öffnen, anmelden, **Benachrichtigungen an** tippen und erlauben.
+- **Android / Desktop:** Seite öffnen und **Benachrichtigungen an** klicken. Installieren geht über das Browser-Menü.
+- Voraussetzung ist HTTPS, also der Zugriff über das Internet (Cloudflare Tunnel, siehe unten).
+
+### Einrichten (einmalig)
+
+1. Server einrichten wie unter *Installation auf Proxmox* und *Zugriff über das Internet* beschrieben.
+2. In der Anthropic Console (console.anthropic.com) ein Konto anlegen, Guthaben aufladen und einen
+   API-Schlüssel erzeugen. Ihn in der `.env` als `ANTHROPIC_API_KEY` eintragen. Abgerechnet wird nach
+   Verbrauch. Ein Lauf mit 30 Vorprüfungen und 5 Entwürfen kostet grob 0,50 bis 1 €. Tipp: In der
+   Anthropic Console zusätzlich ein Ausgabenlimit setzen.
+3. Ein eigenes Postfach für die Akquise anlegen (z. B. `kontakt@ylvalabs.de`) und als `OUTREACH_USER` /
+   `OUTREACH_PASSWORD` eintragen. `IMAP_HOST` muss gesetzt sein, damit Antworten gelesen werden.
+4. `NOTIFY_EMAILS` und `BASE_URL` setzen, Dienst neu starten.
+5. Unter **03 Leads → Gehirn ansehen** die Texte prüfen und anpassen, dann den ersten **Lauf starten**,
+   am besten klein (z. B. 10 Vorprüfungen, 2 Entwürfe, 1 € Budget).
+
+Alle Einstellungen stehen kommentiert in `.env.example`. Mit `DEMO_MODE=true` lassen sich unter
+„Leads“ Beispieldaten laden, um die Oberfläche ohne Schlüssel auszuprobieren.
+
 ## Installation auf Proxmox
 
 ### Variante A: Docker (empfohlen)
@@ -120,6 +197,13 @@ Einrichtung, einmalig:
 app/main.py            Web-App: Login, Vorschau, Upload, Versand, Verlauf
 app/emailbuild.py      Formularfelder → HTML-Mail + Textversion (MIME)
 app/pixel.py           Pixel-Band und Pixel-Icons als mailtaugliche Tabellen
+app/leads_views.py     KI-Akquise: Übersicht, Firma mit Chat, Gehirn, Web-App und Push
+app/agent.py           Hintergrund-Arbeiter: suchen, recherchieren, Antworten lesen, lernen
+app/ai.py              Fragen an die KI (Claude) mit festen Antwortformaten
+app/finder.py          Betriebe aus OpenStreetMap, Webseiten lesen
+app/leaddb.py          Datenbank der Leads und das Gehirn (Startfassung: app/brain_seed.md)
+app/webpush.py         Push-Benachrichtigungen (VAPID, ohne App Store)
+tests/                 python -m unittest discover tests
 email_templates/       Die Mail-Vorlagen (Jinja2), Original-Band und Logo
 templates/, static/    Oberfläche im Stil der Brand Guidelines
 ```

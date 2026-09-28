@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Leads · Ylva Labs{% endblock %}
+{% block content %}
+<main class="page wide">
+  <div class="leads-head">
+    <div>
+      <span class="label">03 · Leads</span>
+      <h1 class="title">Akquise.</h1>
+    </div>
+    <a class="btn" href="{{ url_for('leads.brain') }}">Gehirn ansehen</a>
+  </div>
+
+  {% include "_leads_bar.html" %}
+
+  <nav class="tabs mono" aria-label="Bereiche">
+    <a href="{{ url_for('leads.overview') }}" class="{{ 'on' if tab == 'alle' }}">Alle</a>
+    {% for key, label, _ in tabs %}
+    <a href="{{ url_for('leads.overview', tab=key) }}" class="{{ 'on' if tab == key }} t-{{ key }}">{{ label }} <span class="count">{{ st.counts[key] }}</span></a>
+    {% endfor %}
+  </nav>
+
+  {% if demo and not st.counts.values()|sum %}
+  <form method="post" action="{{ url_for('leads.demo_seed') }}" class="note">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    Noch keine Betriebe. Im Demo-Modus kannst du Beispieldaten laden, um alles auszuprobieren.
+    <button class="btn small">Beispieldaten laden</button>
+  </form>
+  {% endif %}
+
+  {% for key, label, hint, items in sections %}
+  <section class="lead-section s-{{ key }}">
+    <div class="section-head">
+      <h2>{{ label }} <span class="muted">{{ st.counts[key] }}</span></h2>
+      <span class="muted small">{{ hint }}</span>
+    </div>
+    {% if items %}
+    <ul class="lead-list">
+      {% for l in items %}
+      <li><a class="lead-row" href="{{ url_for('leads.detail', lead_id=l.id) }}">
+        <span class="lead-name">{% if l.unread %}<i class="new" title="Neu"></i>{% endif %}{{ l.name }}</span>
+        <span class="lead-meta muted">{{ l.category_label }}{% if l.city %} · {{ l.city }}{% endif %} · {{ l.distance_km|round|int }} km</span>
+        <span class="lead-score mono" title="Passung laut KI">{{ l.fit_score if l.fit_score is not none else '–' }}</span>
+        <span class="pill st-{{ tab_of(l) }}">{{ interest_labels.get(l.interest) or lead_status_labels.get(l.status, l.status) }}</span>
+        <span class="lead-date mono muted">{{ (l.replied_at or l.sent_at or l.updated_at)|kurzdatum }}</span>
+      </a></li>
+      {% endfor %}
+    </ul>
+    {% if tab == 'alle' and st.counts[key] > items|length %}
+    <a class="more-link mono" href="{{ url_for('leads.overview', tab=key) }}">Alle {{ st.counts[key] }} anzeigen →</a>
+    {% endif %}
+    {% else %}
+    <p class="muted small empty">Noch nichts.</p>
+    {% endif %}
+  </section>
+  {% endfor %}
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='leads.js') }}"></script>{% endblock %}
