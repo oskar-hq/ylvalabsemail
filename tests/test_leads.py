@@ -407,6 +407,14 @@ class ViewsTest(unittest.TestCase):
         self.assertEqual(leaddb.get_lead(c, due)["followup_count"], -1)
         self.assertEqual(leaddb.tab_of(leaddb.get_lead(c, due)), "versendet")
         self.assertEqual(self.client.get("/sw.js").headers["Service-Worker-Allowed"], "/")
+        # Systemcheck ohne echte Netzwerkzugriffe
+        from app import systemcheck
+        with mock.patch.object(systemcheck.urllib.request, "urlopen", side_effect=OSError("gesperrt")), \
+                mock.patch.object(finder, "fetch_page", return_value=("https://ylvalabs.de/", "<html></html>")):
+            html = self.client.get("/leads/system").get_data(as_text=True)
+        self.assertIn("Kartensuche (OpenStreetMap)", html)
+        self.assertIn("overpass-api.de erreichen", html)   # Hinweis bei Fehler
+        self.assertIn("DEMO_MODE ist an", html)            # Test läuft im Demo-Modus
         self.assertEqual(len(webpush.b64u_decode(self.client.get("/push/key").get_json()["key"])), 65)
 
 

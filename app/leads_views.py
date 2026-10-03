@@ -480,6 +480,17 @@ def brain_version(version_id):
         abort(404)
     return Response(row["content"], mimetype="text/plain; charset=utf-8")
 
+# ---------------------------------------------------------------- Systemcheck
+
+
+@bp.get("/leads/system")
+@login_required
+def system():
+    from . import main, systemcheck
+    results = systemcheck.run(SETTINGS, main.smtp_connect, main.imap_sent_folder, SETTINGS["DATA_DIR"])
+    return render_template("system.html", account=g.account, results=results, st=status_payload(),
+                           demo=SETTINGS["DEMO_MODE"])
+
 # ---------------------------------------------------------------- Demo
 
 

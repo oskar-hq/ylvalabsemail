@@ -102,6 +102,21 @@ kein Apple-Entwicklerkonto.
 Alle Einstellungen stehen kommentiert in `.env.example`. Mit `DEMO_MODE=true` lassen sich unter
 „Leads“ Beispieldaten laden, um die Oberfläche ohne Schlüssel auszuprobieren.
 
+## Schnellstart
+
+```bash
+git clone https://github.com/oskar-hq/ylvalabsemail.git
+cd ylvalabsemail
+sudo bash deploy/setup.sh
+```
+
+Das Skript fragt alles Nötige ab, startet die App mit Docker und macht einen Systemcheck. Es kennt drei Varianten:
+gemieteter Server mit automatischem HTTPS ([docs/SERVER-MIETEN.md](docs/SERVER-MIETEN.md)), Heimserver/Proxmox
+und eigener Rechner zum Ausprobieren ([docs/LOKAL-TESTEN.md](docs/LOKAL-TESTEN.md)). Den Systemcheck gibt es auch
+in der App unter „03 Leads → Systemcheck“. Sicherung: `bash deploy/backup.sh`, zurückspielen: `bash deploy/restore.sh <Datei>`.
+
+Die folgenden Abschnitte beschreiben die Einrichtung von Hand.
+
 ## Installation auf Proxmox
 
 ### Variante A: Docker (empfohlen)

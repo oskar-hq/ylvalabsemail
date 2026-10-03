@@ -5,16 +5,17 @@ Sie fasst zusammen, was gebaut wurde, was noch offen ist und welche Fragen vor d
 Installation geklärt werden müssen. Antworten könnt ihr direkt in diese Datei schreiben
 (auf GitHub: Datei öffnen → Stift-Symbol → „Commit changes“) oder als Kommentar im Pull Request.
 
-**Stand:** 28.09.2026
+**Stand:** 03.10.2026
 
 ## Links
 
 | Was | Wo |
 |---|---|
 | Repository | https://github.com/oskar-hq/ylvalabsemail |
-| Pull Request mit allen Änderungen | https://github.com/oskar-hq/ylvalabsemail/pull/1 |
-| Branch mit dem neuen Stand | `claude/peaceful-ramanujan-ls4osx` |
-| Bisheriger Stand des Mailers | `claude/practical-dijkstra-nnnz1b` (es gibt keinen `main`-Branch) |
+| Aktueller Stand | Standard-Branch `claude/practical-dijkstra-nnnz1b` (es gibt keinen `main`; ein einfaches `git clone` holt automatisch den richtigen) |
+| Erste Version (gemergt) | https://github.com/oskar-hq/ylvalabsemail/pull/1 |
+| Einrichtung auf einem gemieteten Server | [docs/SERVER-MIETEN.md](docs/SERVER-MIETEN.md) |
+| Ausprobieren auf dem eigenen PC | [docs/LOKAL-TESTEN.md](docs/LOKAL-TESTEN.md) |
 | Ausführliche Anleitung | [README.md](README.md), Abschnitte „KI-Akquise“, „Installation auf Proxmox“, „Zugriff über das Internet“ |
 | Alle Einstellungen, kommentiert | [.env.example](.env.example) |
 | Klickbare Vorschau mit Beispieldaten | https://claude.ai/artifact/NDSnMqjBbghuj9dqbCPXmg (privat, Oskar muss sie erst über „Teilen“ freigeben) |
@@ -44,9 +45,11 @@ Der **Ylva Labs Mailer** ist eine kleine Web-App (Python/Flask), die gestaltete 
 
 - Fertig und getestet: 22 automatische Tests (`python -m unittest discover tests`).
   Die Oberfläche lief im Browser auf Desktop und Handy ohne Fehler.
+- Einrichtungs-Skript, Docker-Container, HTTPS über Caddy, Sicherung und Zurückspielen wurden
+  echt in Docker durchgespielt.
 - **Noch nie getestet:** mit einem echten KI-Schlüssel, mit der echten Kartensuche und mit
   dem echten Postfach. In der Entwicklungsumgebung waren diese Dienste gesperrt.
-  Deshalb sollte der erste echte Lauf klein sein (siehe Schritt 7 unten).
+  Deshalb sollte der erste echte Lauf klein sein (siehe „Danach“ unten).
 
 ---
 
@@ -97,8 +100,11 @@ Bitte kurz beantworten, dann lässt sich die Installation passend vorbereiten.
       auch das Schreiben günstiger mit Sonnet laufen (`AI_MODEL`)?
 - [ ] **Antworten automatisch einordnen:** Kostet ca. 1–2 Cent pro echter Antwort und läuft
       ohne Knopfdruck. Beibehalten oder auch auf „nur von Hand“ stellen?
-- [ ] **Pull Request** durchsehen und mergen. Danach sinnvoll: einen `main`-Branch anlegen und auf
-      GitHub als Standard einstellen, damit der Server immer denselben Branch holt.
+- [ ] **Wo läuft die App?** Server des Freundes oder ein eigener gemieteter Server (ca. 4–6 € im Monat,
+      siehe [docs/SERVER-MIETEN.md](docs/SERVER-MIETEN.md)). Empfehlung: mieten, dann ist niemand
+      auf fremde Hardware und Zeit angewiesen.
+- [ ] Optional: den Standard-Branch auf GitHub in `main` umbenennen (Settings → Branches), das ist
+      übersichtlicher. Server holen sich dann einfach den neuen Namen per `git pull`.
 - [ ] **Gehirn prüfen:** In der App unter „Leads → Gehirn ansehen“ die Texte über Ylva Labs,
       Zielgruppe und Stil kontrollieren. Die Startfassung steht in `app/brain_seed.md`.
 
@@ -106,67 +112,47 @@ Bitte kurz beantworten, dann lässt sich die Installation passend vorbereiten.
 
 ## Einrichtung Schritt für Schritt
 
-Die Details stehen in der [README](README.md). Hier ist die kurze Reihenfolge.
-
-**1. Code holen** (solange der Pull Request nicht gemergt ist, den Branch angeben):
+Das meiste erledigt das Einrichtungs-Skript `deploy/setup.sh`. Es fragt die Zugangsdaten ab, schreibt
+die `.env` (nur für root lesbar), installiert bei Bedarf Docker, startet die App, macht den Systemcheck
+und richtet auf Wunsch die tägliche Sicherung ein.
 
 ```bash
-git clone -b claude/peaceful-ramanujan-ls4osx https://github.com/oskar-hq/ylvalabsemail.git
+git clone https://github.com/oskar-hq/ylvalabsemail.git
 cd ylvalabsemail
-cp .env.example .env
-chmod 600 .env
+sudo bash deploy/setup.sh
 ```
 
-**2. `.env` ausfüllen.** Diese Werte werden gebraucht:
+Das Skript fragt zuerst, wo die App läuft:
 
-| Einstellung | Wert | Von wem |
+| Auswahl | Wann | HTTPS |
 |---|---|---|
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURITY` | `smtp.strato.de`, `587`, `starttls` | fest |
-| `IMAP_HOST` | `imap.strato.de` | fest |
-| `ALLOWED_DOMAINS` | `ylvalabs.de` | fest |
-| `ANTHROPIC_API_KEY` | der Schlüssel | Oskar trägt ihn selbst ein |
-| `OUTREACH_USER`, `OUTREACH_PASSWORD` | Akquise-Postfach | Oskar trägt es selbst ein |
-| `NOTIFY_EMAILS` | wer benachrichtigt wird | Oskar |
-| `BASE_URL` | z. B. `https://mail.ylvalabs.de` | nach Schritt 4 |
-| `DEMO_MODE` | `false` | fest |
-| `COOKIE_SECURE`, `TRUST_PROXY` | `true`, `cloudflare` | nach Schritt 4 |
+| 1 · Gemieteter Server | VPS mit eigener IP, z. B. Hetzner, netcup, IONOS | automatisch über Caddy (`docker-compose.vps.yml`). Nur ein A-Eintrag `mail.ylvalabs.de` → Server-IP bei Strato nötig |
+| 2 · Heimserver / Proxmox | Server im Heim- oder Büronetz | später per Cloudflare Tunnel (README, „Zugriff über das Internet“) |
+| 3 · Eigener Rechner | zum Ausprobieren | keins, http://localhost:8080 |
 
-Alles andere kann erst einmal so bleiben.
+Die Zugangsdaten tippt am besten Oskar selbst ein, wenn das Skript danach fragt (Passwort des
+Akquise-Postfachs, KI-Schlüssel). Sie werden beim Tippen nicht angezeigt und landen nur in der `.env`.
 
-**3. Starten**, entweder mit Docker:
+**Danach:**
 
-```bash
-docker compose up -d --build
-```
+1. Die App öffnen, mit einem `@ylvalabs.de`-Postfach anmelden, „03 Leads“ → **Systemcheck**. Dort steht für
+   jeden Punkt, ob er passt und was sonst zu tun ist. Im Terminal geht dasselbe mit
+   `docker compose exec mailer python -m app.systemcheck`.
+2. **Handy:** In Safari `https://mail.ylvalabs.de/leads` öffnen → *Teilen* → *Zum Home-Bildschirm*,
+   App öffnen und auf **Benachrichtigungen an** tippen (ab iOS 16.4).
+3. **Erster echter Lauf, bewusst klein:** 10 Vorprüfungen, 2 Entwürfe, 1 € Budget, „Vorher neu suchen“ anhaken.
 
-oder ohne Docker in einem Debian/Ubuntu-Container:
+**Wichtige Befehle:**
 
 ```bash
-bash deploy/install-lxc.sh
+git pull && docker compose up -d --build                 # Update einspielen
+docker compose logs -f mailer                            # Protokoll ansehen
+bash deploy/backup.sh                                    # Sicherung nach ~/ylva-backups
+bash deploy/restore.sh ~/ylva-backups/<Datei>.tar.gz     # Sicherung zurückspielen (z. B. beim Umzug)
 ```
 
-Danach ist die App im Heimnetz unter `http://<IP>:8080` erreichbar.
-
-**4. Zugriff übers Internet** mit Cloudflare Tunnel und Cloudflare Access, wie in der README
-beschrieben. Achtung beim Umzug der Nameserver: Die MX-, SPF- und DKIM-Einträge von Strato
-müssen übernommen werden, sonst kommen keine Mails mehr an.
-
-**5. Anmelden** mit einem `@ylvalabs.de`-Postfach. Oben unter „03 Leads“ darf keine gelbe Warnung
-mehr stehen. Tut sie es doch, steht darin, welche Einstellung fehlt.
-
-**6. Handy:** In Safari `https://mail.ylvalabs.de/leads` öffnen → *Teilen* → *Zum Home-Bildschirm*.
-Dann die App öffnen und auf **Benachrichtigungen an** tippen (ab iOS 16.4).
-
-**7. Erster echter Lauf, bewusst klein:** 10 Vorprüfungen, 2 Entwürfe, 1 € Budget,
-„Vorher neu suchen“ anhaken. Danach die Kosten unter „Kosten im Detail“ ansehen.
-
-**Updates später:**
-
-```bash
-git pull && docker compose up -d --build
-```
-
-Ohne Docker: `git pull && bash deploy/install-lxc.sh`.
+Ohne Docker (Debian/Ubuntu-Container, z. B. Proxmox-LXC) geht es weiterhin mit `bash deploy/install-lxc.sh`
+und der `.env` von Hand, siehe README.
 
 ## Sicherheit, kurz
 

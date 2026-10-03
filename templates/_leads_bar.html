@@ -12,7 +12,8 @@
     <div class="cost wide"><span class="label">Dieser Monat</span><b id="monthEur">{{ '%.2f'|format(st.month_eur)|replace('.', ',') }} €</b>
       {% if st.cap_eur %}<span class="muted small">von {{ '%.0f'|format(st.cap_eur) }} € Monatsbudget</span>
       <span class="budget-bar"><i id="monthBar" style="width:{{ [100, (st.month_eur / st.cap_eur * 100)|round]|min }}%"></i></span>{% endif %}</div>
-    <a class="cost-link mono" href="{{ url_for('leads.costs') }}">Kosten im Detail →</a>
+    <span class="cost-links"><a class="cost-link mono" href="{{ url_for('leads.costs') }}">Kosten im Detail →</a>
+      <a class="cost-link mono" href="{{ url_for('leads.system') }}">Systemcheck →</a></span>
   </div>
 
   {% if st.run %}

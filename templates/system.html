@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block title %}Systemcheck · Leads{% endblock %}
+{% block content %}
+{% set labels = {'ok': 'In Ordnung', 'warn': 'Hinweis', 'fail': 'Fehlt'} %}
+{% set fails = results|selectattr('status', 'equalto', 'fail')|list|length %}
+{% set warns = results|selectattr('status', 'equalto', 'warn')|list|length %}
+<main class="page wide">
+  <p class="crumbs mono"><a href="{{ url_for('leads.overview') }}">← Leads</a></p>
+  <span class="label">03 · Leads · Systemcheck</span>
+  <h1 class="title">{% if fails %}Noch {{ fails }} Punkt{{ 'e' if fails != 1 }} offen.{% elif warns %}Läuft, mit {{ warns }} Hinweis{{ 'en' if warns != 1 }}.{% else %}Alles eingerichtet.{% endif %}</h1>
+  <p class="muted small measure">Prüft Einstellungen, Postfach, KI-Schlüssel, Kartensuche, Webseiten und Push. Kostet nichts: Es wird keine KI-Anfrage gestellt.
+    Im Terminal geht dasselbe mit <code>docker compose exec mailer python -m app.systemcheck</code>.</p>
+  <ul class="checks">
+    {% for r in results %}
+    <li><span class="pill {{ r.status }}">{{ labels[r.status] }}</span>
+      <div><b>{{ r.name }}</b><p class="small">{{ r.detail }}</p>{% if r.hint and r.status != 'ok' %}<p class="hint">→ {{ r.hint }}</p>{% endif %}</div>
+      <span class="mono muted">{{ r.ms }} ms</span></li>
+    {% endfor %}
+  </ul>
+  <a class="btn" href="{{ url_for('leads.system') }}">Erneut prüfen</a>
+</main>
+{% endblock %}
