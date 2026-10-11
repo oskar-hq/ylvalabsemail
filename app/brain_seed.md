@@ -32,8 +32,8 @@ Feedback und aus den Antworten der Firmen fort.
 
 ## Wen wir suchen
 
-- Mittelständische und kleinere Betriebe im Umkreis von 50 km um Kappeln (Schlei, Angeln, Schwansen,
-  Flensburg, Eckernförde, Schleswig).
+- Mittelständische und kleinere Betriebe in Schleswig-Holstein. Wir sitzen in Kappeln und kommen
+  im ganzen Land vor Ort vorbei.
 - Gut passend: 5 bis 250 Mitarbeitende, spürbar viel Verwaltung, Dokumentation oder Kundenkontakt,
   wiederkehrende Abläufe, die heute von Hand laufen.
 - Anzeichen für Bedarf: Kontakt nur per Telefon/Fax, Formulare als PDF zum Ausdrucken, Stellenanzeigen für

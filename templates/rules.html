@@ -10,7 +10,8 @@
     <section>
       <p class="measure">Jeder Betrieb startet mit <b>{{ base }} Punkten</b>. Die App liest die Startseite und bis zu drei Unterseiten
         (Impressum, Kontakt, Über uns, Karriere) und vergibt nach festen Regeln Punkte, ganz ohne KI. Ab <b>{{ threshold }} Punkten</b>
-        kommt der Betrieb als „Neu“ ins CRM. In der Akte steht jede Regel, die gegriffen hat.</p>
+        kommt der Betrieb als „Neu“ ins CRM, aber nur mit E-Mail-Adresse, weil der Kontakt per Mail läuft.
+        Gesucht wird nur in Schleswig-Holstein. In der Akte steht jede Regel, die gegriffen hat.</p>
       <div class="table-wrap"><table class="stats">
         <thead><tr><th>Punkte</th><th>Regel</th></tr></thead>
         <tbody>{% for points, rule in rules|sort(attribute=0, reverse=true) %}<tr><td class="mono {{ 'neg' if points < 0 }}">{{ '%+d'|format(points) }}</td><td>{{ rule }}</td></tr>{% endfor %}</tbody>

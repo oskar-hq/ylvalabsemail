@@ -69,10 +69,14 @@ def haversine_km(lat1, lon1, lat2, lon2):
     return 2 * r * math.asin(math.sqrt(a))
 
 
-def overpass_query(lat, lon, radius_km):
-    around = f"(around:{int(radius_km * 1000)},{lat},{lon})"
-    parts = "".join(f"nwr{around}{sel}[\"name\"];" for sel, _ in QUERIES)
-    return f"[out:json][timeout:180];({parts});out center tags;"
+def overpass_query(lat, lon, radius_km, region=""):
+    """Suche in einem Bundesland (ISO-Code, z. B. DE-SH) oder, ohne Region, im Umkreis um einen Punkt."""
+    if region:
+        head, where = f'area["ISO3166-2"="{region}"]->.gebiet;', "(area.gebiet)"
+    else:
+        head, where = "", f"(around:{int(radius_km * 1000)},{lat},{lon})"
+    parts = "".join(f"nwr{where}{sel}[\"name\"];" for sel, _ in QUERIES)
+    return f"[out:json][timeout:300];{head}({parts});out center tags;"
 
 
 def classify(tags):
@@ -124,7 +128,7 @@ def rough_filter(tags, website, host):
     return None
 
 
-def parse_elements(elements, lat, lon, radius_km):
+def parse_elements(elements, lat, lon, radius_km=None):
     """Overpass-Antwort -> Liste von Firmen (nur mit Webseite oder E-Mail)."""
     found, seen = [], set()
     for el in elements:
@@ -139,7 +143,7 @@ def parse_elements(elements, lat, lon, radius_km):
         if plat is None or plon is None:
             continue
         dist = haversine_km(lat, lon, plat, plon)
-        if dist > radius_km:
+        if radius_km and dist > radius_km:
             continue
         host = urllib.parse.urlparse(website).netloc.lower().removeprefix("www.") if website else ""
         dedupe = host or name.lower()
@@ -161,12 +165,13 @@ def parse_elements(elements, lat, lon, radius_km):
     return found
 
 
-def search_osm(lat, lon, radius_km, overpass_url):
-    data = urllib.parse.urlencode({"data": overpass_query(lat, lon, radius_km)}).encode()
+def search_osm(lat, lon, radius_km, overpass_url, region=""):
+    """Mit Region (z. B. DE-SH) zählt nur das Bundesland, Entfernung dient dann nur der Anzeige."""
+    data = urllib.parse.urlencode({"data": overpass_query(lat, lon, radius_km, region)}).encode()
     req = urllib.request.Request(overpass_url, data=data, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=240) as resp:
+    with urllib.request.urlopen(req, timeout=330) as resp:
         payload = json.load(resp)
-    return parse_elements(payload.get("elements", []), lat, lon, radius_km)
+    return parse_elements(payload.get("elements", []), lat, lon, None if region else radius_km)
 
 # ---------------------------------------------------------------- Webseite lesen
 

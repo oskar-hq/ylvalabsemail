@@ -78,6 +78,12 @@ class FinderTest(unittest.TestCase):
         self.assertIn("Kette", finder.rough_filter({"brand": "Edeka"}, "https://x.de", "x.de"))
         self.assertIn("Social", finder.rough_filter({}, "https://facebook.com/x", "facebook.com"))
         self.assertIn('nwr(around:50000,54.6614,9.9311)["craft"]["name"];', finder.overpass_query(54.6614, 9.9311, 50))
+        q = finder.overpass_query(54.6614, 9.9311, 50, "DE-SH")
+        self.assertIn('area["ISO3166-2"="DE-SH"]->.gebiet;', q)
+        self.assertIn('nwr(area.gebiet)["craft"]["name"];', q)
+        self.assertNotIn("around", q)
+        # Mit Region gilt kein Radius: auch Betriebe weit weg (aber im Land) bleiben drin
+        self.assertIn("Zu weit", [f["name"] for f in finder.parse_elements(elements, 54.6614, 9.9311)])
 
     def test_emails(self):
         html = 'Mail: <a href="mailto:chef@betrieb.de">x</a> oder buero [at] betrieb.de, logo@2x.png'
@@ -203,6 +209,15 @@ class AgentTest(unittest.TestCase):
         lead = leaddb.get_lead(self.c, lead_id)
         self.assertEqual((lead["status"], lead["rejected_by"], lead["stage"]), ("aussortiert", "regel", None))
         self.assertEqual(self.c.execute("SELECT COUNT(*) FROM ai_usage").fetchone()[0], 0)
+
+    def test_no_email_no_pipeline(self):
+        lead_id = self.add("Tischlerei ohne Mail", website="https://tischlerei-a.de")
+        with mock.patch.object(finder, "research_website", return_value={**self.SITE, "emails": []}):
+            self.assertFalse(agent.stage_score(self.c, lead_id, {}))
+        lead = leaddb.get_lead(self.c, lead_id)
+        self.assertGreaterEqual(lead["fit_score"], 60)  # passt inhaltlich …
+        self.assertEqual((lead["status"], lead["stage"]), ("aussortiert", None))  # … aber ohne Mail nicht ins CRM
+        self.assertIn("keine E-Mail-Adresse", lead["fit_reason"])
 
     def test_imported_lead_stays_in_pipeline(self):
         lead_id, _ = crm.create_lead(self.c, {"name": "Kleiner Betrieb", "website": "klein.example"}, "t")

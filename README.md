@@ -34,8 +34,8 @@ alles in einem CRM. Die KI ist nur noch ein optionales Werkzeug zum Schreiben.
 
 | Schritt | Was passiert | Kosten |
 |---|---|---|
-| 1 · Suchen und Grobfilter | Betriebe aus OpenStreetMap im Umkreis von 50 km um Kappeln. Ketten, Betriebe ohne Webseite, reine Social-Media-Seiten, Kleinstbranchen und gesperrte Adressen fallen raus | kostenlos |
-| 2 · Bewertung nach Regeln | Startseite plus Impressum, Kontakt, Über uns, Karriere lesen. Punkte für Branche, Nähe, Größe (5–250 Mitarbeitende), Faxnummer, PDF-Formulare, Stellen fürs Büro, Touren, Pflichtdokumentation, alte Webseite … Abzug für IT-Firmen, Behörden, Franchise, Online-Terminbuchung, fehlende E-Mail-Adresse. Ab `LEADS_RULE_MIN` Punkten (Standard 60) kommt der Betrieb als „Neu“ ins CRM | kostenlos |
+| 1 · Suchen und Grobfilter | Betriebe aus OpenStreetMap in ganz Schleswig-Holstein (`LEADS_REGION=DE-SH`). Ketten, Betriebe ohne Webseite, reine Social-Media-Seiten, Kleinstbranchen und gesperrte Adressen fallen raus | kostenlos |
+| 2 · Bewertung nach Regeln | Startseite plus Impressum, Kontakt, Über uns, Karriere lesen. Punkte für Branche, Größe (5–250 Mitarbeitende), Faxnummer, PDF-Formulare, Stellen fürs Büro, Touren, Pflichtdokumentation, alte Webseite … Abzug für IT-Firmen, Behörden, Franchise, Online-Terminbuchung, fehlende E-Mail-Adresse. Ab `LEADS_RULE_MIN` Punkten (Standard 60) **und mit E-Mail-Adresse** kommt der Betrieb als „Neu“ ins CRM | kostenlos |
 | 3 · Entwurf (optional) | Für die Besten ohne Nachricht schreibt die KI einen Entwurf, mit Budget in Euro | ca. 5 Cent pro Entwurf |
 
 Jede Regel, die gegriffen hat, steht mit ihren Punkten in der Akte. Die Tabelle aller Regeln zeigt die Seite

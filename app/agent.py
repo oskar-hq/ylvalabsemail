@@ -128,15 +128,20 @@ def notify(c, title, body, url="/leads", mail=True):
 # ---------------------------------------------------------------- Stufe 1: Firmen suchen und grob filtern (kostenlos)
 
 
+REGION_LABELS = {"DE-SH": "in ganz Schleswig-Holstein", "DE-SL": "im Saarland", "DE-HH": "in Hamburg"}
+
+
 class SearchError(Exception):
     pass
 
 
 def run_search(c):
     lat, lon = S("LEADS_CENTER")
-    set_activity(f"Schritt 1/3 · Sucht Betriebe im Umkreis von {S('LEADS_RADIUS_KM'):g} km (kostenlos) …")
+    where = REGION_LABELS.get(S("LEADS_REGION"), S("LEADS_REGION")) if S("LEADS_REGION") \
+        else f"im Umkreis von {S('LEADS_RADIUS_KM'):g} km"
+    set_activity(f"Schritt 1/3 · Sucht Betriebe {where} (kostenlos, dauert ein paar Minuten) …")
     try:
-        found = finder.search_osm(lat, lon, S("LEADS_RADIUS_KM"), S("OVERPASS_URL"))
+        found = finder.search_osm(lat, lon, S("LEADS_RADIUS_KM"), S("OVERPASS_URL"), S("LEADS_REGION"))
     except Exception as exc:
         raise SearchError(f"Die Kartensuche (OpenStreetMap) ist gerade nicht erreichbar ({exc}). "
                           "Bitte später erneut starten; es sind keine Kosten entstanden.") from exc
@@ -242,12 +247,15 @@ def stage_score(c, lead_id, learned):
         {"pages": [], "emails": [], "links": [], "errors": ["keine Webseite"]}
     result = scoring.score(lead, research, learned)
     threshold = S("LEADS_RULE_MIN")
-    passes = result["score"] >= threshold
+    email_addr = result["email"] or lead["email"] or None
+    passes = result["score"] >= threshold and bool(email_addr)  # Kontakt läuft per Mail
     info = {"signale": result["signals"], "groesse": result["groesse"], "zeitfresser": result["zeitfresser"],
             "auszug": result["auszug"], "pages": [p["url"] for p in research["pages"]], "emails": research["emails"],
             "errors": research["errors"]}
-    email_addr = result["email"] or lead["email"] or None
-    common = dict(fit_score=result["score"], fit_reason=scoring.summary(result, threshold), research=_json(info),
+    reason = scoring.summary(result, threshold)
+    if result["score"] >= threshold and not email_addr:
+        reason = f"Regeln: {result['score']}/100, passt inhaltlich, aber keine E-Mail-Adresse gefunden."
+    common = dict(fit_score=result["score"], fit_reason=reason, research=_json(info),
                   contact_name=lead["contact_name"] or result["contact_name"] or None, email=email_addr)
 
     blocked = set(leaddb.kv_get(c, "blocklist", []))

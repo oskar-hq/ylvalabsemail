@@ -7,12 +7,12 @@ from . import crm, leaddb
 
 # Beispielhafte Regel-Treffer für die Akte
 SIGNALE = {
-    "handwerk": [(20, "Branche Handwerk (Vorrang)"), (8, "Ganz in der Nähe"), (15, "Etwa 14 Mitarbeitende, passende Größe"),
+    "handwerk": [(20, "Branche Handwerk (Vorrang)"), (15, "Etwa 14 Mitarbeitende, passende Größe"),
                  (12, "Sucht Personal fürs Büro oder die Verwaltung"), (8, "Formulare als PDF zum Ausdrucken"),
                  (5, "E-Mail-Adresse gefunden")],
-    "pflege": [(20, "Branche Pflege und Gesundheit (Vorrang)"), (8, "Ganz in der Nähe"), (5, "Pflichtdokumentation, Nachweise oder Zertifizierung"),
+    "pflege": [(20, "Branche Pflege und Gesundheit (Vorrang)"), (5, "Pflichtdokumentation, Nachweise oder Zertifizierung"),
                (5, "Arbeitet vor Ort beim Kunden (Touren, Montage, Hausbesuche)"), (5, "E-Mail-Adresse gefunden")],
-    "landwirtschaft": [(18, "Branche Landwirtschaft (Vorrang)"), (8, "Ganz in der Nähe"), (5, "Pflichtdokumentation, Nachweise oder Zertifizierung"),
+    "landwirtschaft": [(18, "Branche Landwirtschaft (Vorrang)"), (5, "Pflichtdokumentation, Nachweise oder Zertifizierung"),
                        (5, "E-Mail-Adresse gefunden"), (3, "Persönliche Adresse statt info@")],
 }
 

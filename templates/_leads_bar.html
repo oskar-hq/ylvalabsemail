@@ -36,8 +36,8 @@
       <a class="btn" href="{{ url_for('leads.rules') }}">So wird bewertet</a>
     </div>
     <ol class="funnel three small">
-      <li><b>Suchen und Grobfilter</b><span>Karte und feste Regeln · kostenlos</span></li>
-      <li><b>Bewertung nach Regeln</b><span>Webseite lesen, Punkte vergeben, ab {{ st.rule_min }} passt es · kostenlos, ohne KI</span></li>
+      <li><b>Suchen und Grobfilter</b><span>ganz Schleswig-Holstein, Karte und feste Regeln · kostenlos</span></li>
+      <li><b>Bewertung nach Regeln</b><span>Webseite lesen, Punkte vergeben, ab {{ st.rule_min }} und mit E-Mail-Adresse passt es · kostenlos, ohne KI</span></li>
       <li><b>Entwurf</b><span>nur wenn du willst · {{ rd.models.entwurf }} · ca. {{ '%.1f'|format(rd.estimate.per_stage_eur.entwurf * 100)|replace('.', ',') }} ct · oder Vorlage, kostenlos</span></li>
     </ol>
   </form>

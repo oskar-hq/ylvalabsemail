@@ -147,12 +147,6 @@ def score(lead, research, learned=None, now=None):
     if BRANCHE_POINTS.get(branche):
         add(BRANCHE_POINTS[branche], f"Branche {BRANCHE_LABELS[branche]}"
             + (" (Vorrang)" if branche in BRANCHE_ZEITFRESSER else ""))
-    dist = lead.get("distance_km")
-    if dist is not None:
-        if dist <= 15:
-            add(8, f"Ganz in der Nähe ({dist:g} km)")
-        elif dist <= 30:
-            add(4, f"In der Region ({dist:g} km)")
 
     # Größe
     size = extract_size(text)
@@ -207,7 +201,7 @@ def score(lead, research, learned=None, now=None):
         if is_personal(email):
             add(3, "Persönliche Adresse statt info@")
     else:
-        add(-15, "Keine E-Mail-Adresse, nur Brief oder Telefon")
+        add(-15, "Keine E-Mail-Adresse gefunden (ohne kommt der Betrieb nicht ins CRM)")
     if contact:
         add(3, f"Ansprechperson im Impressum: {contact}")
     if not pages:
@@ -250,8 +244,7 @@ def learned_adjustments(rows):
 def rules_table():
     """Für die Seite „So bewertet der Algorithmus“."""
     rows = [(p, f"Branche {BRANCHE_LABELS[b]}") for b, p in BRANCHE_POINTS.items()]
-    rows += [(8, "Ganz in der Nähe (bis 15 km)"), (4, "In der Region (bis 30 km)"),
-             (15, "5 bis 250 Mitarbeitende laut Webseite"), (-10, "Mehr als 250 Mitarbeitende"),
+    rows += [(15, "5 bis 250 Mitarbeitende laut Webseite"), (-10, "Mehr als 250 Mitarbeitende"),
              (-15, "Weniger als 5 Mitarbeitende")]
     rows += [(p, r) for _, p, r, _, _ in TEXT_RULES]
     rows += [(12, "Sucht Personal fürs Büro oder die Verwaltung"), (5, "Sucht Personal (andere Stellen)"),
@@ -259,7 +252,7 @@ def rules_table():
              (2, "Webseite ohne HTTPS"), (-6, "Termine sind schon online buchbar"),
              (-30, "IT-Firma oder Agentur"), (-25, "Behörde"), (-15, "Teil einer Gruppe oder Franchise"),
              (5, "E-Mail-Adresse gefunden"), (3, "Persönliche Adresse statt info@"),
-             (-15, "Keine E-Mail-Adresse"), (3, "Ansprechperson im Impressum gefunden"),
+             (-15, "Keine E-Mail-Adresse (dann nie ins CRM)"), (3, "Ansprechperson im Impressum gefunden"),
              (10, "Bis zu ±10: Erfahrung mit der Branche aus euren Ergebnissen")]
     return rows
 

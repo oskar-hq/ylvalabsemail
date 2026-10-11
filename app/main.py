@@ -48,7 +48,9 @@ SETTINGS = {
     "DATA_DIR": Path(env("DATA_DIR", str(ROOT / "data"))),
     # Akquise (Bereich „Leads“) und CRM
     "LEADS_WORKER": env("LEADS_WORKER", "true").lower() in ("1", "true", "yes"),
-    "LEADS_CENTER": tuple(float(x) for x in env("LEADS_CENTER", "54.6614,9.9311").split(",")),  # Kappeln
+    # Suchgebiet: Bundesland als ISO-Code (DE-SH = Schleswig-Holstein). Leer = Umkreis um LEADS_CENTER.
+    "LEADS_REGION": env("LEADS_REGION", "DE-SH"),
+    "LEADS_CENTER": tuple(float(x) for x in env("LEADS_CENTER", "54.6614,9.9311").split(",")),  # Kappeln, für die Entfernung
     "LEADS_RADIUS_KM": float(env("LEADS_RADIUS_KM", "50")),
     # Vorschläge für den Start-Dialog eines Laufs
     "LEADS_RUN_CHECK": int(env("LEADS_RUN_CHECK", "50")),
