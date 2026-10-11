@@ -1,4 +1,4 @@
-"""Datenbank für die KI-Akquise: Firmen (Leads), Verlauf, Gehirn, Push-Abos."""
+"""Datenbank der Akquise: Firmen (Leads), Verlauf, Wiedervorlagen, Gehirn, Push-Abos."""
 import json
 import re
 import sqlite3
@@ -14,15 +14,16 @@ TABS = [
     ("mittel", "Mittel", "Vielleicht später, Rückfrage oder unklar."),
     ("kein_interesse", "Kein Interesse", "Abgesagt oder möchte nicht mehr kontaktiert werden."),
     ("entwurf", "Zur Prüfung", "Nachricht ist fertig und wartet auf eure Freigabe."),
+    ("passt", "Passt", "Passt laut Regeln, noch ohne Nachricht. Entwurf schreiben lassen, Vorlage nehmen oder selbst schreiben."),
     ("nachfassen", "Nachfassen", "Keine Antwort seit einer Woche. Einmal kurz erinnern oder anrufen."),
     ("versendet", "Versendet", "Raus, wir warten auf Antwort."),
-    ("arbeit", "In Bearbeitung", "Gefunden, noch nicht fertig recherchiert."),
-    ("aussortiert", "Aussortiert", "Passt nicht, von der KI oder von euch aussortiert."),
+    ("arbeit", "In Bearbeitung", "Wird gerade bewertet oder hatte einen Fehler."),
+    ("aussortiert", "Aussortiert", "Passt nicht, nach den Regeln oder von euch aussortiert."),
 ]
 
 STATUS_LABELS = {
-    "kandidat": "Gefunden", "recherche": "Wird recherchiert", "vorgeprueft": "Vorgeprüft",
-    "analysiert": "Analysiert", "entwurf": "Zur Prüfung",
+    "kandidat": "Gefunden", "recherche": "Wird bewertet", "passt": "Passt",
+    "vorgeprueft": "Vorgeprüft", "analysiert": "Analysiert", "entwurf": "Zur Prüfung",
     "versendet": "Versendet", "beantwortet": "Beantwortet", "aussortiert": "Aussortiert",
     "gesperrt": "Gesperrt", "fehler": "Fehler",
 }
@@ -77,6 +78,12 @@ CREATE TABLE IF NOT EXISTS ai_usage (
     cost_usd REAL NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS ai_usage_at ON ai_usage(at);
+CREATE TABLE IF NOT EXISTS tasks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    lead_id INTEGER NOT NULL, due TEXT NOT NULL, text TEXT NOT NULL,
+    created_at TEXT NOT NULL, created_by TEXT, done_at TEXT, done_by TEXT
+);
+CREATE INDEX IF NOT EXISTS tasks_open ON tasks(done_at, due);
 """
 
 # Spalten, die nach der ersten Version dazugekommen sind
@@ -90,6 +97,24 @@ MIGRATIONS = [
     "ALTER TABLE leads ADD COLUMN followup_body TEXT",
     "ALTER TABLE leads ADD COLUMN followup_sent_at TEXT",
     "ALTER TABLE leads ADD COLUMN followup_message_id TEXT",
+    # CRM: Stufe in der Pipeline (NULL = nicht in der Pipeline), seit wann, Auftragswert
+    "ALTER TABLE leads ADD COLUMN stage TEXT",
+    "ALTER TABLE leads ADD COLUMN stage_at TEXT",
+    "ALTER TABLE leads ADD COLUMN deal_eur REAL",
+]
+
+# Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.
+DATA_MIGRATIONS = [
+    # Bewertung nach Regeln statt KI: „analysiert“ heißt jetzt „passt“, Vorgeprüfte werden neu bewertet
+    "UPDATE leads SET status='passt' WHERE status='analysiert'",
+    "UPDATE leads SET status='kandidat' WHERE status='vorgeprueft'",
+    """UPDATE leads SET stage_at=updated_at, stage=CASE
+           WHEN interest='kein_interesse' OR status='gesperrt' THEN 'verloren'
+           WHEN interest IS NOT NULL OR status='beantwortet' THEN 'antwort'
+           WHEN status='versendet' THEN 'kontaktiert'
+           ELSE 'neu' END
+       WHERE stage IS NULL AND IFNULL(rejected_by,'') != 'filter'
+         AND status IN ('passt','entwurf','versendet','beantwortet','gesperrt')""",
 ]
 
 FOLLOWUP_DAYS = 7  # wird beim Start aus LEADS_FOLLOWUP_DAYS gesetzt, 0 = aus
@@ -119,6 +144,11 @@ def connect(path):
             conn.execute(stmt)
         except sqlite3.OperationalError:
             pass  # gibt es schon
+    done = kv_get(conn, "data_version", 0)
+    if done < len(DATA_MIGRATIONS):
+        for stmt in DATA_MIGRATIONS[done:]:
+            conn.execute(stmt)
+        kv_set(conn, "data_version", len(DATA_MIGRATIONS))
     return conn
 
 # ---------------------------------------------------------------- Kleinkram
@@ -180,6 +210,7 @@ TAB_SQL = {
     "mittel": "interest='mittel' OR (status='beantwortet' AND interest IS NULL)",
     "kein_interesse": "interest='kein_interesse' OR status='gesperrt'",
     "entwurf": "status='entwurf' AND interest IS NULL",
+    "passt": "status='passt' AND interest IS NULL",
     "nachfassen": "status='versendet' AND interest IS NULL AND IFNULL(followup_count,0)=0 AND :days > 0"
                   " AND sent_at <= :cutoff",
     "versendet": "status='versendet' AND interest IS NULL AND NOT (IFNULL(followup_count,0)=0 AND :days > 0"
@@ -203,7 +234,8 @@ def tab_counts(conn):
 
 
 def tab_leads(conn, key, limit=300):
-    order = {"entwurf": "fit_score DESC, updated_at DESC", "nachfassen": "sent_at",
+    order = {"entwurf": "fit_score DESC, updated_at DESC", "passt": "fit_score DESC, distance_km",
+             "nachfassen": "sent_at",
              "arbeit": "IFNULL(fit_score, quick_score) DESC, updated_at DESC"}.get(key, "updated_at DESC")
     rows = conn.execute(f"SELECT * FROM leads WHERE {TAB_SQL[key]} ORDER BY {order} LIMIT :limit",
                         {**_tab_args(), "limit": limit}).fetchall()
@@ -262,6 +294,20 @@ def branche_stats(conn):
     return [dict(r) for r in rows]
 
 
+def category_outcomes(conn):
+    """Was hat je Kategorie und Branche funktioniert? Für den Zuschlag/Abzug in der Regel-Bewertung."""
+    good = "(interest='qualified' OR stage IN ('gespraech','angebot','kunde'))"
+    rows = []
+    for key, label in (("category", "category_label"), ("branche", "branche")):
+        rows += [dict(r) for r in conn.execute(f"""
+            SELECT {key} AS key, MAX({label}) AS label,
+                   IFNULL(SUM({good}), 0) + 0.5 * IFNULL(SUM(interest='mittel' AND NOT {good}), 0) AS pos,
+                   IFNULL(SUM(interest='kein_interesse' OR rejected_by='team'
+                              OR (status='gesperrt' AND IFNULL(rejected_by,'') != 'filter')), 0) AS neg
+            FROM leads WHERE IFNULL({key},'') != '' GROUP BY {key}""")]
+    return rows
+
+
 def brain_sections(text, names):
     """Nur bestimmte Abschnitte des Gehirns (für die günstige Vorprüfung, spart Tokens)."""
     parts = re.split(r"(?m)^(?=## )", text)
@@ -310,13 +356,3 @@ def stage_averages(conn):
     return {r["stage"]: (r["usd"], r["n"]) for r in conn.execute(
         "SELECT stage, AVG(cost_usd) usd, COUNT(*) n FROM ai_usage GROUP BY stage")}
 
-
-def pass_rates(conn):
-    """Wie viele kommen durch die Vorprüfung bzw. Analyse? Für die Schätzung vor einem Lauf."""
-    row = conn.execute("""SELECT SUM(quick_score IS NOT NULL) q_all,
-        SUM(quick_score IS NOT NULL AND NOT (status='aussortiert' AND fit_score IS NULL)) q_pass,
-        SUM(fit_score IS NOT NULL) a_all,
-        SUM(fit_score IS NOT NULL AND status != 'aussortiert') a_pass FROM leads""").fetchone()
-    q = (row["q_pass"] / row["q_all"]) if (row["q_all"] or 0) >= 10 else 0.4
-    a = (row["a_pass"] / row["a_all"]) if (row["a_all"] or 0) >= 10 else 0.5
-    return q, a

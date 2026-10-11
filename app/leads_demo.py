@@ -1,9 +1,20 @@
-"""Beispieldaten für den Demo-Modus: so sieht die Akquise aus, bevor die KI echte Betriebe gefunden hat.
+"""Beispieldaten für den Demo-Modus: so sehen Akquise und CRM aus, bevor echte Betriebe gefunden sind.
 Alle Betriebe sind erfunden."""
 import json
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
-from . import leaddb
+from . import crm, leaddb
+
+# Beispielhafte Regel-Treffer für die Akte
+SIGNALE = {
+    "handwerk": [(20, "Branche Handwerk (Vorrang)"), (8, "Ganz in der Nähe"), (15, "Etwa 14 Mitarbeitende, passende Größe"),
+                 (12, "Sucht Personal fürs Büro oder die Verwaltung"), (8, "Formulare als PDF zum Ausdrucken"),
+                 (5, "E-Mail-Adresse gefunden")],
+    "pflege": [(20, "Branche Pflege und Gesundheit (Vorrang)"), (8, "Ganz in der Nähe"), (5, "Pflichtdokumentation, Nachweise oder Zertifizierung"),
+               (5, "Arbeitet vor Ort beim Kunden (Touren, Montage, Hausbesuche)"), (5, "E-Mail-Adresse gefunden")],
+    "landwirtschaft": [(18, "Branche Landwirtschaft (Vorrang)"), (8, "Ganz in der Nähe"), (5, "Pflichtdokumentation, Nachweise oder Zertifizierung"),
+                       (5, "E-Mail-Adresse gefunden"), (3, "Persönliche Adresse statt info@")],
+}
 
 DEMO = [
     dict(name="Tischlerei Hansen (Beispiel)", branche="handwerk", category="craft=carpenter", category_label="Tischlerei",
@@ -52,6 +63,18 @@ DEMO = [
          body="Sie bieten einen Notdienst und Photovoltaik-Beratung an, da kommt sicher einiges an Anfragen zusammen.\n\n"
               "Wir entwickeln mit Handwerksbetrieben ein Werkzeug, das Anfragen sortiert und Antworten vorbereitet.\n\n"
               "Wollen wir 30 Minuten telefonieren?"),
+    dict(name="Metallbau Schlei (Beispiel)", branche="handwerk", category="craft=metal_construction", category_label="Metallbau",
+         city="Kappeln", address="Werftstraße 7, 24376 Kappeln", distance_km=2.1, status="passt", fit_score=71,
+         email="post@metallbau-schlei.example", contact_name="Birte Lorenzen",
+         fit_reason="Regeln: 71/100, passt. Branche Handwerk (Vorrang); Etwa 25 Mitarbeitende, passende Größe; Faxnummer auf der Webseite.",
+         zeitfresser=["Angebote, Aufmaß und Nachkalkulation", "Anfragen und Bestellungen per Fax und Telefon"]),
+    dict(name="Gärtnerei Grünholz (Beispiel)", branche="handwerk", category="craft=gardener", category_label="Garten- und Landschaftsbau",
+         city="Süderbrarup", address="Am Moor 1, 24392 Süderbrarup", distance_km=13.0, status="beantwortet", interest="qualified",
+         fit_score=77, email="info@gruenholz.example", contact_name="Hauke Thomsen", stage="kunde", deal_eur=6500,
+         fit_reason="Garten- und Landschaftsbau mit 18 Leuten und vielen Baustellen gleichzeitig.",
+         zeitfresser=["Einsatz- und Tourenplanung"], subject="Baustellen planen ohne Zettelwirtschaft", greeting="Moin Herr Thomsen,",
+         body="…", reply="Moin, lassen Sie uns gerne sprechen. Dienstag passt.", reply_summary="Interesse! Termin am Dienstag.",
+         grund="Stichwort „gerne“", schritt="Termin bestätigen."),
     dict(name="Steuerbüro Angeln (Beispiel)", branche="dienstleistung", category="office=tax_advisor", category_label="Steuerberatung",
          city="Kappeln", address="Schmiedestraße 5, 24376 Kappeln", distance_km=0.6, status="versendet", fit_score=69,
          email="kanzlei@steuer-angeln.example", fit_reason="Kanzlei mit 12 Mitarbeitenden, Belege kommen noch viel auf Papier.",
@@ -68,6 +91,14 @@ DEMO = [
 ]
 
 
+def _stage(d):
+    if d.get("interest") == "kein_interesse":
+        return "verloren"
+    if d.get("interest"):
+        return "antwort"
+    return {"versendet": "kontaktiert", "entwurf": "neu", "passt": "neu"}.get(d["status"])
+
+
 def seed(conn):
     t0 = datetime.now() - timedelta(days=6)
     for i, d in enumerate(DEMO):
@@ -75,23 +106,25 @@ def seed(conn):
         cur = conn.execute(
             "INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, category_label, address, city,"
             " lat, lon, distance_km, website, email, phone, status, interest, interest_reason, fit_score, fit_reason, research,"
-            " contact_name, subject, greeting, body, channel, sent_at, replied_at, unread, rejected_by)"
-            " VALUES (?,?,?,?,?,?,?,?,?,0,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " contact_name, subject, greeting, body, channel, sent_at, replied_at, unread, rejected_by, stage, stage_at, deal_eur)"
+            " VALUES (?,?,?,?,?,?,?,?,?,0,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (f"demo:{i}", at, at, d["name"], d["branche"], d["category"], d["category_label"], d["address"], d["city"],
              d["distance_km"], "https://ylvalabs.de", d.get("email") or None, "04642 000000", d["status"], d.get("interest"),
              d.get("grund"), d.get("fit_score"), d.get("fit_reason"),
-             json.dumps({"groesse": "Beispieldaten", "zeitfresser": d.get("zeitfresser", []), "pages": [], "emails": []}),
+             json.dumps({"groesse": "Beispieldaten", "zeitfresser": d.get("zeitfresser", []), "pages": [], "emails": [],
+                         "signale": SIGNALE.get(d["branche"], []) if (d.get("fit_score") or 0) >= 60 else []}),
              d.get("contact_name"), d.get("subject"), d.get("greeting"), d.get("body"),
              d.get("channel", "email") if d["status"] in ("versendet", "beantwortet") else None,
              ((datetime.now() - timedelta(days=9)).isoformat(timespec="seconds") if d["status"] == "versendet"
               else at if d["status"] == "beantwortet" else None),  # „versendet“ ist schon zum Nachfassen fällig
              at if d.get("reply") else None, 1 if d["status"] in ("entwurf",) or d.get("interest") == "qualified" else 0,
-             "ki" if d["status"] == "aussortiert" else None))
+             "regel" if d["status"] == "aussortiert" else None, d.get("stage") or _stage(d), at, d.get("deal_eur")))
         if not cur.rowcount:
             continue
         lead_id = cur.lastrowid
         leaddb.add_event(conn, lead_id, "draft" if d.get("body") else "status",
-                         f"Passt ({d['fit_score']}/100). {d['fit_reason']}" if d.get("body") else (d.get("fit_reason") or "Gefunden."))
+                         f"Passt ({d['fit_score']}/100). {d['fit_reason']}" if d.get("body") else (d.get("fit_reason") or "Gefunden."),
+                         author="Regeln")
         if d["status"] in ("versendet", "beantwortet"):
             leaddb.add_event(conn, lead_id, "sent", "Kontakt aufgenommen (Beispiel).", author="oskar@ylvalabs.de")
         if d.get("reply"):
@@ -99,19 +132,24 @@ def seed(conn):
                              meta={"subject": "Re: " + d["subject"]})
             leaddb.add_event(conn, lead_id, "classify", d["reply_summary"],
                              meta={"grund": d["grund"], "naechster_schritt": d["schritt"]})
+    # Wiedervorlagen, damit „Heute dran“ etwas zeigt
+    if not conn.execute("SELECT 1 FROM tasks").fetchone():
+        names = {r["name"]: r["id"] for r in conn.execute("SELECT id, name FROM leads WHERE source_id LIKE 'demo:%'")}
+        for name, days, text in [("Tischlerei Hansen (Beispiel)", 0, "Anrufen, vormittags (hat um Rückruf gebeten)"),
+                                 ("Pflegedienst Schleiufer (Beispiel)", 150, "Im Frühjahr wieder melden"),
+                                 ("Gärtnerei Grünholz (Beispiel)", 7, "Zwischenstand Prototyp zeigen")]:
+            if name in names:
+                crm.add_task(conn, names[name], (date.today() + timedelta(days=days)).isoformat(), text, "oskar@ylvalabs.de")
     # Ein Beispiel-Lauf mit Kosten, damit die Kostenanzeige etwas zeigt
     if not conn.execute("SELECT 1 FROM runs").fetchone():
         at = (t0 + timedelta(days=5)).isoformat(timespec="seconds")
         cur = conn.execute(
             "INSERT INTO runs (started_at, ended_at, started_by, params, status, message, counts) VALUES (?,?,?,?,?,?,?)",
-            (at, at, "oskar@ylvalabs.de", json.dumps({"vorpruefen": 30, "entwuerfe": 5, "budget_eur": 2.0, "suchen": True}),
-             "fertig", "2 neue Entwürfe, 30 vorgeprüft, 6 analysiert. Kosten: 0,42 € (Beispiel).",
-             json.dumps({"neu_gefunden": 412, "grobfilter": 131, "vorgeprueft": 30, "vorpruefung_durch": 11,
-                         "analysiert": 6, "analyse_durch": 4, "entwuerfe": 2})))
+            (at, at, "oskar@ylvalabs.de", json.dumps({"bewerten": 50, "entwuerfe": 2, "budget_eur": 2.0, "suchen": True}),
+             "fertig", "50 bewertet, 9 passen, 2 Entwürfe. KI-Kosten: 0,13 € (Beispiel).",
+             json.dumps({"neu_gefunden": 412, "grobfilter": 131, "bewertet": 50, "passen": 9, "entwuerfe": 2})))
         run_id = cur.lastrowid
-        rows = [("vorpruefung", "claude-haiku-4-5", 30, 3100, 160, 0.0039),
-                ("analyse", "claude-sonnet-5", 6, 9800, 2100, 0.0406),
-                ("entwurf", "claude-opus-5", 2, 3300, 1500, 0.054),
+        rows = [("entwurf", "claude-opus-5", 2, 3300, 1500, 0.054),
                 ("lernen", "claude-sonnet-5", 1, 4200, 1600, 0.0244)]
         for stage, model, n, tin, tout, usd in rows:
             for _ in range(n):

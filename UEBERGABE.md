@@ -5,7 +5,14 @@ Sie fasst zusammen, was gebaut wurde, was noch offen ist und welche Fragen vor d
 Installation geklärt werden müssen. Antworten könnt ihr direkt in diese Datei schreiben
 (auf GitHub: Datei öffnen → Stift-Symbol → „Commit changes“) oder als Kommentar im Pull Request.
 
-**Stand:** 28.09.2026
+**Stand:** 11.10.2026
+
+> **Neu seit 11.10.:** Welche Betriebe passen, entscheiden jetzt feste Regeln ohne KI (`app/scoring.py`), und es
+> gibt ein CRM (Menü „04 CRM“: Pipeline, Wiedervorlagen, CSV). Die KI schreibt nur noch Entwürfe, wenn man es
+> anfordert, der API-Schlüssel ist also optional. Antworten werden nach Stichworten eingeordnet. Die Datenbank wird
+> beim ersten Start automatisch umgestellt. In der `.env` entfallen `AI_MODEL_QUICK`, `LEADS_QUICK_MIN` und
+> `LEADS_ANALYSE_MIN`, neu ist `LEADS_RULE_MIN` (Standard 60). Ausgehende Verbindung zu `api.anthropic.com` wird
+> nur noch für KI-Entwürfe gebraucht.
 
 ## Links
 

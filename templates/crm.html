@@ -1,0 +1,97 @@
+{% extends "base.html" %}
+{% block title %}CRM · Ylva Labs{% endblock %}
+{% macro euro(v) %}{{ '{:,.0f}'.format(v).replace(',', '.') }} €{% endmacro %}
+{% block content %}
+<main class="page full" id="crm">
+  <div class="leads-head">
+    <div>
+      <span class="label">04 · CRM</span>
+      <h1 class="title">Pipeline.</h1>
+    </div>
+    <div class="btn-row head-btns">
+      <button class="btn primary" type="button" id="newLead">Firma anlegen</button>
+      <button class="btn" type="button" id="importBtn">CSV importieren</button>
+      <a class="btn" href="{{ url_for('crm.export_csv') }}">CSV exportieren</a>
+      <a class="btn" href="{{ url_for('leads.overview') }}">Neue Betriebe finden</a>
+    </div>
+  </div>
+
+  <section class="today">
+    <div class="section-head"><h2>Heute dran <span class="muted">{{ due|length }}</span></h2>
+      <span class="muted small">Wiedervorlagen bis heute{% if st.counts.nachfassen %} · <a href="{{ url_for('leads.overview', tab='nachfassen') }}">{{ st.counts.nachfassen }} zum Nachfassen fällig</a>{% endif %}{% if st.counts.entwurf %} · <a href="{{ url_for('leads.overview', tab='entwurf') }}">{{ st.counts.entwurf }} Entwürfe warten auf Freigabe</a>{% endif %}</span></div>
+    {% if due %}
+    <ul class="tasks big">
+      {% for t in due %}<li class="{{ 'overdue' if t.due < today }}">
+        <button class="check-btn" data-task="{{ t.id }}" title="Erledigt">✓</button>
+        <span><b>{{ fmt_day(t.due) }}</b> · <a href="{{ url_for('leads.detail', lead_id=t.lead_id) }}">{{ t.name }}</a> · {{ t.text }}</span></li>{% endfor %}
+    </ul>
+    {% else %}<p class="muted small empty">Nichts fällig.{% if upcoming %} Als Nächstes: {{ fmt_day(upcoming[0].due) }}, {{ upcoming[0].name }}.{% endif %}</p>{% endif %}
+  </section>
+
+  <div class="board-tools">
+    <input type="search" id="boardFilter" placeholder="Filtern nach Name, Ort, Branche …" aria-label="Filtern">
+    <span class="muted small">Karten zwischen den Spalten ziehen oder in der Akte die Stufe wählen.</span>
+  </div>
+
+  <div class="board" id="board">
+    {% for key, label, hint, cards, total in columns %}
+    <section class="col col-{{ key }}" data-stage="{{ key }}">
+      <header class="col-head">
+        <h2>{{ label }} <span class="muted">{{ cards|length }}</span></h2>
+        <span class="muted small">{{ hint }}{% if total %} · {{ euro(total) }}{% endif %}</span>
+      </header>
+      <ul class="cards" data-stage="{{ key }}">
+        {% for c in cards %}
+        <li class="card" draggable="true" data-id="{{ c.id }}" data-search="{{ (c.name ~ ' ' ~ (c.city or '') ~ ' ' ~ (c.category_label or '') ~ ' ' ~ (c.contact_name or ''))|lower }}">
+          <a href="{{ url_for('leads.detail', lead_id=c.id) }}" class="card-link">
+            <span class="card-name">{% if c.unread %}<i class="new" title="Neu"></i>{% endif %}{{ c.name }}</span>
+            <span class="card-meta muted">{{ c.category_label }}{% if c.city %} · {{ c.city }}{% endif %}</span>
+            <span class="card-foot mono">
+              {% if c.fit_score is not none %}<span title="Punkte nach Regeln">{{ c.fit_score }} P</span>{% endif %}
+              {% if c.status == 'entwurf' %}<span class="pill st-entwurf">Entwurf</span>{% elif c.status == 'passt' and not c.body %}<span class="pill">ohne Nachricht</span>{% endif %}
+              {% if c.interest %}<span class="pill st-{{ c.interest }}">{{ interest_labels[c.interest] }}</span>{% endif %}
+              {% if c.next_due %}<span class="{{ 'late' if c.next_due <= today }}" title="Nächste Wiedervorlage">⏰ {{ fmt_day(c.next_due) }}</span>{% endif %}
+              {% if c.deal_eur %}<span>{{ euro(c.deal_eur) }}</span>{% endif %}
+            </span>
+          </a>
+          <select class="card-move" aria-label="Stufe ändern">{% for k, l, _ in stages %}<option value="{{ k }}" {{ 'selected' if k == key }}>{{ l }}</option>{% endfor %}</select>
+        </li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endfor %}
+  </div>
+  {% if demo and not total_cards %}
+  <form method="post" action="{{ url_for('leads.demo_seed') }}" class="note">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    Noch keine Betriebe in der Pipeline. Im Demo-Modus kannst du Beispieldaten laden.
+    <button class="btn small">Beispieldaten laden</button>
+  </form>
+  {% endif %}
+</main>
+
+<dialog id="newDlg"><form class="dlg" id="newForm">
+  <h2>Firma anlegen.</h2>
+  <p class="small muted">Für Betriebe, die ihr selbst kennt (Messe, Empfehlung, Netzwerk). Sie kommen direkt als „Neu“ in die Pipeline.</p>
+  <label class="field"><span class="sub">Name *</span><input type="text" name="name" required></label>
+  <div class="two-col">
+    <label class="field"><span class="sub">Ansprechperson</span><input type="text" name="contact_name"></label>
+    <label class="field"><span class="sub">E-Mail</span><input type="email" name="email"></label>
+    <label class="field"><span class="sub">Telefon</span><input type="text" name="phone"></label>
+    <label class="field"><span class="sub">Webseite</span><input type="text" name="website" placeholder="betrieb.de"></label>
+    <label class="field"><span class="sub">Ort</span><input type="text" name="city"></label>
+    <label class="field"><span class="sub">Branche</span><input type="text" name="branche" placeholder="z. B. Handwerk"></label>
+  </div>
+  <label class="field"><span class="sub">Notiz</span><input type="text" name="note" placeholder="z. B. auf der Norla getroffen"></label>
+  <div class="dlg-actions"><button type="button" class="btn" data-close>Abbrechen</button><button class="btn primary">Anlegen</button></div>
+</form></dialog>
+
+<dialog id="importDlg"><form class="dlg" id="importForm">
+  <h2>CSV importieren.</h2>
+  <p class="small">Eine Zeile pro Firma, Trennzeichen <code>;</code> oder <code>,</code> (Excel: „Speichern unter → CSV“). Erkannte Spalten:
+    <b>Firma</b> (Pflicht), E-Mail, Telefon, Webseite, Ansprechpartner, Ort, Adresse, Branche, Notiz. Doppelte (gleiche E-Mail, Webseite oder Name) werden übersprungen.</p>
+  <label class="drop"><input type="file" name="file" accept=".csv,text/csv" required><span>CSV-Datei auswählen</span></label>
+  <div class="dlg-actions"><button type="button" class="btn" data-close>Abbrechen</button><button class="btn primary">Importieren</button></div>
+</form></dialog>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='leads.js') }}"></script>{% endblock %}

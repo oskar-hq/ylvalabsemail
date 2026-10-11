@@ -1,15 +1,14 @@
-"""Der Hintergrund-Arbeiter der KI-Akquise.
+"""Der Hintergrund-Arbeiter der Akquise.
 
 Läuft als Thread im Mailer-Prozess (Gunicorn mit genau einem Worker).
-Von sich aus liest er nur das Postfach. Alles, was Tokens kostet, passiert in einem Lauf, den ihr von Hand
-startet, mit Budgetgrenze. Ein Lauf arbeitet sich von billig nach teuer vor, damit nur die besten Betriebe
-die teure Analyse bekommen:
+Von sich aus liest er nur das Postfach und ordnet Antworten nach Regeln ein (kostenlos). Ein Lauf, den ihr von
+Hand startet, macht:
 
 1. Suchen (OpenStreetMap) und Grobfilter nach Regeln: kostenlos.
-2. Vorprüfung der Startseite mit dem günstigsten Modell.
-3. Gründliche Analyse mit Unterseiten mit dem mittleren Modell, nur für die Besten aus Stufe 2.
-4. Entwurf mit dem stärksten Modell, nur für die Besten aus Stufe 3.
-Zum Schluss lernt er aus den Rückmeldungen. Versendet wird nie automatisch.
+2. Bewertung nach Regeln (app/scoring.py): Webseite lesen, Punkte vergeben, ohne KI, kostenlos.
+   Wer genug Punkte hat, kommt als „Neu“ in die Pipeline.
+3. Nur wenn ihr es wollt: Entwürfe für die Besten, von der KI geschrieben, mit Budgetgrenze.
+Versendet wird nie automatisch.
 """
 import email
 import email.policy
@@ -26,7 +25,7 @@ from email.message import EmailMessage
 from email.utils import formataddr, formatdate, parseaddr
 from urllib.parse import urlparse
 
-from . import ai, emailbuild, finder, leaddb, webpush
+from . import ai, crm, emailbuild, finder, leaddb, scoring, webpush
 
 log = logging.getLogger("ylva.leads")
 
@@ -49,6 +48,8 @@ def init(settings, smtp_connect, sent_folder, db_path, data_dir):
                data_dir=data_dir)
     ai.on_usage = _record_usage
     leaddb.FOLLOWUP_DAYS = settings["LEADS_FOLLOWUP_DAYS"]
+    if not settings["LEADS_WORKER"]:
+        set_activity("Wartet")
     if settings["LEADS_WORKER"] and not STATE["running"]:
         STATE["running"] = True
         threading.Thread(target=_loop, name="leads-worker", daemon=True).start()
@@ -78,8 +79,6 @@ def outreach_address():
 def status():
     """Für die Anzeige oben auf der Leads-Seite."""
     warnings = []
-    if not ai.available():
-        warnings.append("Kein KI-Schlüssel: ANTHROPIC_API_KEY in der .env eintragen, sonst wird nichts recherchiert.")
     if not outreach_configured():
         warnings.append("Kein Akquise-Postfach: OUTREACH_USER und OUTREACH_PASSWORD eintragen, "
                         "sonst werden keine Antworten gelesen und keine Mails verschickt.")
@@ -87,7 +86,8 @@ def status():
         warnings.append("IMAP_HOST fehlt: Antworten der Firmen können nicht gelesen werden.")
     if not S("LEADS_WORKER"):
         warnings.append("Der Hintergrund-Arbeiter ist aus (LEADS_WORKER=false).")
-    return {**STATE, "run_id": RUN["id"], "progress": RUN["progress"], "warnings": warnings, "email_enabled": S("OUTREACH_EMAIL") and outreach_configured()}
+    return {**STATE, "run_id": RUN["id"], "progress": RUN["progress"], "warnings": warnings,
+            "email_enabled": S("OUTREACH_EMAIL") and outreach_configured()}
 
 # ---------------------------------------------------------------- Benachrichtigungen
 
@@ -134,7 +134,7 @@ class SearchError(Exception):
 
 def run_search(c):
     lat, lon = S("LEADS_CENTER")
-    set_activity(f"Stufe 1/4 · Sucht Betriebe im Umkreis von {S('LEADS_RADIUS_KM'):g} km (kostenlos) …")
+    set_activity(f"Schritt 1/3 · Sucht Betriebe im Umkreis von {S('LEADS_RADIUS_KM'):g} km (kostenlos) …")
     try:
         found = finder.search_osm(lat, lon, S("LEADS_RADIUS_KM"), S("OVERPASS_URL"))
     except Exception as exc:
@@ -166,8 +166,9 @@ def learned_filter(c):
             SELECT category, category_label FROM leads
             WHERE status NOT IN ('kandidat','recherche') AND IFNULL(rejected_by,'') != 'filter' AND category != ''
             GROUP BY category
-            HAVING IFNULL(SUM(interest IN ('qualified','mittel') OR status IN ('entwurf','versendet','analysiert')), 0) = 0
-               AND IFNULL(SUM(rejected_by IN ('ki','team') OR interest='kein_interesse'), 0) >= 5""").fetchall():
+            HAVING IFNULL(SUM(interest IN ('qualified','mittel') OR stage IS NOT NULL
+                              OR status IN ('passt','entwurf','versendet')), 0) = 0
+               AND IFNULL(SUM(rejected_by IN ('ki','regel','team') OR interest='kein_interesse'), 0) >= 5""").fetchall():
         removed += c.execute(
             "UPDATE leads SET status='aussortiert', rejected_by='filter', updated_at=?, fit_reason=? "
             "WHERE status='kandidat' AND category=?",
@@ -195,8 +196,8 @@ def next_candidate(c):
             SELECT branche, category,
                    SUM(interest='qualified') q, SUM(interest='mittel') m,
                    SUM(interest='kein_interesse' OR status='gesperrt') k,
-                   SUM(rejected_by='team') rt, SUM(rejected_by='ki') rk,
-                   SUM(status IN ('entwurf','versendet','beantwortet','analysiert') AND rejected_by IS NULL) ok
+                   SUM(rejected_by='team') rt, SUM(rejected_by IN ('ki','regel')) rk,
+                   SUM(status IN ('passt','entwurf','versendet','beantwortet') AND rejected_by IS NULL) ok
             FROM leads WHERE status NOT IN ('kandidat','recherche') AND IFNULL(rejected_by,'') != 'filter'
             GROUP BY branche, category""").fetchall():
         for key in (("b", r["branche"]), ("c", r["category"])):
@@ -229,54 +230,25 @@ def _domain(addr):
 def _json(data):
     return json.dumps(data, ensure_ascii=False)
 
-# ---------------------------------------------------------------- Stufe 2–4: KI, von günstig nach stark
+# ---------------------------------------------------------------- Bewertung nach Regeln (kostenlos) und Entwurf (KI)
 
 
-def stage_quick(c, lead_id, brain_short):
-    """Stufe 2: nur die Startseite, günstigstes Modell."""
+def stage_score(c, lead_id, learned):
+    """Webseite lesen und nach Regeln bewerten. Gibt True zurück, wenn der Betrieb passt."""
     lead = leaddb.get_lead(c, lead_id)
+    in_pipeline = lead["stage"] is not None  # von Hand angelegt oder importiert: bleibt drin
     leaddb.update_lead(c, lead_id, status="recherche")
-    research = finder.research_website(lead["website"], max_pages=1, chars_per_page=2500)
-    if not research["pages"]:
-        leaddb.update_lead(c, lead_id, status="aussortiert", rejected_by="filter",
-                           fit_reason="Grobfilter: Webseite nicht lesbar. " + "; ".join(research["errors"])[:200])
-        return False
-    try:
-        result = ai.quick_check(leaddb.brain_sections(leaddb.brain(c), ["Wen wir suchen", "Gelernt"])
-                                if brain_short is None else brain_short, lead, research)
-    except ai.AIError:
-        leaddb.update_lead(c, lead_id, status="kandidat")  # beim nächsten Lauf noch einmal
-        raise
-    fields = dict(quick_score=result["score"], quick_reason=result["grund"])
-    if result["score"] < S("LEADS_QUICK_MIN"):
-        leaddb.update_lead(c, lead_id, status="aussortiert", rejected_by="ki", fit_reason=f"Vorprüfung: {result['grund']}",
-                           **fields)
-        leaddb.add_event(c, lead_id, "status", f"Vorprüfung ({ai.MODELS['vorpruefung']}): {result['score']}/100, "
-                         f"aussortiert. {result['grund']}")
-        return False
-    leaddb.update_lead(c, lead_id, status="vorgeprueft", **fields)
-    leaddb.add_event(c, lead_id, "status", f"Vorprüfung ({ai.MODELS['vorpruefung']}): {result['score']}/100. {result['grund']}")
-    return True
-
-
-def stage_analyse(c, lead_id, brain):
-    """Stufe 3: Startseite plus Unterseiten, mittleres Modell."""
-    lead = leaddb.get_lead(c, lead_id)
-    leaddb.update_lead(c, lead_id, status="recherche")
-    research = finder.research_website(lead["website"])
-    try:
-        result = ai.analyse(brain, lead, research, lead["quick_reason"] or "")
-    except ai.AIError:
-        leaddb.update_lead(c, lead_id, status="vorgeprueft")
-        raise
-    known = set(research["emails"]) | ({lead["email"].lower()} if lead["email"] else set())
-    chosen = (result.get("email") or "").strip().lower()
-    email_addr = chosen if chosen in known else (lead["email"] or (research["emails"][0] if research["emails"] else ""))
-    info = {"groesse": result.get("groesse"), "zeitfresser": result.get("zeitfresser", []),
-            "aufhaenger": result.get("aufhaenger"), "pages": [p["url"] for p in research["pages"]],
-            "emails": research["emails"], "errors": research["errors"]}
-    common = dict(fit_score=result["score"], fit_reason=result["begruendung"], research=_json(info),
-                  contact_name=result.get("ansprechpartner") or None, email=email_addr or None)
+    research = finder.research_website(lead["website"]) if lead["website"] else \
+        {"pages": [], "emails": [], "links": [], "errors": ["keine Webseite"]}
+    result = scoring.score(lead, research, learned)
+    threshold = S("LEADS_RULE_MIN")
+    passes = result["score"] >= threshold
+    info = {"signale": result["signals"], "groesse": result["groesse"], "zeitfresser": result["zeitfresser"],
+            "auszug": result["auszug"], "pages": [p["url"] for p in research["pages"]], "emails": research["emails"],
+            "errors": research["errors"]}
+    email_addr = result["email"] or lead["email"] or None
+    common = dict(fit_score=result["score"], fit_reason=scoring.summary(result, threshold), research=_json(info),
+                  contact_name=lead["contact_name"] or result["contact_name"] or None, email=email_addr)
 
     blocked = set(leaddb.kv_get(c, "blocklist", []))
     if email_addr and (_domain(email_addr) in blocked or email_addr in blocked):
@@ -284,42 +256,76 @@ def stage_analyse(c, lead_id, brain):
         leaddb.add_event(c, lead_id, "status", "Gesperrt: Diese Adresse möchte nicht kontaktiert werden.")
         return False
     duplicate = email_addr and c.execute(
-        "SELECT name FROM leads WHERE id != ? AND email=? AND status IN ('analysiert','entwurf','versendet',"
+        "SELECT name FROM leads WHERE id != ? AND email=? AND status IN ('passt','entwurf','versendet',"
         "'beantwortet','gesperrt')", (lead_id, email_addr)).fetchone()
-    if duplicate:
-        leaddb.update_lead(c, lead_id, status="aussortiert", rejected_by="ki", **{
+    if duplicate and not in_pipeline:
+        leaddb.update_lead(c, lead_id, status="aussortiert", rejected_by="regel", **{
             **common, "fit_reason": f"Doppelt: dieselbe Adresse wie „{duplicate['name']}“."})
         leaddb.add_event(c, lead_id, "status", f"Aussortiert: gleiche Adresse wie „{duplicate['name']}“.")
         return False
-    label = f"Analyse ({ai.MODELS['analyse']}): {result['score']}/100."
-    if result["passt"] and result["score"] >= S("LEADS_ANALYSE_MIN"):
-        leaddb.update_lead(c, lead_id, status="analysiert", **common)
-        leaddb.add_event(c, lead_id, "status", f"{label} Passt. {result['begruendung']}")
-        return True
-    leaddb.update_lead(c, lead_id, status="aussortiert", rejected_by="ki", **common)
-    leaddb.add_event(c, lead_id, "status", f"{label} Aussortiert. {result['begruendung']}")
+    if passes or in_pipeline:
+        leaddb.update_lead(c, lead_id, status="passt", rejected_by=None, **common)
+        note = "" if passes else " Laut Regeln eher nicht, bleibt aber in der Pipeline, weil ihr den Betrieb angelegt habt."
+        leaddb.add_event(c, lead_id, "status", common["fit_reason"] + note, author="Regeln")
+        crm.advance(c, lead_id, "neu")
+        return passes
+    leaddb.update_lead(c, lead_id, status="aussortiert", rejected_by="regel", **common)
+    leaddb.add_event(c, lead_id, "status", common["fit_reason"], author="Regeln")
     return False
 
 
-def stage_write(c, lead_id, brain):
-    """Stufe 4: den Entwurf schreiben, stärkstes Modell, nur für die besten."""
-    lead = leaddb.get_lead(c, lead_id)
+def _analysis(lead):
     info = lead["research"]
-    analysis = {"begruendung": lead["fit_reason"] or "", "groesse": info.get("groesse"),
-                "zeitfresser": info.get("zeitfresser", []), "aufhaenger": info.get("aufhaenger"),
-                "ansprechpartner": lead["contact_name"]}
-    result = ai.write_draft(brain, lead, analysis)
+    return {"begruendung": lead["fit_reason"] or "", "groesse": info.get("groesse"),
+            "zeitfresser": info.get("zeitfresser", []), "auszug": info.get("auszug", ""),
+            "ansprechpartner": lead["contact_name"]}
+
+
+def stage_write(c, lead_id, brain):
+    """Den Entwurf von der KI schreiben lassen (stärkstes Modell). Nur auf Wunsch."""
+    lead = leaddb.get_lead(c, lead_id)
+    result = ai.write_draft(brain, lead, _analysis(lead))
     leaddb.update_lead(c, lead_id, status="entwurf", unread=1, subject=result["betreff"], greeting=result["anrede"],
                        body=result["text"])
     leaddb.add_event(c, lead_id, "draft", f"Entwurf geschrieben ({ai.MODELS['entwurf']}).")
     return True
 
+
+TEMPLATE_HEADING = "Vorlage (ohne KI)"
+
+
+def template_draft(c, lead_id):
+    """Entwurf aus der Vorlage im Gehirn (Abschnitt „Vorlage (ohne KI)“), kostenlos. Platzhalter:
+    {firma}, {anrede}, {zeitfresser}, {kategorie}, {ort}, {absender}."""
+    lead = leaddb.get_lead(c, lead_id)
+    section = leaddb.brain_sections(leaddb.brain(c), [TEMPLATE_HEADING]).strip() \
+        or leaddb.brain_sections(leaddb.BRAIN_SEED.read_text(encoding="utf-8"), [TEMPLATE_HEADING]).strip()
+    lines = section.splitlines()[1:]  # Überschrift weg
+    subject = greeting = ""
+    while lines and (not lines[0].strip() or re.match(r"(?i)^(betreff|anrede):", lines[0])):
+        m = re.match(r"(?i)^(betreff|anrede):\s*(.*)$", lines.pop(0))
+        if m and m.group(1).lower() == "betreff":
+            subject = m.group(2)
+        elif m:
+            greeting = m.group(2)
+    fresser = (lead["research"].get("zeitfresser") or ["Papierkram und wiederkehrende Anfragen"])[:2]
+    values = {"firma": lead["name"], "kategorie": lead["category_label"] or "Betrieb",
+              "anrede": f"Guten Tag {lead['contact_name']}," if lead["contact_name"] else "Guten Tag,",
+              "zeitfresser": " sowie ".join(fresser), "ort": lead["city"] or "Ihrer Region",
+              "absender": S("LEADS_SENDER_NAME")}
+
+    def fill(text):
+        return re.sub(r"\{(\w+)\}", lambda m: values.get(m.group(1), m.group(0)), text).strip()
+    fields = {"subject": fill(subject), "greeting": fill(greeting) or values["anrede"],
+              "body": fill("\n".join(lines))}
+    leaddb.update_lead(c, lead_id, status="entwurf", **fields)
+    leaddb.add_event(c, lead_id, "draft", "Entwurf aus der Vorlage erstellt (ohne KI).", author="Vorlage")
+    return fields
+
 # ---------------------------------------------------------------- Läufe (nur von Hand gestartet)
 
 # Grobe Kosten pro Aufruf in US-Dollar, bis genug eigene Messwerte da sind
-DEFAULT_COST_USD = {"vorpruefung": 0.004, "analyse": 0.04, "entwurf": 0.06, "chat": 0.06, "antwort": 0.02,
-                    "lernen": 0.04, "erinnerung": 0.02}
-ANALYSE_FACTOR = 3  # höchstens so viele Analysen pro gewünschtem Entwurf
+DEFAULT_COST_USD = {"entwurf": 0.06, "chat": 0.06, "lernen": 0.04, "erinnerung": 0.02}
 RUN = {"id": None, "cancel": False, "progress": ""}
 _local = threading.local()
 
@@ -339,19 +345,16 @@ def due_followups(c, without_text=False):
     return [dict(r) for r in rows if not (without_text and r["followup_body"])]
 
 
-def estimate(c, check, drafts, followups=True):
-    """Was kostet ein Lauf ungefähr? Aus den bisherigen Durchschnittswerten."""
-    q_rate, a_rate = leaddb.pass_rates(c)
-    # Analysiert wird nur, bis genug Entwürfe beisammen sind
-    analyses = min(check * q_rate, drafts / max(a_rate, 0.1), drafts * ANALYSE_FACTOR)
-    written = min(analyses * a_rate, drafts)
-    usd = (check * avg_cost_usd(c, "vorpruefung") + analyses * avg_cost_usd(c, "analyse")
-           + written * avg_cost_usd(c, "entwurf") + avg_cost_usd(c, "lernen"))
+def estimate(c, drafts, followups=True):
+    """Was kostet ein Lauf ungefähr? Die Bewertung ist kostenlos, nur Entwürfe und Erinnerungen kosten."""
+    waiting = c.execute("SELECT COUNT(*) FROM leads WHERE status='passt' AND interest IS NULL "
+                        "AND IFNULL(body,'')=''").fetchone()[0]
     reminders = len(due_followups(c, without_text=True)) if followups else 0
-    usd += reminders * avg_cost_usd(c, "erinnerung")
-    return {"eur": ai.eur(usd), "analysen": round(analyses), "entwuerfe": round(written), "erinnerungen": reminders,
-            "per_stage_eur": {s: ai.eur(avg_cost_usd(c, s)) for s in DEFAULT_COST_USD},
-            "q_rate": q_rate, "a_rate": a_rate}
+    usd = drafts * avg_cost_usd(c, "entwurf") + reminders * avg_cost_usd(c, "erinnerung")
+    if drafts or reminders:
+        usd += avg_cost_usd(c, "lernen")
+    return {"eur": ai.eur(usd), "entwuerfe": drafts, "erinnerungen": reminders, "ohne_entwurf": waiting,
+            "per_stage_eur": {s: ai.eur(avg_cost_usd(c, s)) for s in DEFAULT_COST_USD}}
 
 
 def month_budget_left_eur(c):
@@ -381,16 +384,17 @@ def _record_usage(stage, model, tokens, cost, lead_id):
 
 def start_run(params, started_by):
     """Vom Knopf „Lauf starten“. Gibt (run_id, None) oder (None, Fehlertext) zurück."""
-    if not ai.available():
-        return None, "Ohne KI-Schlüssel (ANTHROPIC_API_KEY) kann nichts geprüft werden."
     if not S("LEADS_WORKER"):
         return None, "Der Hintergrund-Arbeiter ist aus (LEADS_WORKER=false)."
+    if params.get("entwuerfe") and not ai.available():
+        return None, ("Ohne KI-Schlüssel (ANTHROPIC_API_KEY) schreibt niemand Entwürfe. Setzt „Entwürfe“ auf 0: "
+                      "Die Bewertung läuft ohne KI.")
     c = conn()
     try:
         if RUN["id"] or c.execute("SELECT 1 FROM runs WHERE status='wartet'").fetchone():
             return None, "Es läuft schon ein Lauf."
         left = month_budget_left_eur(c)
-        if left is not None and left <= 0:
+        if params.get("entwuerfe") and left is not None and left <= 0:
             return None, f"Das Monatsbudget von {S('LEADS_MONTHLY_BUDGET_EUR'):.2f} € ist aufgebraucht."
         cur = c.execute("INSERT INTO runs (started_at, started_by, params, status) VALUES (?,?,?, 'wartet')",
                         (leaddb.now(), started_by, _json(params)))
@@ -412,59 +416,51 @@ def _progress(text):
     set_activity(text)
 
 
+def _eur(value):
+    return f"{value:.2f}".replace(".", ",") + " €"
+
+
 def execute_run(c, run_id):
     run = c.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
     p = json.loads(run["params"])
-    check, drafts, budget = int(p["vorpruefen"]), int(p["entwuerfe"]), float(p["budget_eur"])
-    counts = {"neu_gefunden": 0, "grobfilter": 0, "vorgeprueft": 0, "vorpruefung_durch": 0, "analysiert": 0,
-              "analyse_durch": 0, "entwuerfe": 0, "erinnerungen": 0}
+    check, drafts, budget = int(p.get("bewerten", 0)), int(p.get("entwuerfe", 0)), float(p.get("budget_eur", 0))
+    use_ai = ai.available()
+    counts = {"neu_gefunden": 0, "grobfilter": 0, "bewertet": 0, "passen": 0, "entwuerfe": 0, "erinnerungen": 0}
     RUN.update(id=run_id, cancel=False)
     _local.run_id = run_id
     c.execute("UPDATE runs SET status='laeuft' WHERE id=?", (run_id,))
     c.commit()
     status, message = "fertig", None
     try:
-        # Stufe 1: suchen und grob filtern (kostenlos)
-        if p.get("suchen") or not c.execute("SELECT 1 FROM leads WHERE status='kandidat'").fetchone():
+        # Schritt 1: suchen und grob filtern (kostenlos)
+        if p.get("suchen") or (check and not c.execute("SELECT 1 FROM leads WHERE status='kandidat'").fetchone()):
             counts["neu_gefunden"], counts["grobfilter"] = run_search(c)
         counts["grobfilter"] += learned_filter(c)
-        brain = leaddb.brain(c)
-        brain_short = leaddb.brain_sections(brain, ["Wen wir suchen", "Gelernt"])
 
-        # Stufe 2: Vorprüfung der Startseite (günstigstes Modell)
+        # Schritt 2: nach Regeln bewerten (kostenlos, nur die Webseite wird gelesen)
+        learned = scoring.learned_adjustments(leaddb.category_outcomes(c))
         for i in range(check):
-            check_budget(c, run_id, budget, "vorpruefung")
+            if RUN["cancel"]:
+                raise BudgetStop("Von Hand gestoppt.")
             lead_id = next_candidate(c)
             if not lead_id:
                 break
-            _progress(f"Stufe 2/4 · Vorprüfung {i + 1}/{check}: {leaddb.get_lead(c, lead_id)['name']}")
-            counts["vorgeprueft"] += 1
-            counts["vorpruefung_durch"] += stage_quick(c, lead_id, brain_short)
+            _progress(f"Schritt 2/3 · Bewertet {i + 1}/{check}: {leaddb.get_lead(c, lead_id)['name']} (kostenlos)")
+            counts["bewertet"] += 1
+            counts["passen"] += stage_score(c, lead_id, learned)
 
-        # Stufe 3: gründliche Analyse, nur die besten aus der Vorprüfung (mittleres Modell)
-        for n in range(drafts * ANALYSE_FACTOR):
-            ready = c.execute("SELECT COUNT(*) FROM leads WHERE status='analysiert'").fetchone()[0]
-            if ready >= drafts:
-                break
-            row = c.execute("SELECT id, name FROM leads WHERE status='vorgeprueft' "
-                            "ORDER BY quick_score DESC, distance_km LIMIT 1").fetchone()
-            if not row:
-                break
-            check_budget(c, run_id, budget, "analyse")
-            _progress(f"Stufe 3/4 · Analyse {n + 1}: {row['name']}")
-            counts["analysiert"] += 1
-            counts["analyse_durch"] += stage_analyse(c, row["id"], brain)
+        # Schritt 3 (nur auf Wunsch): Entwürfe für die besten passenden Betriebe ohne Nachricht (KI)
+        if drafts and use_ai:
+            brain = leaddb.brain(c)
+            best = c.execute("SELECT id, name FROM leads WHERE status='passt' AND interest IS NULL AND IFNULL(body,'')='' "
+                             "ORDER BY email IS NOT NULL DESC, fit_score DESC, distance_km LIMIT ?", (drafts,)).fetchall()
+            for i, row in enumerate(best):
+                check_budget(c, run_id, budget, "entwurf")
+                _progress(f"Schritt 3/3 · Schreibt Entwurf {i + 1}/{len(best)}: {row['name']}")
+                counts["entwuerfe"] += stage_write(c, row["id"], brain)
 
-        # Stufe 4: Entwürfe, nur für die allerbesten (stärkstes Modell)
-        best = c.execute("SELECT id, name FROM leads WHERE status='analysiert' ORDER BY fit_score DESC LIMIT ?",
-                         (drafts,)).fetchall()
-        for i, row in enumerate(best):
-            check_budget(c, run_id, budget, "entwurf")
-            _progress(f"Stufe 4/4 · Schreibt Entwurf {i + 1}/{len(best)}: {row['name']}")
-            counts["entwuerfe"] += stage_write(c, row["id"], brain)
-
-        # Erinnerungen für Betriebe, die seit einer Woche nicht geantwortet haben (mittleres Modell, kurz)
-        if p.get("erinnerungen", True):
+        # Erinnerungen für Betriebe, die seit einer Woche nicht geantwortet haben (KI, kurz)
+        if p.get("erinnerungen") and use_ai:
             due = due_followups(c, without_text=True)
             for i, lead in enumerate(due):
                 check_budget(c, run_id, budget, "erinnerung")
@@ -472,8 +468,9 @@ def execute_run(c, run_id):
                 write_followup(c, lead["id"])
                 counts["erinnerungen"] += 1
 
-        # Zum Schluss aus den Rückmeldungen seit dem letzten Lauf lernen
-        if c.execute("SELECT 1 FROM signals WHERE processed=0").fetchone():
+        # Wenn die KI geschrieben hat: aus euren Rückmeldungen den Stil lernen
+        if (counts["entwuerfe"] or counts["erinnerungen"]) \
+                and c.execute("SELECT 1 FROM signals WHERE processed=0").fetchone():
             check_budget(c, run_id, budget, "lernen")
             maybe_reflect(c, force=True)
     except BudgetStop as exc:
@@ -485,20 +482,21 @@ def execute_run(c, run_id):
         log.exception("Fehler im Lauf %s", run_id)
         status, message = "fehler", f"{exc.__class__.__name__}: {exc}"
         STATE["error"], STATE["error_at"] = message, time.time()
-        c.execute("UPDATE leads SET status='fehler', updated_at=? WHERE status='recherche'", (leaddb.now(),))
     finally:
+        c.execute("UPDATE leads SET status='fehler', updated_at=? WHERE status='recherche'", (leaddb.now(),))
         _local.run_id = None
         cost = ai.eur(leaddb._sum(c, "run_id = ?", (run_id,))["usd"])
-        summary = (f"{counts['entwuerfe']} neue Entwürfe, "
-                   + (f"{counts['erinnerungen']} Erinnerungen, " if counts["erinnerungen"] else "")
-                   + f"{counts['vorgeprueft']} vorgeprüft, "
-                   f"{counts['analysiert']} analysiert. Kosten: {cost:.2f} €.".replace(f"{cost:.2f}", f"{cost:.2f}".replace(".", ",")))
+        summary = (f"{counts['bewertet']} bewertet, {counts['passen']} passen"
+                   + (f", {counts['entwuerfe']} Entwürfe" if counts["entwuerfe"] else "")
+                   + (f", {counts['erinnerungen']} Erinnerungen" if counts["erinnerungen"] else "")
+                   + (f". KI-Kosten: {_eur(cost)}." if cost else ". Ohne KI-Kosten."))
         c.execute("UPDATE runs SET ended_at=?, status=?, message=?, counts=? WHERE id=?",
                   (leaddb.now(), status, " ".join(x for x in (message, summary) if x), _json(counts), run_id))
         c.commit()
         RUN.update(id=None, cancel=False, progress="")
         title = {"fertig": "Lauf fertig", "gestoppt": "Lauf gestoppt", "fehler": "Lauf mit Fehler beendet"}[status]
-        notify(c, title, " ".join(x for x in (message, summary) if x), "/leads?tab=entwurf")
+        notify(c, title, " ".join(x for x in (message, summary) if x),
+               "/leads?tab=entwurf" if counts["entwuerfe"] else "/crm")
 
 # ---------------------------------------------------------------- Versand
 
@@ -583,6 +581,7 @@ def send_outreach(c, lead, sent_by, followup=False):
     leaddb.update_lead(c, lead["id"], status="versendet", channel="email", sent_at=leaddb.now(),
                        message_id=msg["Message-ID"], unread=0)
     leaddb.add_event(c, lead["id"], "sent", f"Per Mail an {lead['email']} versendet.", author=sent_by)
+    crm.advance(c, lead["id"], "kontaktiert")
 
 # ---------------------------------------------------------------- Antworten lesen
 
@@ -672,35 +671,37 @@ def check_inbox(c):
 
 
 def handle_reply(c, lead_id, msg):
+    """Antwort einer Firma: in die Akte, nach Stichworten einordnen (ohne KI), Pipeline und Wiedervorlage setzen."""
     lead = leaddb.get_lead(c, lead_id)
     name, addr = parseaddr(msg.get("From", ""))
     text = _message_text(msg)
+    subject = str(msg.get("Subject", ""))
     leaddb.add_event(c, lead_id, "reply", text or "(leere Nachricht)", author=name or addr,
-                     meta={"from": addr, "subject": str(msg.get("Subject", "")), "date": str(msg.get("Date", ""))})
-    leaddb.update_lead(c, lead_id, replied_at=leaddb.now(), unread=1)
-    left = month_budget_left_eur(c)
-    if not ai.available() or (left is not None and left <= 0):
-        leaddb.update_lead(c, lead_id, status="beantwortet")
-        notify(c, f"Antwort: {lead['name']}", (text or "")[:200], f"/leads/{lead_id}")
-        return True
-    set_activity(f"Liest Antwort von {lead['name']}")
-    sent_text = f"Betreff: {lead['subject']}\n{lead['greeting']}\n\n{lead['body']}"
-    result = ai.classify_reply(leaddb.brain(c), lead, sent_text, text)
+                     meta={"from": addr, "subject": subject, "date": str(msg.get("Date", ""))})
+    result = scoring.classify_reply(subject, text, dict(msg.items()))
     kind = result["interesse"]
-    leaddb.add_event(c, lead_id, "classify", f"{INTEREST_TITLES[kind]} {result['zusammenfassung']}",
+    leaddb.add_event(c, lead_id, "classify", f"{INTEREST_TITLES[kind]} {result['zusammenfassung']}", author="Regeln",
                      meta={"interesse": kind, "grund": result["grund"], "naechster_schritt": result["naechster_schritt"]})
     if kind == "automatisch":
         return True
-    fields = {"status": "beantwortet", "interest": INTEREST_MAP[kind], "interest_reason": result["grund"] or None}
+    fields = {"status": "beantwortet", "interest": INTEREST_MAP[kind], "interest_reason": result["grund"] or None,
+              "replied_at": leaddb.now(), "unread": 1}
     if kind == "abmeldung":
         fields["status"] = "gesperrt"
         block = set(leaddb.kv_get(c, "blocklist", []))
         block.add(addr.lower())
         leaddb.kv_set(c, "blocklist", sorted(block))
     leaddb.update_lead(c, lead_id, **fields)
+    if kind in ("qualified", "mittel"):
+        crm.advance(c, lead_id, "antwort")
+        due, todo = (crm.today(), "Auf die Antwort reagieren: anrufen oder Termin vorschlagen") if kind == "qualified" \
+            else (crm.quick_due("1m"), "Antwort lesen und wieder melden")
+        crm.add_task(c, lead_id, due, todo, "Regeln")
+    else:
+        crm.advance(c, lead_id, "verloren")
     leaddb.add_signal(c, "antwort", f"{lead['name']} ({lead['branche']} / {lead['category_label']}, "
                       f"{lead['distance_km']} km, Größe: {lead['research'].get('groesse') or '?'}): {kind}. "
-                      f"Grund: {result['grund'] or '–'}. {result['lernpunkt']}", lead_id)
+                      f"Antwort: {result['zusammenfassung']}", lead_id)
     notify(c, f"{INTEREST_TITLES[kind]} {lead['name']}", result["zusammenfassung"][:220], f"/leads/{lead_id}")
     return True
 
@@ -742,6 +743,7 @@ def tick():
                     leaddb.kv_set(c, "last_inbox", time.time())
                     check_inbox(c)
             notify_due(c)
+            notify_tasks(c)
             run = c.execute("SELECT id FROM runs WHERE status='wartet' ORDER BY id LIMIT 1").fetchone()
             if run:
                 execute_run(c, run["id"])
@@ -749,7 +751,7 @@ def tick():
                 leaddb.kv_set(c, "request:reflect", False)
                 maybe_reflect(c, force=True)
             wanted = leaddb.kv_get(c, "request:lead")
-            if wanted and ai.available():
+            if wanted:
                 leaddb.kv_set(c, "request:lead", None)
                 _local.run_id = None
                 recheck_lead(c, wanted)
@@ -766,12 +768,21 @@ def tick():
 
 
 def recheck_lead(c, lead_id):
-    """Einen einzelnen Betrieb von Hand neu prüfen lassen (alle Stufen, ohne Lauf)."""
-    brain = leaddb.brain(c)
-    name = leaddb.get_lead(c, lead_id)["name"]
-    set_activity(f"Prüft neu: {name}")
-    if stage_quick(c, lead_id, None) and stage_analyse(c, lead_id, brain):
-        stage_write(c, lead_id, brain)
+    """Einen einzelnen Betrieb von Hand neu bewerten lassen (kostenlos)."""
+    set_activity(f"Bewertet neu: {leaddb.get_lead(c, lead_id)['name']}")
+    stage_score(c, lead_id, scoring.learned_adjustments(leaddb.category_outcomes(c)))
+
+
+def notify_tasks(c):
+    """Kostenlos: einmal Bescheid geben, wenn Wiedervorlagen fällig werden."""
+    told = set(leaddb.kv_get(c, "tasks_notified", []))
+    new = [t for t in crm.open_tasks(c, until=crm.today()) if t["id"] not in told]
+    if not new:
+        return 0
+    leaddb.kv_set(c, "tasks_notified", sorted(told | {t["id"] for t in new})[-500:])
+    names = ", ".join(t["name"] for t in new[:3]) + (" …" if len(new) > 3 else "")
+    notify(c, f"Wiedervorlage: {len(new)} heute dran", names, "/crm")
+    return len(new)
 
 
 def _loop():

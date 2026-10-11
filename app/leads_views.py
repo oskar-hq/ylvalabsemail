@@ -1,11 +1,11 @@
-"""Oberfläche der KI-Akquise: Übersicht, Firma im Detail mit Chat, Gehirn, Web-App und Push."""
+"""Oberfläche der Akquise: Übersicht, Firma im Detail (Akte) mit Chat, Regeln, Gehirn, Web-App und Push."""
 import json
 import time
 from datetime import datetime
 
 from flask import Blueprint, Response, abort, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from . import agent, ai, emailbuild, leaddb
+from . import agent, ai, crm, emailbuild, leaddb, scoring
 from .main import DB_PATH, ROOT, SETTINGS, login_required
 
 bp = Blueprint("leads", __name__)
@@ -60,7 +60,8 @@ def _kurzdatum(value):
 @bp.app_context_processor
 def _leads_globals():
     return {"lead_status_labels": leaddb.STATUS_LABELS, "interest_labels": leaddb.INTEREST_LABELS,
-            "tab_of": leaddb.tab_of, "is_due": leaddb.is_due, "followup_days": leaddb.FOLLOWUP_DAYS}
+            "tab_of": leaddb.tab_of, "is_due": leaddb.is_due, "followup_days": leaddb.FOLLOWUP_DAYS,
+            "stages": crm.STAGES, "stage_labels": crm.STAGE_LABELS, "fmt_day": crm.fmt_day}
 
 
 def money(usd):
@@ -79,6 +80,7 @@ def status_payload():
         "warnings": st["warnings"], "email_enabled": st["email_enabled"], "ai": ai.available(),
         "counts": leaddb.tab_counts(c),
         "unread": c.execute("SELECT COUNT(*) FROM leads WHERE unread=1").fetchone()[0],
+        "due_tasks": crm.due_count(c), "rule_min": SETTINGS["LEADS_RULE_MIN"], "today": crm.today(),
         "last_search": leaddb.kv_get(c, "last_search"),
         "run": dict(run, params=json.loads(run["params"])) if run else None,
         "run_eur": money(run_cost["usd"]) if run_cost else 0, "run_tokens": (run_cost["tin"] + run_cost["tout"]) if run_cost else 0,
@@ -89,10 +91,9 @@ def status_payload():
 
 
 def run_defaults():
-    est = agent.estimate(db(), SETTINGS["LEADS_RUN_CHECK"], SETTINGS["LEADS_RUN_DRAFTS"])
+    est = agent.estimate(db(), SETTINGS["LEADS_RUN_DRAFTS"] if ai.available() else 0, followups=False)
     return {"check": SETTINGS["LEADS_RUN_CHECK"], "drafts": SETTINGS["LEADS_RUN_DRAFTS"],
-            "budget": SETTINGS["LEADS_RUN_BUDGET_EUR"], "estimate": est, "models": ai.MODELS,
-            "factor": agent.ANALYSE_FACTOR}
+            "budget": SETTINGS["LEADS_RUN_BUDGET_EUR"], "estimate": est, "models": ai.MODELS}
 
 # ---------------------------------------------------------------- Übersicht
 
@@ -120,9 +121,9 @@ def status_json():
 @login_required
 def run():
     try:
-        params = {"vorpruefen": max(1, min(500, int(request.form.get("vorpruefen", 0)))),
+        params = {"bewerten": max(0, min(1000, int(request.form.get("bewerten", 0)))),
                   "entwuerfe": max(0, min(50, int(request.form.get("entwuerfe", 0)))),
-                  "budget_eur": max(0.05, min(100.0, float(request.form.get("budget_eur", "0").replace(",", ".")))),
+                  "budget_eur": max(0.0, min(100.0, float(request.form.get("budget_eur", "0").replace(",", ".") or 0))),
                   "suchen": request.form.get("suchen") == "1",
                   "erinnerungen": request.form.get("erinnerungen") == "1"}
     except ValueError:
@@ -130,7 +131,7 @@ def run():
     run_id, error = agent.start_run(params, who())
     if error:
         return jsonify(error=error), 400
-    return jsonify(ok=True, run_id=run_id, message="Lauf gestartet. Ihr bekommt Bescheid, wenn er fertig ist.")
+    return jsonify(ok=True, run_id=run_id, message="Lauf gestartet. Du bekommst Bescheid, wenn er fertig ist.")
 
 
 @bp.post("/leads/stop")
@@ -144,10 +145,10 @@ def stop():
 @login_required
 def estimate():
     try:
-        check, drafts = int(request.args.get("vorpruefen", 0)), int(request.args.get("entwuerfe", 0))
+        drafts = int(request.args.get("entwuerfe", 0))
     except ValueError:
         abort(400)
-    return jsonify(agent.estimate(db(), max(0, check), max(0, drafts), request.args.get("erinnerungen") == "1"))
+    return jsonify(agent.estimate(db(), max(0, drafts), request.args.get("erinnerungen") == "1"))
 
 
 @bp.get("/leads/kosten")
@@ -180,8 +181,11 @@ def detail(lead_id):
         leaddb.update_lead(db(), lead_id, unread=0)
     events = [dict(e, meta=json.loads(e["meta"]) if e["meta"] else {}) for e in
               db().execute("SELECT * FROM lead_events WHERE lead_id=? ORDER BY id", (lead_id,))]
+    can_mail, mail_hint = crm.may_email(lead, SETTINGS["OUTREACH_EMAIL"])
     return render_template("lead.html", account=g.account, lead=lead, events=events, st=status_payload(),
                            reminder_ct=ai.eur(agent.avg_cost_usd(db(), "erinnerung")) * 100,
+                           draft_ct=ai.eur(agent.avg_cost_usd(db(), "entwurf")) * 100,
+                           tasks=crm.open_tasks(db(), lead_id=lead_id), can_mail=can_mail, mail_hint=mail_hint,
                            tab=leaddb.tab_of(lead), tabs=leaddb.TABS, demo=SETTINGS["DEMO_MODE"])
 
 
@@ -207,7 +211,7 @@ def letter(lead_id):
 
 
 def _draft_from_form():
-    return {k: request.form.get(k, "").strip() for k in ("subject", "greeting", "body")}
+    return {k: request.form.get(k, "").replace("\r\n", "\n").strip() for k in ("subject", "greeting", "body")}
 
 
 @bp.post("/leads/<int:lead_id>/save")
@@ -225,7 +229,10 @@ def _save_draft(lead):
     before = {"subject": lead["subject"] or "", "greeting": lead["greeting"] or "", "body": lead["body"] or ""}
     if draft == before:
         return False
+    if lead["status"] == "passt" and draft["body"]:
+        draft["status"] = "entwurf"  # selbst geschrieben
     leaddb.update_lead(db(), lead_id, **draft)
+    draft.pop("status", None)
     leaddb.add_event(db(), lead_id, "edit", "Entwurf von Hand geändert.", author=who(),
                      meta={"vorher": before, "nachher": draft})
     leaddb.add_signal(db(), "handänderung",
@@ -276,11 +283,14 @@ def chat(lead_id):
 def send(lead_id):
     _save_draft(lead_or_404(lead_id))
     lead = lead_or_404(lead_id)
-    if lead["status"] not in ("entwurf", "aussortiert"):
+    if lead["status"] not in ("entwurf", "passt", "aussortiert"):
         return jsonify(error="Diese Nachricht ist schon raus."), 400
+    if not (lead["body"] or "").strip():
+        return jsonify(error="Es gibt noch keinen Text."), 400
     if g.account.get("demo"):
         leaddb.update_lead(db(), lead_id, status="versendet", channel="email", sent_at=leaddb.now())
         leaddb.add_event(db(), lead_id, "sent", "Demo: als versendet markiert (nichts verschickt).", author=who())
+        crm.advance(db(), lead_id, "kontaktiert")
         return jsonify(ok=True)
     try:
         agent.send_outreach(db(), lead, who())
@@ -292,7 +302,7 @@ def send(lead_id):
 
 def _approved_signal(lead, channel):
     leaddb.add_signal(db(), "freigabe", f"Das Team hat die Nachricht an {lead['name']} ({lead['branche']} / "
-                      f"{lead['category_label']}, Score {lead['fit_score']}) {channel} freigegeben.", lead["id"])
+                      f"{lead['category_label']}, Punkte {lead['fit_score']}) {channel} freigegeben.", lead["id"])
 
 
 @bp.post("/leads/<int:lead_id>/mark-sent")
@@ -306,6 +316,7 @@ def mark_sent(lead_id):
         abort(400)
     leaddb.update_lead(db(), lead_id, status="versendet", channel=channel, sent_at=leaddb.now(), unread=0)
     leaddb.add_event(db(), lead_id, "sent", f"Kontakt {labels[channel]} aufgenommen.", author=who())
+    crm.advance(db(), lead_id, "kontaktiert")
     _approved_signal(lead, labels[channel])
     return jsonify(ok=True)
 
@@ -317,9 +328,13 @@ def reject(lead_id):
     reason = request.form.get("reason", "").strip()
     leaddb.update_lead(db(), lead_id, status="aussortiert", rejected_by="team", unread=0)
     leaddb.add_event(db(), lead_id, "status", f"Vom Team aussortiert. {reason}".strip(), author=who())
+    if lead["stage"] == "neu":  # noch nicht kontaktiert: raus aus der Pipeline
+        leaddb.update_lead(db(), lead_id, stage=None, stage_at=leaddb.now())
+    else:
+        crm.advance(db(), lead_id, "verloren", author=who())
     leaddb.add_signal(db(), "aussortiert", f"Das Team hält {lead['name']} ({lead['branche']} / {lead['category_label']}, "
-                      f"{lead['distance_km']} km, KI-Score {lead['fit_score']}) für ungeeignet. Grund: {reason or 'nicht genannt'}. "
-                      f"Einschätzung der KI war: {lead['fit_reason']}", lead_id)
+                      f"{lead['distance_km']} km, {lead['fit_score']} Punkte) für ungeeignet. Grund: {reason or 'nicht genannt'}. "
+                      f"Bewertung war: {lead['fit_reason']}", lead_id)
     return jsonify(ok=True)
 
 
@@ -334,6 +349,7 @@ def set_interest(lead_id):
     leaddb.update_lead(db(), lead_id, interest=interest, status="beantwortet", interest_reason=reason or lead["interest_reason"])
     leaddb.add_event(db(), lead_id, "status", f"Vom Team eingeordnet: {leaddb.INTEREST_LABELS[interest]}. {reason}".strip(),
                      author=who())
+    crm.advance(db(), lead_id, "verloren" if interest == "kein_interesse" else "antwort", author=who())
     leaddb.add_signal(db(), "einordnung", f"{lead['name']} ({lead['branche']} / {lead['category_label']}) wurde vom Team als "
                       f"„{leaddb.INTEREST_LABELS[interest]}“ eingeordnet. {reason}", lead_id)
     return jsonify(ok=True)
@@ -353,19 +369,65 @@ def note(lead_id):
 @bp.post("/leads/<int:lead_id>/retry")
 @login_required
 def retry(lead_id):
-    lead_or_404(lead_id)
-    leaddb.update_lead(db(), lead_id, status="kandidat", rejected_by=None)
-    if not ai.available():
-        return jsonify(error="Ohne KI-Schlüssel kann nichts geprüft werden."), 400
+    """Neu nach Regeln bewerten (kostenlos). Geht nur, solange noch nichts verschickt ist."""
+    lead = lead_or_404(lead_id)
+    if lead["status"] not in ("kandidat", "passt", "aussortiert", "fehler"):
+        return jsonify(error="Der Betrieb ist schon kontaktiert, eine neue Bewertung ändert nichts mehr."), 400
+    if not lead["website"]:
+        return jsonify(error="Ohne Webseite gibt es nichts zu bewerten."), 400
+    if not SETTINGS["LEADS_WORKER"]:
+        return jsonify(error="Der Hintergrund-Arbeiter ist aus (LEADS_WORKER=false)."), 400
     leaddb.kv_set(db(), "request:lead", lead_id)
     agent.wake()
     return jsonify(ok=True)
+
+
+@bp.post("/leads/<int:lead_id>/entwurf/ki")
+@login_required
+def draft_ai(lead_id):
+    """Entwurf von der KI schreiben lassen, nur auf Knopfdruck."""
+    lead = lead_or_404(lead_id)
+    if lead["status"] not in ("passt", "entwurf", "aussortiert", "fehler") or lead["interest"]:
+        return jsonify(error="Für diesen Betrieb wird kein neuer Erstkontakt geschrieben."), 400
+    if not ai.available():
+        return jsonify(error="Ohne KI-Schlüssel (ANTHROPIC_API_KEY) geht das nicht. Nimm die Vorlage oder schreib selbst."), 400
+    left = agent.month_budget_left_eur(db())
+    if left is not None and left <= 0:
+        return jsonify(error="Das Monatsbudget ist aufgebraucht."), 400
+    before = leaddb._sum(db(), "lead_id = ? AND stage = 'entwurf'", (lead_id,))["usd"]
+    try:
+        agent.stage_write(db(), lead_id, leaddb.brain(db()))
+    except ai.AIError as exc:
+        return jsonify(error=str(exc)), 502
+    spent = leaddb._sum(db(), "lead_id = ? AND stage = 'entwurf'", (lead_id,))["usd"] - before
+    return jsonify(ok=True, cost_eur=money(spent))
+
+
+@bp.post("/leads/<int:lead_id>/entwurf/vorlage")
+@login_required
+def draft_template(lead_id):
+    """Entwurf aus der Vorlage im Gehirn, ohne KI."""
+    lead = lead_or_404(lead_id)
+    if lead["status"] not in ("passt", "entwurf", "aussortiert", "fehler") or lead["interest"]:
+        return jsonify(error="Für diesen Betrieb wird kein neuer Erstkontakt geschrieben."), 400
+    try:
+        agent.template_draft(db(), lead_id)
+    except ValueError as exc:
+        return jsonify(error=str(exc)), 400
+    return jsonify(ok=True)
+
+
+@bp.get("/leads/regeln")
+@login_required
+def rules():
+    return render_template("rules.html", account=g.account, rules=scoring.rules_table(), base=scoring.BASE,
+                           threshold=SETTINGS["LEADS_RULE_MIN"], st=status_payload(), demo=SETTINGS["DEMO_MODE"])
 
 # ---------------------------------------------------------------- Erinnerung (Nachfassen)
 
 
 def _followup_fields():
-    return {f"followup_{k}": request.form.get(k, "").strip() for k in ("subject", "greeting", "body")}
+    return {f"followup_{k}": request.form.get(k, "").replace("\r\n", "\n").strip() for k in ("subject", "greeting", "body")}
 
 
 def _save_followup(lead):

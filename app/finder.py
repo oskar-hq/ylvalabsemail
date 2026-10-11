@@ -281,12 +281,12 @@ def fetch_page(url, robots_cache):
 
 
 def research_website(url, max_pages=4, chars_per_page=6000):
-    """Startseite plus Impressum/Kontakt/Über uns lesen. Gibt Texte, E-Mails und Fehler zurück."""
-    robots, pages, emails, errors = {}, [], set(), []
+    """Startseite plus Impressum/Kontakt/Über uns lesen. Gibt Texte, Links, E-Mails und Fehler zurück."""
+    robots, pages, emails, errors, links = {}, [], set(), [], []
     try:
         final_url, html = fetch_page(url, robots)
     except Exception as exc:
-        return {"pages": [], "emails": [], "errors": [f"{url}: {exc}"]}
+        return {"pages": [], "emails": [], "links": [], "errors": [f"{url}: {exc}"]}
     queue, done = [(final_url, html)], {final_url}
     host = urllib.parse.urlparse(final_url).netloc
     while queue and len(pages) < max_pages:
@@ -298,6 +298,7 @@ def research_website(url, max_pages=4, chars_per_page=6000):
             pass
         pages.append({"url": page_url, "title": parser.title.strip()[:200], "text": parser.text()[:chars_per_page]})
         emails.update(extract_emails(html))
+        links.extend(urllib.parse.urljoin(page_url, h) for h in parser.links[:300])
         if len(pages) == 1:  # Unterseiten nur von der Startseite aus
             candidates = []
             for href in parser.links:
@@ -313,4 +314,4 @@ def research_website(url, max_pages=4, chars_per_page=6000):
                     queue.append(fetch_page(link, robots))
                 except Exception as exc:
                     errors.append(f"{link}: {exc}")
-    return {"pages": pages, "emails": sorted(emails), "errors": errors}
+    return {"pages": pages, "emails": sorted(emails), "links": list(dict.fromkeys(links))[:600], "errors": errors}

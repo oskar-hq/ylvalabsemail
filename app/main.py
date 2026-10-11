@@ -46,17 +46,16 @@ SETTINGS = {
     "SESSION_HOURS": float(env("SESSION_HOURS", "12")),
     "DEMO_MODE": env("DEMO_MODE", "false").lower() in ("1", "true", "yes"),
     "DATA_DIR": Path(env("DATA_DIR", str(ROOT / "data"))),
-    # KI-Akquise (Bereich „Leads“)
+    # Akquise (Bereich „Leads“) und CRM
     "LEADS_WORKER": env("LEADS_WORKER", "true").lower() in ("1", "true", "yes"),
     "LEADS_CENTER": tuple(float(x) for x in env("LEADS_CENTER", "54.6614,9.9311").split(",")),  # Kappeln
     "LEADS_RADIUS_KM": float(env("LEADS_RADIUS_KM", "50")),
     # Vorschläge für den Start-Dialog eines Laufs
-    "LEADS_RUN_CHECK": int(env("LEADS_RUN_CHECK", "30")),
-    "LEADS_RUN_DRAFTS": int(env("LEADS_RUN_DRAFTS", "5")),
+    "LEADS_RUN_CHECK": int(env("LEADS_RUN_CHECK", "50")),
+    "LEADS_RUN_DRAFTS": int(env("LEADS_RUN_DRAFTS", "0")),
     "LEADS_RUN_BUDGET_EUR": float(env("LEADS_RUN_BUDGET_EUR", "2")),
     "LEADS_MONTHLY_BUDGET_EUR": float(env("LEADS_MONTHLY_BUDGET_EUR", "20")),  # 0 = keine Grenze
-    "LEADS_QUICK_MIN": int(env("LEADS_QUICK_MIN", "50")),  # ab dieser Punktzahl der Vorprüfung geht es weiter
-    "LEADS_ANALYSE_MIN": int(env("LEADS_ANALYSE_MIN", "65")),  # ab dieser Punktzahl der Analyse wird geschrieben
+    "LEADS_RULE_MIN": int(env("LEADS_RULE_MIN", "60")),  # ab dieser Punktzahl der Regel-Bewertung kommt er in die Pipeline
     "LEADS_FOLLOWUP_DAYS": int(env("LEADS_FOLLOWUP_DAYS", "7")),  # nach so vielen Tagen ohne Antwort nachfassen, 0 = nie
     "LEADS_SENDER_NAME": env("LEADS_SENDER_NAME", "Oskar Jacobsen"),
     "OUTREACH_USER": env("OUTREACH_USER"),
@@ -320,18 +319,37 @@ def index():
     return redirect(url_for("compose"))
 
 
+def lead_fields(lead):
+    """Formular „Verfassen“ für einen Betrieb aus dem CRM vorbelegen (Text aus dem Entwurf)."""
+    rcpt = emailbuild.formataddr((lead["contact_name"] or "", lead["email"])) if lead["email"] else ""
+    return {"template": "brief", "graphic": "none", "recipients": rcpt, "subject": lead["subject"] or "",
+            "greeting": lead["greeting"] or ("Guten Tag {name}," if lead["contact_name"] else "Guten Tag,"),
+            "body": lead["body"] or "", "closing": "Viele Grüße", "sender_name": SETTINGS["LEADS_SENDER_NAME"],
+            "reply_to": agent.outreach_address() if agent.outreach_configured() else "", "lead_id": str(lead["id"])}
+
+
 @app.route("/compose")
 @login_required
 def compose():
-    fields, from_history = defaults(), False
+    fields, from_history, lead = defaults(), False, None
     if request.args.get("from"):
         row = db().execute("SELECT fields FROM mails WHERE id=? AND user=?",
                            (request.args["from"], g.account["user"])).fetchone()
         if row:
             fields.update(json.loads(row["fields"]))
+            fields.pop("lead_id", None)
             from_history = True
+    elif request.args.get("lead", "").isdigit():
+        c = leaddb.connect(DB_PATH)
+        try:
+            lead = leaddb.get_lead(c, int(request.args["lead"]))
+        finally:
+            c.close()
+        if lead:
+            fields.update(lead_fields(lead))
+            from_history = True  # gespeicherten Entwurf im Browser nicht darüberlegen
     return render_template(
-        "compose.html", fields=fields, from_history=from_history, templates=emailbuild.TEMPLATES,
+        "compose.html", fields=fields, from_history=from_history, lead=lead, templates=emailbuild.TEMPLATES,
         icons={k: (label, pixel.icon_preview_svg(k)) for k, (label, _) in pixel.ICONS.items()},
         account=g.account, imap=bool(SETTINGS["IMAP_HOST"]))
 
@@ -437,8 +455,25 @@ def send():
         return jsonify(error="Bitte ein Bild hochladen oder eine andere Grafik wählen."), 400
 
     img = image_path(form)
+    lead_id = int(form["lead_id"]) if form.get("lead_id", "").isdigit() else None
+    if lead_id and not test:
+        c = leaddb.connect(DB_PATH)
+        try:
+            lead = leaddb.get_lead(c, lead_id)
+            ok, why = crm.may_email(lead, SETTINGS["OUTREACH_EMAIL"]) if lead else (False, "Betrieb nicht gefunden.")
+        finally:
+            c.close()
+        if not ok:
+            return jsonify(error=why), 400
     if account.get("demo"):
         if not test:
+            if lead_id:  # Demo: in der Akte vermerken, verschickt wird nichts
+                c = leaddb.connect(DB_PATH)
+                try:
+                    msg = emailbuild.build_message(form, rcpts[0], SETTINGS, account["address"], img)
+                    crm.record_mail(c, lead_id, msg, "Demo")
+                finally:
+                    c.close()
             return jsonify(demo=True, would_send=len(rcpts))
         # Statt zu senden: die fertige Mail als .eml-Datei zum Öffnen im Mailprogramm
         msg = emailbuild.build_message(form, rcpts[0], SETTINGS, account["address"], img)
@@ -479,6 +514,12 @@ def send():
             pass
 
     warning = None
+    if lead_id and sent_msgs and not test:
+        c = leaddb.connect(DB_PATH)
+        try:
+            crm.record_mail(c, lead_id, sent_msgs[0], account["address"])
+        finally:
+            c.close()
     if sent_msgs and not test and SETTINGS["IMAP_HOST"] and form.get("save_sent"):
         try:
             save_to_sent(account, sent_msgs)
@@ -529,9 +570,11 @@ def healthz():
     return "ok"
 
 
-# ---------------------------------------------------------------- KI-Akquise
-from . import agent  # noqa: E402
+# ---------------------------------------------------------------- Akquise und CRM
+from . import agent, crm, leaddb  # noqa: E402
+from .crm_views import bp as crm_bp  # noqa: E402
 from .leads_views import bp as leads_bp  # noqa: E402
 
 app.register_blueprint(leads_bp)
+app.register_blueprint(crm_bp)
 agent.init(SETTINGS, smtp_connect, imap_sent_folder, DB_PATH, SETTINGS["DATA_DIR"])

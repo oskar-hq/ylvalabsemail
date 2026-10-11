@@ -39,14 +39,15 @@
     runForm.addEventListener('input', () => {
       clearTimeout(timer);
       timer = setTimeout(async () => {
-        const q = new URLSearchParams({ vorpruefen: runForm.vorpruefen.value || 0, entwuerfe: runForm.entwuerfe.value || 0,
-                                        erinnerungen: runForm.erinnerungen.checked ? '1' : '0' });
+        const q = new URLSearchParams({ entwuerfe: runForm.entwuerfe.disabled ? 0 : (runForm.entwuerfe.value || 0),
+                                        erinnerungen: runForm.erinnerungen?.checked ? '1' : '0' });
         try {
           const e = await (await fetch('/leads/schaetzung?' + q)).json();
           const budget = parseFloat(String(runForm.budget_eur.value).replace(',', '.')) || 0;
-          est.innerHTML = `Geschätzt: <b>ca. ${euro(e.eur)}</b> · etwa ${e.analysen} Analysen · etwa ${e.entwuerfe} Entwürfe`
-            + (e.erinnerungen ? ` · ${e.erinnerungen} Erinnerungen` : '')
-            + (e.eur > budget ? ' · <span class="err">Das Budget reicht dafür vermutlich nicht, der Lauf stoppt dann vorher.</span>' : '');
+          est.innerHTML = (e.eur ? `KI geschätzt: <b>ca. ${euro(e.eur)}</b>` : 'Ohne KI-Kosten.')
+            + (e.entwuerfe ? ` · ${e.entwuerfe} Entwürfe` : '') + (e.erinnerungen ? ` · ${e.erinnerungen} Erinnerungen` : '')
+            + ' Passende Betriebe landen als „Neu“ im <a href="/crm">CRM</a>.'
+            + (e.eur > budget ? ' <span class="err">Das KI-Budget reicht dafür vermutlich nicht, der Lauf stoppt dann vorher.</span>' : '');
         } catch {}
       }, 250);
     });
@@ -85,7 +86,7 @@
         const st = await resp.json();
         if (wasRunning && !st.run) { location.reload(); return; }
         if (!wasRunning && st.run) { location.reload(); return; }
-        const text = st.activity !== 'Wartet' ? st.activity : (st.run ? 'Startet gleich …' : 'Aus. Läuft nur, wenn ihr einen Lauf startet.');
+        const text = st.activity !== 'Wartet' ? st.activity : (st.run ? 'Startet gleich …' : 'Bereit. Läuft nur, wenn du einen Lauf startest.');
         $('#activity').textContent = text;
         if ($('#progress')) $('#progress').textContent = st.activity;
         $('#runEur').textContent = euro(st.run_eur);
@@ -93,7 +94,7 @@
         $('#todayEur').textContent = euro(st.today_eur);
         $('#monthEur').textContent = euro(st.month_eur);
         if ($('#monthBar') && st.cap_eur) $('#monthBar').style.width = Math.min(100, st.month_eur / st.cap_eur * 100) + '%';
-        $('.agent .dot').className = 'dot ' + (st.run || st.activity !== 'Wartet' ? 'busy' : (!st.ai ? 'off' : ''));
+        $('.agent .dot').className = 'dot ' + (st.run || st.activity !== 'Wartet' ? 'busy' : '');
         if (JSON.stringify(st.counts) !== JSON.stringify(JSON.parse(initial)) && !$('#reloadHint')) {
           const a = document.createElement('a');
           a.id = 'reloadHint'; a.href = location.href; a.className = 'btn small primary';
@@ -151,6 +152,79 @@
     navigator.serviceWorker.register('/sw.js', { scope: '/' }).catch(() => {});
   }
 
+  // ---------------------------------------------------------------- Wiedervorlagen abhaken (CRM und Akte)
+  $$('[data-task]').forEach(btn => btn.addEventListener('click', async () => {
+    busy(btn, true);
+    try {
+      await post(`/crm/aufgabe/${btn.dataset.task}/erledigt`);
+      btn.closest('li').classList.add('done');
+      toast('Erledigt.');
+    } catch (e) { toast(e.message, true); busy(btn, false); }
+  }));
+
+  // ---------------------------------------------------------------- CRM: Pipeline-Board
+  const board = $('#board');
+  if (board) {
+    async function move(card, stage) {
+      const from = card.closest('.cards');
+      const target = $(`.cards[data-stage="${stage}"]`, board);
+      if (!target || target === from) return;
+      target.prepend(card);
+      $('.card-move', card).value = stage;
+      recount();
+      try { await post(`/crm/${card.dataset.id}/stufe`, { stage }); }
+      catch (e) { from.prepend(card); $('.card-move', card).value = from.dataset.stage; recount(); toast(e.message, true); }
+    }
+    function recount() {
+      $$('.col', board).forEach(col => { $('.col-head h2 .muted', col).textContent = $$('.card:not([hidden])', col).length; });
+    }
+    let dragged = null;
+    board.addEventListener('dragstart', e => {
+      dragged = e.target.closest('.card');
+      if (!dragged) return;
+      dragged.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', dragged.dataset.id);
+    });
+    board.addEventListener('dragend', () => { dragged?.classList.remove('dragging'); $$('.col.over', board).forEach(c => c.classList.remove('over')); dragged = null; });
+    $$('.col', board).forEach(col => {
+      col.addEventListener('dragover', e => { if (dragged) { e.preventDefault(); col.classList.add('over'); } });
+      col.addEventListener('dragleave', e => { if (!col.contains(e.relatedTarget)) col.classList.remove('over'); });
+      col.addEventListener('drop', e => { e.preventDefault(); col.classList.remove('over'); if (dragged) move(dragged, col.dataset.stage); });
+    });
+    // Ohne Maus (Handy): Stufe über die Auswahl auf der Karte
+    $$('.card-move', board).forEach(sel => sel.addEventListener('change', () => move(sel.closest('.card'), sel.value)));
+    $('#boardFilter')?.addEventListener('input', e => {
+      const q = e.target.value.trim().toLowerCase();
+      $$('.card', board).forEach(c => { c.hidden = q && !c.dataset.search.includes(q); });
+      recount();
+    });
+  }
+  $('#newLead')?.addEventListener('click', () => $('#newDlg').showModal());
+  $('#importBtn')?.addEventListener('click', () => $('#importDlg').showModal());
+  $('#newForm')?.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const btn = $('button.primary', ev.target);
+    busy(btn, true);
+    try { const r = await post('/crm/neu', new FormData(ev.target)); location.href = `/leads/${r.lead_id}`; }
+    catch (e) { toast(e.message, true); busy(btn, false); }
+  });
+  $('#importForm')?.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const btn = $('button.primary', ev.target);
+    busy(btn, true, 'Importiert …');
+    try {
+      const r = await post('/crm/import', new FormData(ev.target));
+      const more = r.skipped_count ? ` ${r.skipped_count} übersprungen: ${r.skipped.slice(0, 3).join(' · ')}${r.skipped_count > 3 ? ' …' : ''}` : '';
+      toast(`${r.created} Firmen importiert.${more}`, false);
+      $('#importDlg').close();
+      setTimeout(() => location.reload(), r.skipped_count ? 6000 : 1500);
+    } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
+  });
+  $$('.drop input[type=file]').forEach(inp => inp.addEventListener('change', () => {
+    inp.nextElementSibling.textContent = inp.files[0]?.name || 'CSV-Datei auswählen';
+  }));
+
   // ---------------------------------------------------------------- Einzelne Firma
   const page = $('[data-lead]');
   if (!page) return;
@@ -180,6 +254,11 @@
     const act = btn.dataset.act;
     if (act === 'letter') { post(`${base}/save`, draftData()).catch(() => {}); return; }
     ev.preventDefault();
+    if (act === 'design') {  // erst speichern, dann im Mailer gestalten
+      await post(`${base}/save`, draftData()).catch(() => {});
+      location.href = btn.href;
+      return;
+    }
     try {
       if (act === 'save') {
         busy(btn, true);
@@ -207,8 +286,21 @@
       } else if (act === 'retry') {
         busy(btn, true);
         await post(`${base}/retry`);
-        toast('Die KI prüft den Betrieb gleich noch einmal.');
-        setTimeout(reload, 2500);
+        toast('Die Webseite wird gleich neu gelesen und bewertet.');
+        setTimeout(reload, 6000);
+      } else if (act === 'template') {
+        const body = $('[name=body]', draft);
+        if (body.value.trim() && !confirm('Den jetzigen Text durch die Vorlage ersetzen?')) return;
+        busy(btn, true);
+        await post(`${base}/entwurf/vorlage`);
+        reload();
+      } else if (act === 'ai-draft') {
+        const body = $('[name=body]', draft);
+        if (body.value.trim() && !confirm('Den jetzigen Text durch einen neuen Entwurf der KI ersetzen?')) return;
+        busy(btn, true, 'Schreibt …');
+        const r = await post(`${base}/entwurf/ki`);
+        toast(`Entwurf geschrieben. Kosten: ${euro(r.cost_eur || 0)}`);
+        setTimeout(reload, 900);
       }
     } catch (e) { toast(e.message, true); }
     finally { busy(btn, false); }
@@ -313,6 +405,33 @@
   });
   $('textarea', chatForm || document.createElement('form'))?.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) chatForm.requestSubmit();
+  });
+
+  // Pipeline, Auftragswert, Wiedervorlagen, Kontaktdaten
+  $('#stageSelect')?.addEventListener('change', async (ev) => {
+    try { const r = await post(`/crm/${page.dataset.lead}/stufe`, { stage: ev.target.value }); toast(`Stufe: ${r.label}`); setTimeout(reload, 700); }
+    catch (e) { toast(e.message, true); }
+  });
+  $('#dealForm')?.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    try { const r = await post(`/crm/${page.dataset.lead}/kontakt`, new FormData(ev.target)); toast(r.changed ? 'Gespeichert.' : 'Keine Änderung.'); }
+    catch (e) { toast(e.message, true); }
+  });
+  const taskForm = $('#taskForm');
+  taskForm?.quick.addEventListener('change', () => { taskForm.due.hidden = !!taskForm.quick.value; });
+  taskForm?.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    try { await post(`/crm/${page.dataset.lead}/aufgabe`, new FormData(taskForm)); reload(); }
+    catch (e) { toast(e.message, true); }
+  });
+  const contactForm = $('#contactForm');
+  const toggleContact = (edit) => { contactForm.hidden = !edit; $('#contactView').hidden = edit; };
+  $('#editContact')?.addEventListener('click', () => toggleContact(contactForm.hidden));
+  $('#cancelContact')?.addEventListener('click', () => toggleContact(false));
+  contactForm?.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    try { await post(`/crm/${page.dataset.lead}/kontakt`, new FormData(contactForm)); reload(); }
+    catch (e) { toast(e.message, true); }
   });
 
   $('#noteForm')?.addEventListener('submit', async (ev) => {

@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Regeln · Leads{% endblock %}
+{% block content %}
+<main class="page wide">
+  <p class="crumbs mono"><a href="{{ url_for('leads.overview') }}">← Leads</a></p>
+  <span class="label">03 · Leads · Regeln</span>
+  <h1 class="title">So wird bewertet.</h1>
+
+  <div class="brain-grid">
+    <section>
+      <p class="measure">Jeder Betrieb startet mit <b>{{ base }} Punkten</b>. Die App liest die Startseite und bis zu drei Unterseiten
+        (Impressum, Kontakt, Über uns, Karriere) und vergibt nach festen Regeln Punkte, ganz ohne KI. Ab <b>{{ threshold }} Punkten</b>
+        kommt der Betrieb als „Neu“ ins CRM. In der Akte steht jede Regel, die gegriffen hat.</p>
+      <div class="table-wrap"><table class="stats">
+        <thead><tr><th>Punkte</th><th>Regel</th></tr></thead>
+        <tbody>{% for points, rule in rules|sort(attribute=0, reverse=true) %}<tr><td class="mono {{ 'neg' if points < 0 }}">{{ '%+d'|format(points) }}</td><td>{{ rule }}</td></tr>{% endfor %}</tbody>
+      </table></div>
+    </section>
+    <aside>
+      <div class="side-block">
+        <span class="label">Was der Algorithmus lernt</span>
+        <p class="small">Sobald es zu einer Branche mindestens drei Ergebnisse gibt (Interesse, Gespräch, Kunde gegen Absage oder „Passt nicht“), bekommt sie bis zu 10 Punkte Zuschlag oder Abzug. Das wird nur gezählt, ohne KI.</p>
+        <p class="small">Branchen, die fünfmal nicht gepasst haben und nie, werden gar nicht mehr gelesen.</p>
+      </div>
+      <div class="side-block">
+        <span class="label">Einstellen</span>
+        <p class="small">Die Schwelle steht in der <code>.env</code> als <code>LEADS_RULE_MIN</code> (jetzt {{ threshold }}). Höher heißt: weniger, aber passendere Betriebe. Die Punkte der Regeln stehen in <code>app/scoring.py</code>.</p>
+      </div>
+      <div class="side-block">
+        <span class="label">Antworten einordnen</span>
+        <p class="small">Auch Antworten ordnet die App ohne KI ein, nach Stichworten: Abwesenheitsnotiz, Abmeldung (Adresse wird gesperrt), Absage, „später“, Interesse. Bei Interesse kommt eine Wiedervorlage für heute, bei „später“ eine in einem Monat. Ihr könnt jede Einordnung in der Akte ändern.</p>
+      </div>
+    </aside>
+  </div>
+</main>
+{% endblock %}

@@ -1,15 +1,15 @@
 <div class="agent" id="agent" data-counts="{{ st.counts|tojson|forceescape }}" data-running="{{ '1' if st.run else '' }}">
   <div class="agent-line">
-    <span class="dot {{ 'busy' if st.run or st.activity != 'Wartet' else ('off' if not st.ai else '') }}" aria-hidden="true"></span>
-    <span><b>KI:</b> <span id="activity">{{ st.activity if st.activity != 'Wartet' else ('Aus. Läuft nur, wenn ihr einen Lauf startet.' if not st.run else 'Startet gleich …') }}</span></span>
-    <span class="muted small">· {{ st.counts.kandidaten }} Betriebe warten auf die Vorprüfung{% if st.counts.grobfilter %} · {{ st.counts.grobfilter }} vom Grobfilter aussortiert{% endif %}{% if st.last_search %} · letzte Suche {{ st.last_search.at|kurzdatum }}{% endif %}</span>
+    <span class="dot {{ 'busy' if st.run or st.activity != 'Wartet' }}" aria-hidden="true"></span>
+    <span><b>Suche:</b> <span id="activity">{{ st.activity if st.activity != 'Wartet' else ('Bereit. Läuft nur, wenn du einen Lauf startest.' if not st.run else 'Startet gleich …') }}</span></span>
+    <span class="muted small">· {{ st.counts.kandidaten }} Betriebe warten auf die Bewertung{% if st.counts.grobfilter %} · {{ st.counts.grobfilter }} vom Grobfilter aussortiert{% endif %}{% if st.last_search %} · letzte Suche {{ st.last_search.at|kurzdatum }}{% endif %}</span>
     <button class="btn small push-btn" type="button" id="pushBtn" hidden>Benachrichtigungen an</button>
   </div>
 
   <div class="costs" id="costs">
-    <div class="cost"><span class="label">Dieser Lauf</span><b id="runEur">{{ '%.2f'|format(st.run_eur)|replace('.', ',') }} €</b><span class="muted small" id="runTokens">{{ '{:,}'.format(st.run_tokens).replace(',', '.') }} Tokens</span></div>
-    <div class="cost"><span class="label">Heute</span><b id="todayEur">{{ '%.2f'|format(st.today_eur)|replace('.', ',') }} €</b></div>
-    <div class="cost wide"><span class="label">Dieser Monat</span><b id="monthEur">{{ '%.2f'|format(st.month_eur)|replace('.', ',') }} €</b>
+    <div class="cost"><span class="label">KI dieser Lauf</span><b id="runEur">{{ '%.2f'|format(st.run_eur)|replace('.', ',') }} €</b><span class="muted small" id="runTokens">{{ '{:,}'.format(st.run_tokens).replace(',', '.') }} Tokens</span></div>
+    <div class="cost"><span class="label">KI heute</span><b id="todayEur">{{ '%.2f'|format(st.today_eur)|replace('.', ',') }} €</b></div>
+    <div class="cost wide"><span class="label">KI diesen Monat</span><b id="monthEur">{{ '%.2f'|format(st.month_eur)|replace('.', ',') }} €</b>
       {% if st.cap_eur %}<span class="muted small">von {{ '%.0f'|format(st.cap_eur) }} € Monatsbudget</span>
       <span class="budget-bar"><i id="monthBar" style="width:{{ [100, (st.month_eur / st.cap_eur * 100)|round]|min }}%"></i></span>{% endif %}</div>
     <a class="cost-link mono" href="{{ url_for('leads.costs') }}">Kosten im Detail →</a>
@@ -18,35 +18,36 @@
   {% if st.run %}
   <div class="run-box running">
     <span><b>Lauf läuft.</b> <span id="progress">{{ st.activity }}</span></span>
-    <span class="muted small">Budget {{ '%.2f'|format(st.run.params.budget_eur)|replace('.', ',') }} € · {{ st.run.params.vorpruefen }} Vorprüfungen · höchstens {{ st.run.params.entwuerfe }} Entwürfe</span>
+    <span class="muted small">{{ st.run.params.bewerten or 0 }} bewerten{% if st.run.params.entwuerfe %} · höchstens {{ st.run.params.entwuerfe }} Entwürfe · Budget {{ '%.2f'|format(st.run.params.budget_eur)|replace('.', ',') }} €{% endif %}</span>
     <button class="btn small" id="stopRun">Stoppen</button>
   </div>
   {% else %}
   <form class="run-box" id="runForm" data-per="{{ rd.estimate.per_stage_eur|tojson|forceescape }}">
     <div class="run-fields">
-      <label><span class="sub">Betriebe vorprüfen</span><input type="number" name="vorpruefen" min="1" max="500" value="{{ rd.check }}" inputmode="numeric"></label>
-      <label><span class="sub">Höchstens Entwürfe</span><input type="number" name="entwuerfe" min="0" max="50" value="{{ rd.drafts }}" inputmode="numeric"></label>
-      <label><span class="sub">Budget für diesen Lauf</span><span class="unit"><input type="number" name="budget_eur" min="0.05" max="100" step="0.05" value="{{ '%.2f'|format(rd.budget) }}" inputmode="decimal"><em>€</em></span></label>
+      <label><span class="sub">Betriebe bewerten <em>kostenlos</em></span><input type="number" name="bewerten" min="0" max="1000" value="{{ rd.check }}" inputmode="numeric"></label>
+      <label><span class="sub">Entwürfe schreiben <em>KI, optional</em></span><input type="number" name="entwuerfe" min="0" max="50" value="{{ rd.drafts if st.ai else 0 }}" inputmode="numeric" {{ 'disabled' if not st.ai }}></label>
+      <label><span class="sub">Budget für die KI</span><span class="unit"><input type="number" name="budget_eur" min="0" max="100" step="0.05" value="{{ '%.2f'|format(rd.budget) }}" inputmode="decimal" {{ 'disabled' if not st.ai }}><em>€</em></span></label>
       <label class="check"><input type="checkbox" name="suchen" value="1" {{ 'checked' if not st.counts.kandidaten }}> Vorher neu suchen</label>
-      <label class="check"><input type="checkbox" name="erinnerungen" value="1" checked> Fällige Erinnerungen schreiben{% if st.counts.nachfassen %} ({{ st.counts.nachfassen }}){% endif %}</label>
+      {% if st.ai %}<label class="check"><input type="checkbox" name="erinnerungen" value="1"> Fällige Erinnerungen schreiben{% if st.counts.nachfassen %} ({{ st.counts.nachfassen }}){% endif %}</label>{% endif %}
     </div>
-    <p class="estimate small" id="estimate">Geschätzt: <b>ca. {{ '%.2f'|format(rd.estimate.eur)|replace('.', ',') }} €</b> · etwa {{ rd.estimate.analysen }} Analysen · etwa {{ rd.estimate.entwuerfe }} Entwürfe{% if rd.estimate.erinnerungen %} · {{ rd.estimate.erinnerungen }} Erinnerungen{% endif %}</p>
+    <p class="estimate small" id="estimate">{% if rd.estimate.eur %}KI geschätzt: <b>ca. {{ '%.2f'|format(rd.estimate.eur)|replace('.', ',') }} €</b>{% else %}Ohne KI-Kosten.{% endif %} Passende Betriebe landen als „Neu“ im <a href="{{ url_for('crm.board') }}">CRM</a>.{% if rd.estimate.ohne_entwurf == 1 %} 1 passender Betrieb hat noch keine Nachricht.{% elif rd.estimate.ohne_entwurf %} {{ rd.estimate.ohne_entwurf }} passende Betriebe haben noch keine Nachricht.{% endif %}</p>
     <div class="run-actions">
-      <button class="btn primary" {{ 'disabled' if not st.ai }}>Lauf starten</button>
+      <button class="btn primary">Lauf starten</button>
+      <a class="btn" href="{{ url_for('leads.rules') }}">So wird bewertet</a>
     </div>
-    <ol class="funnel small">
+    <ol class="funnel three small">
       <li><b>Suchen und Grobfilter</b><span>Karte und feste Regeln · kostenlos</span></li>
-      <li><b>Vorprüfung</b><span>nur Startseite · {{ rd.models.vorpruefung }} · ca. {{ '%.1f'|format(rd.estimate.per_stage_eur.vorpruefung * 100)|replace('.', ',') }} ct</span></li>
-      <li><b>Analyse</b><span>die Besten mit Unterseiten · {{ rd.models.analyse }} · ca. {{ '%.1f'|format(rd.estimate.per_stage_eur.analyse * 100)|replace('.', ',') }} ct</span></li>
-      <li><b>Entwurf</b><span>nur die Allerbesten · {{ rd.models.entwurf }} · ca. {{ '%.1f'|format(rd.estimate.per_stage_eur.entwurf * 100)|replace('.', ',') }} ct</span></li>
+      <li><b>Bewertung nach Regeln</b><span>Webseite lesen, Punkte vergeben, ab {{ st.rule_min }} passt es · kostenlos, ohne KI</span></li>
+      <li><b>Entwurf</b><span>nur wenn du willst · {{ rd.models.entwurf }} · ca. {{ '%.1f'|format(rd.estimate.per_stage_eur.entwurf * 100)|replace('.', ',') }} ct · oder Vorlage, kostenlos</span></li>
     </ol>
   </form>
   {% endif %}
 
   {% for w in st.warnings %}<p class="note warn small">{{ w }}</p>{% endfor %}
+  {% if not st.ai %}<p class="note small">Kein KI-Schlüssel eingetragen. Das ist in Ordnung: Suche, Bewertung, CRM und Versand laufen ohne KI. Nachrichten schreibst du selbst oder nimmst die Vorlage.</p>{% endif %}
   {% if st.error %}<p class="note err small">Letzter Fehler: {{ st.error }}</p>{% endif %}
   {% if st.last_run and not st.run %}<p class="note small">Letzter Lauf ({{ st.last_run.started_at|kurzdatum }}, {{ {'fertig': 'fertig', 'gestoppt': 'gestoppt', 'fehler': 'mit Fehler', 'abgebrochen': 'abgebrochen'}.get(st.last_run.status, st.last_run.status) }}): {{ st.last_run.message }}</p>{% endif %}
-  {% if not st.email_enabled %}<p class="note small">Versand per Mail ist aus (<code>OUTREACH_EMAIL=false</code>). Freigegebene Nachrichten gehen als Brief raus oder dienen als Gesprächsleitfaden fürs Telefonat.</p>{% endif %}
+  {% if not st.email_enabled %}<p class="note small">Erstkontakt per Mail ist aus (<code>OUTREACH_EMAIL=false</code>, § 7 UWG). Freigegebene Nachrichten gehen als Brief raus oder dienen als Leitfaden fürs Telefonat. Hat ein Betrieb geantwortet, kannst du ihm gestaltete Mails schicken.</p>{% endif %}
 </div>
 <dialog id="iosDlg"><div class="dlg">
   <h2>Erst zum Home-Bildschirm.</h2>
