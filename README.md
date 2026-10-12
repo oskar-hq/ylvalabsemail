@@ -25,54 +25,77 @@ Damit gehen aufwendige HTML-Designs, die normale Mailprogramme nicht bauen könn
 - Optional wird eine Kopie im IMAP-Ordner „Gesendet“ abgelegt.
 - Jede Mail enthält auch eine Textversion. Das ist gut für die Zustellbarkeit und für Leute, die nur Text lesen.
 
-## KI-Akquise (Bereich „Leads“)
+## Akquise und CRM (Bereiche „Leads“ und „CRM“)
 
-Unter **03 Leads** arbeitet eine KI für euch in der Akquise. Sie läuft **nie von selbst**: Ihr startet
-jeden Lauf von Hand, mit Anzahl, höchstens so vielen Entwürfen und einem **Budget in Euro**. Vor dem Start
-zeigt die Seite, was der Lauf ungefähr kostet. Während er läuft, seht ihr Tokens und Kosten live, und ihr
-könnt ihn jederzeit stoppen. Dazu gibt es ein Monatsbudget als harte Grenze (`LEADS_MONTHLY_BUDGET_EUR`).
+Die App findet Betriebe, die zu Ylva Labs passen, bewertet sie **nach festen Regeln ohne KI**, und ihr verwaltet
+alles in einem CRM. Die KI ist nur noch ein optionales Werkzeug zum Schreiben.
 
-Ein Lauf arbeitet sich **von günstig nach teuer** vor. Nur wer eine Stufe besteht, kommt in die nächste,
-damit nicht jede Webseite die teure Komplettanalyse bekommt:
+**03 Leads: finden und bewerten.** Ein Lauf startet **nie von selbst**. Er macht:
 
-| Stufe | Was passiert | Modell | ca. Kosten pro Betrieb |
-|---|---|---|---|
-| 1 · Suchen und Grobfilter | Betriebe aus OpenStreetMap im Umkreis von 50 km um Kappeln. Regeln sortieren ohne KI aus: Ketten, keine Webseite, nur Social-Media-Seite, Kleinstbranchen, Sperrliste und Branchen, die schon fünfmal nicht gepasst haben | keins | kostenlos |
-| 2 · Vorprüfung | Nur die Startseite, grobe Punktzahl 0–100. Ab 50 geht es weiter | `claude-haiku-4-5` | ca. 0,3 Cent |
-| 3 · Analyse | Startseite und Unterseiten (Impressum, Kontakt, Über uns). Passung, Zeitfresser, Ansprechperson. Ab 65 geht es weiter | `claude-sonnet-5` | ca. 3 Cent |
-| 4 · Entwurf | Schreibt die Nachricht, nur für die besten der Analyse, und benachrichtigt euch | `claude-opus-5` | ca. 5 Cent |
+| Schritt | Was passiert | Kosten |
+|---|---|---|
+| 1 · Suchen und Grobfilter | Nur passende Branchen aus OpenStreetMap, nur in Schleswig-Holstein (`LEADS_REGION=DE-SH`): Heizung/Sanitär, Elektro, Tischlerei, Metallbau, Dach, Bau, Garten- und Landschaftsbau, Pflege, Landwirtschaft, dazu Hausverwaltungen, Ingenieurbüros, Speditionen, Werften. Ketten, Betriebe ohne Webseite und gesperrte Adressen fallen raus | kostenlos |
+| 2 · Bewertung nach Regeln | Startseite plus Impressum, Kontakt, Über uns, Karriere lesen. Die stärksten Punkte: sucht Personal fürs Büro (+25), Kernbranche (+20), 10–100 Mitarbeitende (+15), wächst (+10), Inhaber im Impressum und persönliche Mail (je +5), Fax, PDF-Formulare, Touren, Doku (je +5); schon digital −10. Ausgeschlossen: keine E-Mail-Adresse, unter 5 Leute, Kette/Franchise, IT-Firma, Behörde. Ab `LEADS_RULE_MIN` (50) passt es, ins CRM kommen pro Lauf nur die besten `LEADS_RUN_TOP` (25) | kostenlos |
+| 3 · Entwurf (optional) | Für die Besten ohne Nachricht schreibt die KI einen Entwurf, mit Budget in Euro | ca. 5 Cent pro Entwurf |
 
-Die Cent-Beträge sind Startwerte. Sobald es echte Messwerte gibt, rechnet die Schätzung mit euren
-Durchschnitten. Unter **Kosten im Detail** steht, was jede Stufe und jeder Lauf gekostet hat.
+Jede Regel, die gegriffen hat, steht mit ihren Punkten in der Akte. Die Tabelle aller Regeln zeigt die Seite
+**So wird bewertet**, die Punkte stehen in `app/scoring.py`. Der Algorithmus lernt aus euren Ergebnissen, ohne KI:
+Branchen mit Interesse, Gesprächen und Kunden bekommen bis zu 10 Punkte Zuschlag, Branchen mit Absagen bis zu
+10 Punkte Abzug.
 
-Danach geht es so weiter:
+**Nachricht schreiben**, in der Akte eines Betriebs, drei Wege:
 
-1. **Prüfen:** Ihr lest den Entwurf, ändert ihn selbst oder sagt der KI im **Chat**, was anders werden soll
-   (jede Überarbeitung zeigt ihre Kosten). Dann gebt ihr ihn frei: per Mail senden, als Brief drucken oder
-   als „per Telefon“ markieren.
-2. **Nachfassen:** Kommt nach 7 Tagen keine Antwort, landet der Betrieb kostenlos im Reiter **Nachfassen**,
-   und ihr bekommt Bescheid. Die Erinnerung (höchstens 60 Wörter, ohne Druck, mit dem Satz, dass danach
-   Schluss ist) schreibt die KI auf Knopfdruck oder im nächsten Lauf, für ca. 2 Cent. Auch sie geht erst nach
-   eurer Freigabe raus, per Mail im selben Gesprächsverlauf, oder ihr ruft an. Pro Betrieb gibt es genau eine
-   Erinnerung (`LEADS_FOLLOWUP_DAYS`, 0 schaltet es ab).
-3. **Antworten lesen:** Die App liest das Akquise-Postfach, das ist kostenlos. Nur echte Antworten ordnet die
-   KI als **Qualified**, **Mittel** oder **Kein Interesse** ein (ca. 1–2 Cent pro Antwort) und benachrichtigt
-   euch. Wer keine Nachrichten mehr möchte, kommt auf eine Sperrliste.
-4. **Lernen:** Alles, was ihr ändert, aussortiert oder im Chat sagt, und jede Antwort einer Firma landet im
-   **Gehirn**. Am Ende jedes Laufs (oder per „Jetzt lernen“) schreibt die KI daraus den Abschnitt „Gelernt“
-   fort. Branchen, bei denen es oft klappt, kommen häufiger dran, andere aber weiterhin ab und zu (15 % Zufall).
+- **Selbst schreiben.**
+- **Vorlage einsetzen** (kostenlos): der Abschnitt „Vorlage (ohne KI)“ im Gehirn mit Platzhaltern
+  `{firma}`, `{anrede}`, `{zeitfresser}`, `{kategorie}`, `{ort}`. Die Zeitfresser kommen aus der Regel-Bewertung.
+- **Von der KI schreiben lassen** (ca. 5 Cent): persönlicher Entwurf aus Bewertung und Startseite. Im Chat
+  könnt ihr ihn überarbeiten lassen.
 
-Die Übersicht ist nach Stand sortiert: *Qualified* ganz oben, dann *Mittel*, *Kein Interesse*,
-*Zur Prüfung*, *Versendet*, *In Bearbeitung* und *Aussortiert*. Jeder Reiter lässt sich einzeln anklicken.
-Das **Gehirn** (was die KI über Ylva Labs, die Zielgruppe und den Stil weiß) seht und bearbeitet ihr unter
-„Gehirn ansehen“. Jede Fassung wird aufgehoben.
+Dann: **Im Mailer gestalten** öffnet „01 Verfassen“ mit Empfänger und Text. Dort wählt ihr Vorlage, Pixel-Band
+oder Bild und sendet über euer Postfach (Antwort-Adresse ist das Akquise-Postfach, damit Antworten erkannt werden).
+Oder schlicht **Per Mail senden**, **Als Brief drucken** oder **Als versendet markieren** (Telefon). Gesendete
+Mails stehen in der Akte, der Betrieb rückt auf „Kontaktiert“.
+
+**04 CRM: der Überblick.**
+
+- **Pipeline-Board** mit den Stufen Neu → Kontaktiert → Antwort → Gespräch → Angebot → Kunde / Verloren.
+  Karten zwischen den Spalten ziehen (am Handy: Auswahl auf der Karte). Ereignisse schieben automatisch weiter
+  (gesendet, Antwort, Absage), aber nie zurück. Auftragswert je Betrieb, Summe je Spalte.
+- **Akte** je Betrieb: Kontaktdaten (bearbeitbar), Bewertung, Nachricht, kompletter Verlauf mit gesendeten Mails,
+  Antworten und Notizen.
+- **Wiedervorlagen** mit Datum („in 1 Woche nachfassen“). Oben im CRM steht, was heute dran ist, die Zahl
+  steht auch im Menü, und ihr bekommt einmal Bescheid (Push/Mail).
+- **Karte** (Knopf „Karte“ im CRM): Heatmap der passenden Betriebe in Schleswig-Holstein, gewichtet nach Punkten,
+  dazu die Betriebe im CRM als Punkte nach Stufe und eine Liste der stärksten Gegenden (Umkreis 12 km) mit den
+  besten Betrieben darin. Gedacht für Vor-Ort-Tage. Leaflet liegt in `static/vendor/leaflet` (BSD-Lizenz), nur
+  die Kartenkacheln kommen von OpenStreetMap.
+- **Wachstum je Kreis** (auf der Karte): Gewerbeanmeldungen und Baugenehmigungen je 1.000 Einwohner, als
+  eingefärbte Kreise und als Tabelle. Die Zahlen importiert ihr als CSV aus der
+  [Regionaldatenbank Deutschland](https://www.regionalstatistik.de) (Statistik 52311 Gewerbeanzeigen, 31111
+  Baugenehmigungen; Kreis-Ebene, ein Merkmal, ein Zeitraum; Datenlizenz Deutschland – Namensnennung 2.0).
+  Die 5 stärksten Kreise sind Wachstumsregionen: Betriebe dort bekommen +5 Punkte (Gewerbe), Bau-Gewerke +8
+  (Baugenehmigungen). Die Kreisgrenzen lädt der Server einmal über OpenStreetMap und ordnet jedem Betrieb
+  seinen Kreis zu. Einwohner sind gerundet hinterlegt, ein CSV-Import macht sie genau.
+- **Firma anlegen** von Hand (Messe, Empfehlung) und **CSV importieren** (Spalten Firma, E-Mail, Telefon,
+  Webseite, Ansprechpartner, Ort, Adresse, Branche, Notiz; Dubletten werden übersprungen).
+  **CSV exportieren** für Excel.
+
+**Antworten** liest die App aus dem Akquise-Postfach und ordnet sie **nach Stichworten** ein: Abwesenheitsnotiz,
+Abmeldung (Adresse kommt auf die Sperrliste), Absage, „später“, Interesse. Bei Interesse gibt es eine
+Wiedervorlage für heute, bei „später“ eine in einem Monat. Jede Einordnung könnt ihr in der Akte ändern.
+**Nachfassen:** Kommt nach 7 Tagen keine Antwort, landet der Betrieb im Reiter „Nachfassen“
+(`LEADS_FOLLOWUP_DAYS`, 0 schaltet es ab). Die Erinnerung schreibt ihr selbst oder lasst sie die KI schreiben.
+
+Die KI kostet nur, wenn ihr sie zum Schreiben nutzt (Entwurf, Chat, Erinnerung, Lernen des Stils). Dafür gibt es
+ein Monatsbudget als harte Grenze (`LEADS_MONTHLY_BUDGET_EUR`) und die Seite **Kosten im Detail**.
+Ohne `ANTHROPIC_API_KEY` funktioniert alles andere.
 
 ### Rechtliches vorab (wichtig)
 
 Werbe-Mails an Firmen ohne deren vorherige Einwilligung sind in Deutschland nach **§ 7 UWG** unzulässig,
 auch im B2B-Bereich. Es drohen Abmahnungen, und das Postfach kann als Spam-Quelle gesperrt werden.
 Deshalb ist der Mailversand für den Erstkontakt **ausgeschaltet** (`OUTREACH_EMAIL=false`), bis ihr das
-geklärt habt, z. B. mit einer Anwältin oder der IHK. Bis dahin taugt jeder Entwurf als **Brief**
+geklärt habt, z. B. mit einer Anwältin oder der IHK. Gestaltete Mails aus dem CRM sind ebenfalls gesperrt, bis ein Betrieb geantwortet hat. Bis dahin taugt jeder Entwurf als **Brief**
 (Knopf „Als Brief drucken“) oder als Leitfaden für einen **Anruf**. Beides ist im B2B-Bereich
 bei mutmaßlichem Interesse erlaubt. Antworten per Mail werden trotzdem erkannt.
 
@@ -89,15 +112,15 @@ kein Apple-Entwicklerkonto.
 ### Einrichten (einmalig)
 
 1. Server einrichten wie unter *Installation auf Proxmox* und *Zugriff über das Internet* beschrieben.
-2. In der Anthropic Console (console.anthropic.com) ein Konto anlegen, Guthaben aufladen und einen
+2. Optional, nur für Entwürfe von der KI: In der Anthropic Console (console.anthropic.com) ein Konto anlegen, Guthaben aufladen und einen
    API-Schlüssel erzeugen. Ihn in der `.env` als `ANTHROPIC_API_KEY` eintragen. Abgerechnet wird nach
-   Verbrauch. Ein Lauf mit 30 Vorprüfungen und 5 Entwürfen kostet grob 0,50 bis 1 €. Tipp: In der
+   Verbrauch. Ein Entwurf kostet etwa 5 Cent. Tipp: In der
    Anthropic Console zusätzlich ein Ausgabenlimit setzen.
 3. Ein eigenes Postfach für die Akquise anlegen (z. B. `kontakt@ylvalabs.de`) und als `OUTREACH_USER` /
    `OUTREACH_PASSWORD` eintragen. `IMAP_HOST` muss gesetzt sein, damit Antworten gelesen werden.
 4. `NOTIFY_EMAILS` und `BASE_URL` setzen, Dienst neu starten.
-5. Unter **03 Leads → Gehirn ansehen** die Texte prüfen und anpassen, dann den ersten **Lauf starten**,
-   am besten klein (z. B. 10 Vorprüfungen, 2 Entwürfe, 1 € Budget).
+5. Unter **03 Leads → Gehirn und Vorlage** die Texte und die Vorlage prüfen und anpassen, dann den ersten **Lauf starten**,
+   am besten klein (z. B. 20 Betriebe bewerten, 0 Entwürfe). Danach unter **04 CRM** die passenden Betriebe ansehen.
 
 Alle Einstellungen stehen kommentiert in `.env.example`. Mit `DEMO_MODE=true` lassen sich unter
 „Leads“ Beispieldaten laden, um die Oberfläche ohne Schlüssel auszuprobieren.
@@ -197,9 +220,13 @@ Einrichtung, einmalig:
 app/main.py            Web-App: Login, Vorschau, Upload, Versand, Verlauf
 app/emailbuild.py      Formularfelder → HTML-Mail + Textversion (MIME)
 app/pixel.py           Pixel-Band und Pixel-Icons als mailtaugliche Tabellen
-app/leads_views.py     KI-Akquise: Übersicht, Firma mit Chat, Gehirn, Web-App und Push
-app/agent.py           Hintergrund-Arbeiter: suchen, recherchieren, Antworten lesen, lernen
-app/ai.py              Fragen an die KI (Claude) mit festen Antwortformaten
+app/leads_views.py     Akquise: Übersicht, Akte mit Chat, Regeln, Gehirn, Web-App und Push
+app/crm_views.py       CRM: Pipeline-Board, Karte, Wiedervorlagen, Kontaktdaten, Firma anlegen, CSV
+app/crm.py             Pipeline-Stufen, Wiedervorlagen, Import/Export, Versand aus „Verfassen“ in der Akte
+app/scoring.py         Bewertung nach Regeln und Einordnen von Antworten, beides ohne KI
+app/regions.py         Kreise: Grenzen, Statistik je Kreis, Wachstumsregionen
+app/agent.py           Hintergrund-Arbeiter: suchen, bewerten, Antworten lesen, Entwürfe auf Wunsch
+app/ai.py              KI (Claude) nur zum Schreiben: Entwurf, Chat, Erinnerung, Lernen
 app/finder.py          Betriebe aus OpenStreetMap, Webseiten lesen
 app/leaddb.py          Datenbank der Leads und das Gehirn (Startfassung: app/brain_seed.md)
 app/webpush.py         Push-Benachrichtigungen (VAPID, ohne App Store)

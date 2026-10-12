@@ -7,7 +7,11 @@
       <span class="label">03 · Leads</span>
       <h1 class="title">Akquise.</h1>
     </div>
-    <a class="btn" href="{{ url_for('leads.brain') }}">Gehirn ansehen</a>
+    <div class="btn-row head-btns">
+      <a class="btn primary" href="{{ url_for('crm.board') }}">Zum CRM</a>
+      <a class="btn" href="{{ url_for('leads.rules') }}">So wird bewertet</a>
+      <a class="btn" href="{{ url_for('leads.brain') }}">Gehirn und Vorlage</a>
+    </div>
   </div>
 
   {% include "_leads_bar.html" %}
@@ -38,8 +42,8 @@
       {% for l in items %}
       <li><a class="lead-row" href="{{ url_for('leads.detail', lead_id=l.id) }}">
         <span class="lead-name">{% if l.unread %}<i class="new" title="Neu"></i>{% endif %}{{ l.name }}</span>
-        <span class="lead-meta muted">{{ l.category_label }}{% if l.city %} · {{ l.city }}{% endif %} · {{ l.distance_km|round|int }} km</span>
-        <span class="lead-score mono" title="Passung laut KI">{{ l.fit_score if l.fit_score is not none else '–' }}</span>
+        <span class="lead-meta muted">{{ l.category_label }}{% if l.city %} · {{ l.city }}{% endif %}{% if l.distance_km is not none %} · {{ l.distance_km|round|int }} km{% endif %}</span>
+        <span class="lead-score mono" title="Punkte nach Regeln">{{ l.fit_score if l.fit_score is not none else '–' }}</span>
         <span class="pill st-{{ tab_of(l) }}">{{ interest_labels.get(l.interest) or lead_status_labels.get(l.status, l.status) }}</span>
         <span class="lead-date mono muted">{{ (l.replied_at or l.sent_at or l.updated_at)|kurzdatum }}</span>
       </a></li>

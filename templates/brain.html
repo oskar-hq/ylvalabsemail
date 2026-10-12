@@ -11,8 +11,10 @@
   <div class="brain-grid">
     <form method="post" class="brain-form">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-      <p class="muted small">Das Gehirn bekommt die KI bei jeder Recherche, jedem Entwurf und jeder Antwort mit. Oben steht, was ihr vorgebt.
+      <p class="muted small">Das Gehirn bekommt die KI bei jedem Entwurf mit. Oben steht, was ihr vorgebt.
+        Der Abschnitt <b>Vorlage (ohne KI)</b> ist der Text für „Vorlage einsetzen“, mit Platzhaltern wie <code>{firma}</code>, <code>{anrede}</code>, <code>{zeitfresser}</code>, <code>{kategorie}</code>, <code>{ort}</code>.
         Den Abschnitt <b>Gelernt</b> schreibt die KI selbst fort, aus eurem Chat, euren Änderungen, aussortierten Betrieben und den Antworten der Firmen.
+        Welche Betriebe passen, entscheidet nicht die KI, sondern die <a href="{{ url_for('leads.rules') }}">Regeln</a>.
         Ihr dürft ihn aber jederzeit korrigieren.</p>
       <textarea name="content" rows="34" class="brain-text" spellcheck="true">{{ content }}</textarea>
       <div class="row brain-save">
@@ -29,7 +31,7 @@
           <thead><tr><th>Branche</th><th title="Versendet">Raus</th><th title="Qualified">Q</th><th title="Mittel">M</th><th title="Kein Interesse">K</th><th title="Aussortiert">Aus</th></tr></thead>
           <tbody>{% for s in stats %}<tr><td>{{ s.category_label or s.branche }}<br><span class="muted">{{ s.branche }}</span></td><td>{{ s.sent }}</td><td>{{ s.qualified }}</td><td>{{ s.mittel }}</td><td>{{ s.kein }}</td><td>{{ s.aussortiert }}</td></tr>{% endfor %}</tbody>
         </table></div>
-        <p class="muted small">Branchen mit mehr Qualified kommen bei der Suche öfter dran, andere aber weiterhin ab und zu.</p>
+        <p class="muted small">Branchen mit mehr Qualified kommen bei der Suche öfter dran und bekommen bei der Bewertung bis zu 10 Punkte Zuschlag, andere bis zu 10 Punkte Abzug.</p>
         {% else %}<p class="muted small">Noch keine Daten.</p>{% endif %}
       </div>
       <div class="side-block">

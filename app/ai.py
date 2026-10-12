@@ -1,9 +1,9 @@
-"""Alles, wofür die KI (Claude) gefragt wird, gestaffelt nach Aufwand:
+"""Wofür die KI (Claude) gefragt wird: nur noch zum Schreiben.
 
-1. Vorprüfung (günstigstes Modell): Startseite kurz ansehen, passt der Betrieb überhaupt?
-2. Analyse (mittleres Modell): nur für die, die durchgekommen sind, gründlich mit Unterseiten.
-3. Schreiben (stärkstes Modell): nur für die besten, der eigentliche Entwurf.
-Dazu Antworten einordnen und Lernen (mittleres Modell) sowie Überarbeiten im Chat (stärkstes Modell).
+Welche Betriebe passen und wie Antworten einzuordnen sind, entscheiden feste Regeln (app/scoring.py), ohne KI.
+Die KI schreibt den Entwurf (stärkstes Modell) und überarbeitet ihn im Chat, schreibt auf Wunsch die Erinnerung
+und lernt aus eurem Feedback den Stil (mittleres Modell). Jeder Aufruf passiert nur auf euren Knopfdruck oder in
+einem Lauf, den ihr mit Budget startet.
 
 Jeder Aufruf meldet seine Tokens an `on_usage`, daraus werden die Kosten in der Oberfläche berechnet.
 """
@@ -18,21 +18,18 @@ def _env(key, default):
 
 
 MODELS = {
-    "vorpruefung": _env("AI_MODEL_QUICK", "claude-haiku-4-5"),
-    "analyse": _env("AI_MODEL_ANALYSE", "claude-sonnet-5"),
     "entwurf": _env("AI_MODEL", "claude-opus-5"),
+    "lernen": _env("AI_MODEL_ANALYSE", "claude-sonnet-5"),  # mittleres Modell für Kurzes
 }
 MODELS["chat"] = MODELS["entwurf"]
-MODELS["antwort"] = MODELS["analyse"]
-MODELS["lernen"] = MODELS["analyse"]
-MODELS["erinnerung"] = MODELS["analyse"]
-STAGE_LABELS = {"vorpruefung": "Vorprüfung", "analyse": "Analyse", "entwurf": "Entwurf schreiben",
-                "chat": "Chat / Überarbeiten", "antwort": "Antworten einordnen", "lernen": "Lernen",
-                "erinnerung": "Erinnerung schreiben"}
-EFFORT = {"analyse": _env("AI_EFFORT_ANALYSE", "medium"), "entwurf": _env("AI_EFFORT", "high")}
-EFFORT.update(chat=EFFORT["entwurf"], antwort=EFFORT["analyse"], lernen=EFFORT["analyse"], erinnerung=EFFORT["analyse"])
-MAX_TOKENS = {"vorpruefung": 1500, "analyse": 12000, "entwurf": 16000, "chat": 16000, "antwort": 8000, "lernen": 12000,
-              "erinnerung": 8000}
+MODELS["erinnerung"] = MODELS["lernen"]
+# Frühere Stufen, nur noch für die Anzeige alter Kosten
+STAGE_LABELS = {"entwurf": "Entwurf schreiben", "chat": "Chat / Überarbeiten", "lernen": "Lernen (Stil)",
+                "erinnerung": "Erinnerung schreiben", "vorpruefung": "Vorprüfung (früher)",
+                "analyse": "Analyse (früher)", "antwort": "Antworten einordnen (früher)"}
+EFFORT = {"entwurf": _env("AI_EFFORT", "high"), "lernen": _env("AI_EFFORT_ANALYSE", "medium")}
+EFFORT.update(chat=EFFORT["entwurf"], erinnerung=EFFORT["lernen"])
+MAX_TOKENS = {"entwurf": 16000, "chat": 16000, "lernen": 12000, "erinnerung": 8000}
 
 # US-Dollar pro 1 Mio. Tokens (Eingabe, Ausgabe), Stand der Anthropic-Preisliste. Bei Preisänderungen hier anpassen.
 PRICES = {
@@ -87,8 +84,8 @@ def eur(usd):
 
 
 SYSTEM = """Du arbeitest für Ylva Labs, ein kleines KI-Lab aus Schleswig-Holstein, in der Akquise.
-Du findest passende Betriebe, schreibst den ersten Kontakt, überarbeitest Entwürfe nach dem Feedback des
-Teams, liest Antworten von Firmen und lernst daraus. Ein Mensch prüft jede Nachricht, bevor sie rausgeht.
+Ausgesucht werden die Betriebe nach festen Regeln. Du schreibst den ersten Kontakt, überarbeitest Entwürfe
+nach dem Feedback des Teams und lernst daraus. Ein Mensch prüft jede Nachricht, bevor sie rausgeht.
 
 Grundregeln:
 - Schreibe nur, was durch die Webseite des Betriebs oder das Gehirn belegt ist. Erfinde keine Zahlen,
@@ -165,85 +162,19 @@ DRAFT_FIELDS = {
 
 
 def _lead_block(lead):
+    dist = lead.get("distance_km")
     fields = [("Name", lead["name"]), ("Branche", lead.get("branche")), ("Kategorie", lead.get("category_label")),
-              ("Adresse", lead.get("address")), ("Entfernung von Kappeln", f"{lead.get('distance_km')} km"),
+              ("Adresse", lead.get("address")), ("Entfernung von Kappeln", f"{dist} km" if dist is not None else None),
               ("Webseite", lead.get("website")), ("E-Mail laut Karte", lead.get("email")),
               ("Telefon", lead.get("phone"))]
     return "\n".join(f"{k}: {v}" for k, v in fields if v)
 
 
-def _pages(research):
-    return "\n\n".join(f"<seite url=\"{p['url']}\" titel=\"{p['title']}\">\n{p['text']}\n</seite>"
-                       for p in research.get("pages", [])) or "Die Webseite konnte nicht gelesen werden."
-
-
-# ---------------------------------------------------------------- Stufe 1: Vorprüfung (günstig)
-
-
-def quick_check(brain_short, lead, research):
-    """Schneller, günstiger Blick auf die Startseite. Sortiert nur offensichtlich Unpassendes aus."""
-    prompt = f"""Schneller Vorfilter: Lohnt es sich, diesen Betrieb genauer anzusehen?
-
-<betrieb>
-{_lead_block(lead)}
-</betrieb>
-
-<startseite>
-{_pages(research)}
-</startseite>
-
-Bewerte grob nach „Wen wir suchen“. Im Zweifel eher durchlassen (score ab 50), die genaue Prüfung kommt danach.
-Klar aussortieren (score unter 30): Filialen von Ketten, Ein-Personen-Betriebe ohne Verwaltung, Behörden,
-IT-Firmen und Agenturen, Betriebe außerhalb unserer Region, Webseiten ohne erkennbaren Betrieb.
-„grund“: ein kurzer Satz."""
-    schema = _obj({"score": {"type": "integer", "description": "0 = passt sicher nicht, 100 = sehr vielversprechend"},
-                   "grund": STR})
-    return _call("vorpruefung", brain_short, prompt, schema, lead.get("id"))
-
-
-# ---------------------------------------------------------------- Stufe 2: Analyse (mittel)
-
-
-def analyse(brain, lead, research, quick_reason=""):
-    """Gründliche Analyse mit Unterseiten, noch ohne Entwurf."""
-    prompt = f"""Prüfe diesen Betrieb gründlich als möglichen Pilotkunden. Einen Text schreibst du noch nicht.
-
-<betrieb>
-{_lead_block(lead)}
-Auf der Webseite gefundene E-Mail-Adressen: {", ".join(research.get("emails", [])) or "keine"}
-Ergebnis der Vorprüfung: {quick_reason or "–"}
-</betrieb>
-
-<webseite>
-{_pages(research)}
-</webseite>
-
-1. Beurteile anhand von „Wen wir suchen“ und „Gelernt“, wie gut der Betrieb passt (score 0–100).
-   passt=true nur, wenn der Betrieb eigenständig vor Ort entscheidet und du mindestens einen konkreten,
-   plausiblen Zeitfresser erkennst, bei dem wir helfen könnten.
-2. Begründe in 2–4 Sätzen für das Team, warum (nicht). Nenne, was du auf der Webseite gesehen hast.
-3. Wähle die beste Kontaktadresse (persönliche Adresse der Inhaberin/Geschäftsführung vor info@).
-   Nur Adressen, die wirklich auf der Webseite oder in den Kartendaten stehen, sonst leer lassen.
-4. „aufhaenger“: ein bis zwei konkrete Beobachtungen von der Webseite, mit denen eine persönliche Nachricht
-   beginnen könnte (z. B. Leistungen, Stellenanzeigen, Neuigkeiten). Leer, wenn passt=false."""
-    schema = _obj({
-        "passt": {"type": "boolean"},
-        "score": {"type": "integer", "description": "0 = passt gar nicht, 100 = ideal"},
-        "begruendung": STR,
-        "groesse": {"type": "string", "description": "Geschätzte Größe, z. B. „ca. 15 Mitarbeitende“ oder „unklar“."},
-        "zeitfresser": {"type": "array", "items": STR, "description": "Vermutete Zeitfresser, konkret für diesen Betrieb."},
-        "ansprechpartner": {"type": "string", "description": "Name der Inhaberin/des Geschäftsführers, falls genannt, sonst leer."},
-        "email": STR,
-        "aufhaenger": STR,
-    })
-    return _call("analyse", brain, prompt, schema, lead.get("id"))
-
-
-# ---------------------------------------------------------------- Stufe 3: Entwurf (stark)
+# ---------------------------------------------------------------- Entwurf (stark)
 
 
 def write_draft(brain, lead, analysis):
-    """Den Entwurf schreiben. Bekommt die fertige Analyse, nicht noch einmal die ganze Webseite (spart Tokens)."""
+    """Den Entwurf schreiben. Bekommt die Regel-Bewertung und einen Auszug der Startseite (nicht die ganze Webseite)."""
     prompt = f"""Schreibe die erste Nachricht an diesen Betrieb nach „Stil der Nachrichten“.
 
 <betrieb>
@@ -251,14 +182,18 @@ def write_draft(brain, lead, analysis):
 Ansprechperson: {analysis.get("ansprechpartner") or "unbekannt"}
 </betrieb>
 
-<analyse>
+<bewertung_nach_regeln>
 Einschätzung: {analysis["begruendung"]}
 Größe: {analysis.get("groesse") or "unklar"}
 Vermutete Zeitfresser: {"; ".join(analysis.get("zeitfresser", [])) or "–"}
-Aufhänger von der Webseite: {analysis.get("aufhaenger") or "–"}
-</analyse>
+</bewertung_nach_regeln>
 
-Stütze dich nur auf diese Analyse und das Gehirn. Ist keine Ansprechperson bekannt, wähle eine neutrale Anrede."""
+<auszug_startseite>
+{analysis.get("auszug") or "Die Webseite konnte nicht gelesen werden."}
+</auszug_startseite>
+
+Suche dir aus dem Auszug ein bis zwei konkrete Beobachtungen für den ersten Satz. Stütze dich nur auf diese Angaben
+und das Gehirn. Ist keine Ansprechperson bekannt, wähle eine neutrale Anrede."""
     schema = _obj(dict(DRAFT_FIELDS))
     return _call("entwurf", brain, prompt, schema, lead.get("id"))
 
@@ -270,7 +205,7 @@ def revise(brain, lead, draft, chat, feedback):
 
 <betrieb>
 {_lead_block(lead)}
-Deine Einschätzung: {lead.get("fit_reason") or ""}
+Bewertung nach Regeln: {lead.get("fit_reason") or ""}
 </betrieb>
 
 <aktueller_entwurf>
@@ -324,39 +259,7 @@ Regeln:
     return _call("erinnerung", brain, prompt, _obj(dict(DRAFT_FIELDS)), lead.get("id"))
 
 
-# ---------------------------------------------------------------- Antworten und Lernen (mittel)
-
-
-def classify_reply(brain, lead, sent_text, reply_text):
-    """Antwort einer Firma einordnen."""
-    prompt = f"""Ein Betrieb hat auf unsere Nachricht geantwortet. Ordne die Antwort ein.
-
-<betrieb>
-{_lead_block(lead)}
-</betrieb>
-
-<unsere_nachricht>
-{sent_text}
-</unsere_nachricht>
-
-<antwort_des_betriebs>
-{reply_text[:12000]}
-</antwort_des_betriebs>
-
-interesse:
-- qualified: will ein Gespräch, stellt interessierte Fragen oder nennt ein konkretes Problem.
-- mittel: vielleicht später, leitet weiter, unklare Antwort, Abwesenheitsnotiz mit Vertretung.
-- kein_interesse: freundliche oder klare Absage.
-- abmeldung: möchte keine weiteren Nachrichten oder beschwert sich über die Kontaktaufnahme.
-- automatisch: reine Abwesenheits- oder Zustellnachricht ohne Inhalt.
-Fasse die Antwort für das Team zusammen und schlage den nächsten Schritt vor. In „grund“ steht, warum
-Interesse besteht oder nicht (so konkret, wie es die Antwort hergibt, sonst leer). In „lernpunkt“, was wir
-allgemein für die Auswahl der Betriebe oder die Nachrichten lernen können (sonst leer)."""
-    schema = _obj({
-        "interesse": {"type": "string", "enum": ["qualified", "mittel", "kein_interesse", "abmeldung", "automatisch"]},
-        "zusammenfassung": STR, "grund": STR, "naechster_schritt": STR, "lernpunkt": STR,
-    })
-    return _call("antwort", brain, prompt, schema, lead.get("id"))
+# ---------------------------------------------------------------- Lernen (mittel)
 
 
 def reflect(brain, learned, stats, signals):
