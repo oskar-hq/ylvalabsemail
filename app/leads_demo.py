@@ -7,13 +7,14 @@ from . import crm, leaddb
 
 # Beispielhafte Regel-Treffer für die Akte
 SIGNALE = {
-    "handwerk": [(20, "Branche Handwerk (Vorrang)"), (15, "Etwa 14 Mitarbeitende, passende Größe"),
-                 (12, "Sucht Personal fürs Büro oder die Verwaltung"), (8, "Formulare als PDF zum Ausdrucken"),
-                 (5, "E-Mail-Adresse gefunden")],
-    "pflege": [(20, "Branche Pflege und Gesundheit (Vorrang)"), (5, "Pflichtdokumentation, Nachweise oder Zertifizierung"),
-               (5, "Arbeitet vor Ort beim Kunden (Touren, Montage, Hausbesuche)"), (5, "E-Mail-Adresse gefunden")],
-    "landwirtschaft": [(18, "Branche Landwirtschaft (Vorrang)"), (5, "Pflichtdokumentation, Nachweise oder Zertifizierung"),
-                       (5, "E-Mail-Adresse gefunden"), (3, "Persönliche Adresse statt info@")],
+    "handwerk": [(20, "Kernbranche Handwerk"), (15, "Etwa 14 Mitarbeitende, ideale Größe"),
+                 (25, "Sucht Personal fürs Büro, die Verwaltung oder die Disposition"), (5, "Formulare als PDF zum Ausdrucken"),
+                 (5, "Inhaber oder Geschäftsführung im Impressum: Jens Hansen")],
+    "pflege": [(20, "Kernbranche Pflege"), (15, "Etwa 30 Mitarbeitende, ideale Größe"),
+               (5, "Pflichtdokumentation, Nachweise oder Zertifizierung"),
+               (5, "Arbeitet vor Ort beim Kunden (Touren, Montage, Hausbesuche)"), (10, "Wächst (3 offene Stellen)")],
+    "landwirtschaft": [(20, "Kernbranche Landwirtschaft"), (5, "Pflichtdokumentation, Nachweise oder Zertifizierung"),
+                       (5, "Persönliche E-Mail-Adresse statt info@"), (5, "Anfragen laufen vor allem übers Telefon")],
 }
 
 DEMO = [
@@ -31,7 +32,7 @@ DEMO = [
          reply="Moin Herr Jacobsen,\n\ndas klingt tatsächlich spannend, die Angebote sind bei uns echt ein Problem. "
                "Rufen Sie gern nächste Woche an, am besten vormittags.\n\nGruß\nJens Hansen",
          reply_summary="Interesse! Hat ein konkretes Problem mit Angeboten und bittet um einen Anruf nächste Woche vormittags.",
-         grund="Angebote schreiben ist ein spürbares Problem.", schritt="Nächste Woche vormittags anrufen und Vor-Ort-Tag vorschlagen."),
+         grund="Stichwort „spannend“", schritt="Nächste Woche vormittags anrufen und Vor-Ort-Tag vorschlagen."),
     dict(name="Pflegedienst Schleiufer (Beispiel)", branche="pflege", category="healthcare=home_care", category_label="Ambulante Pflege",
          city="Arnis", address="Musterstraße 4, 24399 Arnis", distance_km=4.8, status="beantwortet", interest="mittel", fit_score=78,
          email="kontakt@pflege-schleiufer.example", fit_reason="Ambulanter Dienst mit rund 30 Mitarbeitenden und Touren durch Angeln. "
@@ -66,7 +67,7 @@ DEMO = [
     dict(name="Metallbau Schlei (Beispiel)", branche="handwerk", category="craft=metal_construction", category_label="Metallbau",
          city="Kappeln", address="Werftstraße 7, 24376 Kappeln", distance_km=2.1, status="passt", fit_score=71,
          email="post@metallbau-schlei.example", contact_name="Birte Lorenzen",
-         fit_reason="Regeln: 71/100, passt. Branche Handwerk (Vorrang); Etwa 25 Mitarbeitende, passende Größe; Faxnummer auf der Webseite.",
+         fit_reason="Regeln: 71/100, passt. Kernbranche Handwerk; Etwa 25 Mitarbeitende, ideale Größe; Faxnummer auf der Webseite.",
          zeitfresser=["Angebote, Aufmaß und Nachkalkulation", "Anfragen und Bestellungen per Fax und Telefon"]),
     dict(name="Gärtnerei Grünholz (Beispiel)", branche="handwerk", category="craft=gardener", category_label="Garten- und Landschaftsbau",
          city="Süderbrarup", address="Am Moor 1, 24392 Süderbrarup", distance_km=13.0, status="beantwortet", interest="qualified",
@@ -130,7 +131,7 @@ def seed(conn):
         if d.get("reply"):
             leaddb.add_event(conn, lead_id, "reply", d["reply"], author=d.get("contact_name") or d["name"],
                              meta={"subject": "Re: " + d["subject"]})
-            leaddb.add_event(conn, lead_id, "classify", d["reply_summary"],
+            leaddb.add_event(conn, lead_id, "classify", d["reply_summary"], author="Regeln",
                              meta={"grund": d["grund"], "naechster_schritt": d["schritt"]})
     # Wiedervorlagen, damit „Heute dran“ etwas zeigt
     if not conn.execute("SELECT 1 FROM tasks").fetchone():
