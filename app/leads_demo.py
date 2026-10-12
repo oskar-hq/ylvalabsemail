@@ -5,6 +5,21 @@ from datetime import date, datetime, timedelta
 
 from . import crm, leaddb
 
+# Ungefähre Ortsmitten (Breite, Länge) für die Karte
+ORTE = {"Kappeln": (54.661, 9.931), "Arnis": (54.630, 9.932), "Süderbrarup": (54.636, 9.773),
+        "Rabenkirchen-Faulück": (54.627, 9.866), "Eckernförde": (54.469, 9.838), "Damp": (54.585, 10.020),
+        "Kiel": (54.323, 10.123), "Flensburg": (54.784, 9.437), "Schleswig": (54.521, 9.566), "Rendsburg": (54.305, 9.664),
+        "Neumünster": (54.073, 9.984), "Husum": (54.477, 9.052), "Heide": (54.196, 9.093), "Itzehoe": (53.925, 9.516),
+        "Lübeck": (53.866, 10.686), "Bad Segeberg": (53.936, 10.309), "Eutin": (54.137, 10.618), "Plön": (54.162, 10.421),
+        "Elmshorn": (53.754, 9.652), "Niebüll": (54.789, 8.829), "Bad Oldesloe": (53.811, 10.374), "Ratzeburg": (53.700, 10.757)}
+# Reserve: passende Betriebe ohne Nachricht, verteilt übers Land (Anzahl je Ort), damit die Karte etwas zeigt
+RESERVE = {"Kiel": 7, "Flensburg": 6, "Schleswig": 4, "Rendsburg": 4, "Eckernförde": 3, "Neumünster": 4, "Husum": 2,
+           "Heide": 2, "Lübeck": 5, "Bad Segeberg": 2, "Itzehoe": 1, "Elmshorn": 2, "Kappeln": 3}
+GEWERKE = [("handwerk", "craft=electrician", "Elektro"), ("handwerk", "craft=hvac", "Heizung/Lüftung"),
+           ("handwerk", "craft=carpenter", "Tischlerei"), ("pflege", "healthcare=home_care", "Ambulante Pflege"),
+           ("handwerk", "craft=roofer", "Dachdeckerei"), ("handwerk", "craft=gardener", "Garten- und Landschaftsbau"),
+           ("dienstleistung", "office=property_management", "Hausverwaltung")]
+
 # Beispielhafte Regel-Treffer für die Akte
 SIGNALE = {
     "handwerk": [(20, "Kernbranche Handwerk"), (15, "Etwa 14 Mitarbeitende, ideale Größe"),
@@ -92,6 +107,33 @@ DEMO = [
 ]
 
 
+def _coords(city, i):
+    """Ortsmitte plus eine kleine, feste Streuung, damit Punkte nicht aufeinanderliegen."""
+    lat, lon = ORTE.get(city, (54.3, 9.9))
+    return lat + ((i * 37) % 11 - 5) * 0.006, lon + ((i * 53) % 13 - 6) * 0.009
+
+
+def _seed_reserve(conn, t0):
+    n = 0
+    for city, count in RESERVE.items():
+        for k in range(count):
+            branche, category, label = GEWERKE[(n * 3 + k) % len(GEWERKE)]
+            score = 52 + (n * 7) % 34
+            at = (t0 + timedelta(hours=n)).isoformat(timespec="seconds")
+            name = f"{label} {city} {k + 1} (Beispiel)"
+            lat, lon = _coords(city, n + 100)
+            conn.execute(
+                "INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, category_label,"
+                " address, city, lat, lon, distance_km, website, email, status, fit_score, fit_reason, research)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                (f"demo:reserve:{n}", at, at, name, branche, category, label, city, city, lat, lon,
+                 round(((lat - 54.661) ** 2 * 111 ** 2 + (lon - 9.931) ** 2 * 65 ** 2) ** 0.5, 1),
+                 "https://ylvalabs.de", f"info@beispiel-{n}.example", "passt", score,
+                 f"Regeln: {score}/100, passt. Kernbranche; ideale Größe (Beispiel).",
+                 json.dumps({"groesse": "Beispieldaten", "zeitfresser": [], "signale": SIGNALE.get(branche, [])})))
+            n += 1
+
+
 def _stage(d):
     if d.get("interest") == "kein_interesse":
         return "verloren"
@@ -108,8 +150,9 @@ def seed(conn):
             "INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, category_label, address, city,"
             " lat, lon, distance_km, website, email, phone, status, interest, interest_reason, fit_score, fit_reason, research,"
             " contact_name, subject, greeting, body, channel, sent_at, replied_at, unread, rejected_by, stage, stage_at, deal_eur)"
-            " VALUES (?,?,?,?,?,?,?,?,?,0,0,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (f"demo:{i}", at, at, d["name"], d["branche"], d["category"], d["category_label"], d["address"], d["city"],
+             *_coords(d["city"], i),
              d["distance_km"], "https://ylvalabs.de", d.get("email") or None, "04642 000000", d["status"], d.get("interest"),
              d.get("grund"), d.get("fit_score"), d.get("fit_reason"),
              json.dumps({"groesse": "Beispieldaten", "zeitfresser": d.get("zeitfresser", []), "pages": [], "emails": [],
@@ -133,6 +176,7 @@ def seed(conn):
                              meta={"subject": "Re: " + d["subject"]})
             leaddb.add_event(conn, lead_id, "classify", d["reply_summary"], author="Regeln",
                              meta={"grund": d["grund"], "naechster_schritt": d["schritt"]})
+    _seed_reserve(conn, t0)
     # Wiedervorlagen, damit „Heute dran“ etwas zeigt
     if not conn.execute("SELECT 1 FROM tasks").fetchone():
         names = {r["name"]: r["id"] for r in conn.execute("SELECT id, name FROM leads WHERE source_id LIKE 'demo:%'")}

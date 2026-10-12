@@ -121,3 +121,11 @@ def export_csv():
     name = f"ylva-{'alle-betriebe' if everything else 'pipeline'}-{date.today().isoformat()}.csv"
     return Response(crm.export_csv(db(), everything), mimetype="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})
+
+
+@bp.get("/crm/karte")
+@login_required
+def heatmap():
+    points = crm.map_points(db())
+    return render_template("karte.html", account=g.account, points=points, hotspots=crm.hotspots(points),
+                           stage_labels=crm.STAGE_LABELS, st=status_payload(), demo=SETTINGS["DEMO_MODE"])

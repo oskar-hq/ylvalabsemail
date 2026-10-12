@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Karte · CRM{% endblock %}
+{% block content %}
+<link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
+<main class="page full">
+  <p class="crumbs mono"><a href="{{ url_for('crm.board') }}">← CRM</a></p>
+  <div class="leads-head">
+    <div>
+      <span class="label">04 · CRM · Karte</span>
+      <h1 class="title">Wo eure Kunden sitzen.</h1>
+    </div>
+  </div>
+  <div class="map-grid">
+    <section>
+      <div class="map-tools">
+        <div class="seg" role="group" aria-label="Was zeigen">
+          <button type="button" class="on" data-layer="passend">Passende Betriebe</button>
+          <button type="button" data-layer="alle">Alle bewerteten</button>
+        </div>
+        <label class="check"><input type="checkbox" id="showPipeline" checked> Betriebe im CRM als Punkte</label>
+        <span class="muted small">{{ points|selectattr('passend')|list|length }} passende von {{ points|length }} bewerteten Betrieben</span>
+      </div>
+      <div id="map" class="map" aria-label="Karte von Schleswig-Holstein"></div>
+      <div class="map-legend small">
+        <span><i class="heat-scale"></i> Dichte, gewichtet nach Punkten</span>
+        {% for key in ['neu', 'kontaktiert', 'antwort', 'gespraech', 'angebot', 'kunde'] %}<span><i class="dot-stage stage-{{ key }}"></i>{{ stage_labels[key] }}</span>{% endfor %}
+      </div>
+      {% if not points %}<p class="note small">Noch keine bewerteten Betriebe mit Koordinaten. Nach dem ersten Lauf unter „Leads“ füllt sich die Karte.</p>{% endif %}
+    </section>
+    <aside>
+      <div class="side-block">
+        <span class="label">Stärkste Gegenden</span>
+        <p class="muted small">Umkreise von 12 km mit den meisten passenden Betrieben. Gut für Vor-Ort-Tage: mehrere Termine an einem Tag.</p>
+        {% if hotspots %}
+        <ol class="hotspots">
+          {% for h in hotspots %}
+          <li>
+            <button type="button" class="hs-head" data-lat="{{ h.lat }}" data-lon="{{ h.lon }}">
+              <b>Gegend {{ h.name }}</b>
+              <span class="mono">{{ h.count }} passend · Ø {{ h.avg }} P{% if h.in_pipeline %} · {{ h.in_pipeline }} im CRM{% endif %}</span>
+            </button>
+            <ul class="small tight">{% for t in h.top %}<li><a href="{{ url_for('leads.detail', lead_id=t.id) }}">{{ t.name }}</a> <span class="muted">{{ t.score }} P</span></li>{% endfor %}</ul>
+          </li>
+          {% endfor %}
+        </ol>
+        {% else %}<p class="muted small">Noch keine passenden Betriebe.</p>{% endif %}
+      </div>
+      <div class="side-block">
+        <span class="label">Was als Nächstes dazukommen kann</span>
+        <p class="small">Signale von außen als zusätzliche Ebene: Gewerbeanmeldungen je Kreis (Statistikamt Nord), Neubau- und Gewerbegebiete. Daraus könnten Zusatzpunkte für Betriebe in wachsenden Gegenden werden.</p>
+      </div>
+    </aside>
+  </div>
+</main>
+<script type="application/json" id="mapData">{{ points|tojson }}</script>
+{% endblock %}
+{% block scripts %}
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
+<script src="{{ url_for('static', filename='vendor/leaflet/leaflet-heat.js') }}"></script>
+<script src="{{ url_for('static', filename='karte.js') }}"></script>
+{% endblock %}

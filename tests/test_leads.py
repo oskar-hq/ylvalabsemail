@@ -498,6 +498,17 @@ class CrmTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             crm.import_csv(self.c, b"foo;bar\n1;2\n", "t")
 
+    def test_hotspots(self):
+        pts = [{"id": i, "name": f"K{i}", "lat": 54.32 + i * 0.001, "lon": 10.12, "fit_score": 60 + i, "passend": True,
+                "stage": "neu" if i == 0 else None, "city": "Kiel"} for i in range(3)]
+        pts += [{"id": 9, "name": "F", "lat": 54.78, "lon": 9.43, "fit_score": 90, "passend": True, "stage": None,
+                 "city": "Flensburg"},
+                {"id": 10, "name": "X", "lat": 54.78, "lon": 9.43, "fit_score": 20, "passend": False, "stage": None,
+                 "city": "Flensburg"}]
+        hs = crm.hotspots(pts)
+        self.assertEqual([(h["name"], h["count"]) for h in hs], [("Kiel", 3), ("Flensburg", 1)])
+        self.assertEqual((hs[0]["in_pipeline"], hs[0]["top"][0]["name"]), (1, "K2"))  # beste zuerst
+
     def test_may_email_respects_first_contact_rule(self):
         lead = {"email": "a@a.de", "status": "passt", "stage": "neu", "replied_at": None, "interest": None}
         self.assertFalse(crm.may_email(lead, False)[0])
@@ -563,6 +574,9 @@ class ViewsTest(unittest.TestCase):
         self.assertIn("Pipeline.", html)
         self.assertIn("Anrufen, vormittags", html)  # Wiedervorlage von heute aus den Beispieldaten
         self.assertEqual(self.client.get("/leads/regeln").status_code, 200)
+        karte = self.client.get("/crm/karte").get_data(as_text=True)
+        self.assertIn("Gegend Kiel", karte)  # Beispieldaten haben Koordinaten
+        self.assertIn('id="mapData"', karte)
         r = self.client.post(f"/crm/{lead_id}/stufe", data={"stage": "gespraech"}, headers={"X-CSRF-Token": self.csrf})
         self.assertEqual(r.get_json()["label"], "Gespräch")
         r = self.client.post(f"/crm/{lead_id}/aufgabe", data={"text": "Angebot schicken", "quick": "3t"},

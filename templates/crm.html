@@ -11,6 +11,7 @@
     <div class="btn-row head-btns">
       <button class="btn primary" type="button" id="newLead">Firma anlegen</button>
       <button class="btn" type="button" id="importBtn">CSV importieren</button>
+      <a class="btn" href="{{ url_for('crm.heatmap') }}">Karte</a>
       <a class="btn" href="{{ url_for('crm.export_csv') }}">CSV exportieren</a>
       <a class="btn" href="{{ url_for('leads.overview') }}">Neue Betriebe finden</a>
     </div>

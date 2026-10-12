@@ -293,3 +293,60 @@ def record_mail(conn, lead_id, msg, author):
 
 def today():
     return datetime.now().date().isoformat()
+
+# ---------------------------------------------------------------- Karte: wo liegen die passenden Betriebe?
+
+PASSEND = ("passt", "entwurf", "versendet", "beantwortet")
+
+
+def map_points(conn):
+    """Alle bewerteten Betriebe mit Koordinaten, für die Heatmap."""
+    rows = conn.execute("""SELECT id, name, lat, lon, fit_score, status, stage, interest, city, category_label, branche
+                           FROM leads WHERE lat IS NOT NULL AND lon IS NOT NULL AND NOT (lat = 0 AND lon = 0)
+                             AND fit_score IS NOT NULL""").fetchall()
+    points = []
+    for r in rows:
+        d = dict(r)
+        d["passend"] = (d["status"] in PASSEND or d["stage"] is not None) and d["stage"] != "verloren" \
+            and d["interest"] != "kein_interesse"
+        points.append(d)
+    return points
+
+
+def _km(a, b):
+    # In Schleswig-Holstein reicht die flache Näherung: 1° Breite ≈ 111 km, 1° Länge ≈ 65 km
+    return (((a["lat"] - b["lat"]) * 111) ** 2 + ((a["lon"] - b["lon"]) * 65) ** 2) ** 0.5
+
+
+def hotspots(points, radius_km=12, limit=8):
+    """Gegenden mit den meisten passenden Betrieben, benannt nach dem häufigsten Ort darin. Gedacht für
+    Vor-Ort-Tage: mehrere Termine an einem Tag. Immer die dichteste Stelle zuerst, dann alles im Umkreis von
+    radius_km dazu, dann die nächste dichteste Stelle unter den übrigen Betrieben."""
+    pts = {p["id"]: p for p in points if p["passend"]}
+    cell = lambda p: (int(p["lat"] * 111 // radius_km), int(p["lon"] * 65 // radius_km))  # noqa: E731
+    grid = {}
+    for p in pts.values():
+        grid.setdefault(cell(p), []).append(p)
+    near = {}  # Nachbarn im Umkreis (inklusive sich selbst), über die umliegenden Rasterzellen gesucht
+    for pid, p in pts.items():
+        ci, cj = cell(p)
+        near[pid] = [q["id"] for di in (-1, 0, 1) for dj in (-1, 0, 1) for q in grid.get((ci + di, cj + dj), [])
+                     if _km(p, q) <= radius_km]
+    count = {pid: len(ids) for pid, ids in near.items()}
+    alive, result = set(pts), []
+    while alive and len(result) < limit:
+        center = max(alive, key=lambda pid: (count[pid], pts[pid]["fit_score"] or 0, -pid))
+        items = sorted((pts[q] for q in near[center] if q in alive), key=lambda p: -(p["fit_score"] or 0))
+        for q in items:
+            alive.discard(q["id"])
+            for w in near[q["id"]]:
+                count[w] -= 1
+        towns = [p["city"] for p in items if p["city"]]
+        result.append({
+            "name": max(set(towns), key=towns.count) if towns else "ohne Ortsangabe", "count": len(items),
+            "avg": round(sum(p["fit_score"] or 0 for p in items) / len(items)),
+            "lat": sum(p["lat"] for p in items) / len(items), "lon": sum(p["lon"] for p in items) / len(items),
+            "in_pipeline": sum(1 for p in items if p["stage"]),
+            "top": [{"id": p["id"], "name": p["name"], "score": p["fit_score"]} for p in items[:5]],
+        })
+    return result

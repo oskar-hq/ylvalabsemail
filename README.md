@@ -65,6 +65,10 @@ Mails stehen in der Akte, der Betrieb rückt auf „Kontaktiert“.
   Antworten und Notizen.
 - **Wiedervorlagen** mit Datum („in 1 Woche nachfassen“). Oben im CRM steht, was heute dran ist, die Zahl
   steht auch im Menü, und ihr bekommt einmal Bescheid (Push/Mail).
+- **Karte** (Knopf „Karte“ im CRM): Heatmap der passenden Betriebe in Schleswig-Holstein, gewichtet nach Punkten,
+  dazu die Betriebe im CRM als Punkte nach Stufe und eine Liste der stärksten Gegenden (Umkreis 12 km) mit den
+  besten Betrieben darin. Gedacht für Vor-Ort-Tage. Leaflet liegt in `static/vendor/leaflet` (BSD-Lizenz), nur
+  die Kartenkacheln kommen von OpenStreetMap.
 - **Firma anlegen** von Hand (Messe, Empfehlung) und **CSV importieren** (Spalten Firma, E-Mail, Telefon,
   Webseite, Ansprechpartner, Ort, Adresse, Branche, Notiz; Dubletten werden übersprungen).
   **CSV exportieren** für Excel.
@@ -210,7 +214,7 @@ app/main.py            Web-App: Login, Vorschau, Upload, Versand, Verlauf
 app/emailbuild.py      Formularfelder → HTML-Mail + Textversion (MIME)
 app/pixel.py           Pixel-Band und Pixel-Icons als mailtaugliche Tabellen
 app/leads_views.py     Akquise: Übersicht, Akte mit Chat, Regeln, Gehirn, Web-App und Push
-app/crm_views.py       CRM: Pipeline-Board, Wiedervorlagen, Kontaktdaten, Firma anlegen, CSV
+app/crm_views.py       CRM: Pipeline-Board, Karte, Wiedervorlagen, Kontaktdaten, Firma anlegen, CSV
 app/crm.py             Pipeline-Stufen, Wiedervorlagen, Import/Export, Versand aus „Verfassen“ in der Akte
 app/scoring.py         Bewertung nach Regeln und Einordnen von Antworten, beides ohne KI
 app/agent.py           Hintergrund-Arbeiter: suchen, bewerten, Antworten lesen, Entwürfe auf Wunsch

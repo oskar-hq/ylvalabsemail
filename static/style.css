@@ -360,6 +360,23 @@ dialog ol{padding-left:18px;color:var(--body)}
 .mono.neg,.signals .neg{color:var(--err)}
 .meter{position:relative}
 .meter b{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink)}
+.map-grid{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:0 40px}
+.map-tools{display:flex;gap:10px 18px;align-items:center;flex-wrap:wrap;margin:0 0 10px}
+.map{height:min(72vh,720px);min-height:380px;border:1px solid var(--line);background:var(--tint);z-index:0}
+.map-legend{display:flex;flex-wrap:wrap;gap:6px 16px;margin-top:10px;color:var(--body);align-items:center}
+.map-legend span{display:inline-flex;align-items:center;gap:6px}
+.heat-scale{display:inline-block;width:46px;height:8px;background:linear-gradient(90deg,#d4ecff,#8fd0ff,#5aa9e6,#f6d36d,#e8833a)}
+.dot-stage{display:inline-block;width:10px;height:10px;border-radius:50%;border:1.5px solid #fff;box-shadow:0 0 0 1px var(--line)}
+.dot-stage.stage-neu{background:#8fd0ff}.dot-stage.stage-kontaktiert{background:#8a929c}.dot-stage.stage-antwort{background:#5aa9e6}
+.dot-stage.stage-gespraech{background:#2f5bd3}.dot-stage.stage-angebot{background:#f6d36d}.dot-stage.stage-kunde{background:#1d2126}
+.hotspots{list-style:none;margin:0;padding:0;counter-reset:hs}
+.hotspots>li{counter-increment:hs;border-top:1px solid var(--line);padding:10px 0}
+.hs-head{display:flex;flex-direction:column;gap:2px;width:100%;text-align:left;background:none;border:0;padding:0;cursor:pointer;color:var(--ink);font:inherit}
+.hs-head b{font-weight:500}
+.hs-head b::before{content:counter(hs) ". ";color:var(--muted);font-weight:400}
+.hs-head:hover b,.hs-head:focus-visible b{color:var(--blue)}
+.hotspots ul{margin:6px 0 0}
+@media (max-width:1000px){.map-grid{grid-template-columns:minmax(0,1fr)}.map{height:60vh}}
 .ko-box{margin:0 0 21px}
 .write-help{background:var(--tint);padding:10px 12px;margin:0 0 14px}
 .write-help p{margin:0 0 8px;color:var(--body)}
