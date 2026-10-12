@@ -12,25 +12,21 @@ from html.parser import HTMLParser
 
 USER_AGENT = "YlvaLabsLeadBot/1.0 (+https://ylvalabs.de; info@ylvalabs.de)"
 
-# Welche OpenStreetMap-Einträge als Betrieb in Frage kommen, und in welche Branche sie fallen.
-# Nur Einträge mit Webseite oder E-Mail werden übernommen, sonst kann die KI nichts recherchieren.
+# Welche OpenStreetMap-Einträge gesucht werden, und in welche Branche sie fallen. Bewusst nur Branchen, die zu
+# Ylva Labs passen (siehe Gehirn, „Wen wir suchen“), statt alle Betriebe im Land.
+# Stufe A: handwerk, pflege, landwirtschaft. Stufe B: dienstleistung, industrie (Werften).
 QUERIES = [
-    ('["craft"]', "handwerk"),
-    ('["office"~"^(company|accountant|tax_advisor|lawyer|notary|estate_agent|insurance|architect|engineer|'
-     'logistics|consulting|surveyor|property_management|employment_agency)$"]', "dienstleistung"),
-    ('["amenity"~"^(nursing_home|social_facility|dentist|doctors|clinic|veterinary)$"]', "pflege"),
-    ('["healthcare"~"^(nursing_home|home_care|physiotherapist|doctor|dentist|clinic|rehabilitation|'
-     'occupational_therapist|speech_therapist|care)$"]', "pflege"),
-    ('["social_facility"]', "pflege"),
+    ('["craft"~"^(hvac|plumber|heating_engineer|electrician|carpenter|joiner|cabinet_maker|metal_construction|'
+     'roofer|builder|window_construction|gardener|landscaper)$"]', "handwerk"),
+    ('["healthcare"~"^(home_care|nursing_home)$"]', "pflege"),
+    ('["amenity"="nursing_home"]', "pflege"),
+    ('["social_facility"~"^(nursing_home|assisted_living|day_care)$"]', "pflege"),
+    ('["craft"="agricultural_engines"]', "landwirtschaft"),
+    ('["shop"="agrarian"]', "landwirtschaft"),
     ('["place"="farm"]', "landwirtschaft"),
-    ('["landuse"="farmyard"]["name"]', "landwirtschaft"),
-    ('["shop"~"^(farm|agrarian)$"]', "landwirtschaft"),
-    ('["shop"~"^(car_repair|car|furniture|kitchen|bathroom_furnishing|doityourself|trade|hardware|'
-     'electronics|bicycle|optician|hearing_aids|boat|tyres|motorcycle)$"]', "handel"),
-    ('["industrial"]', "industrie"),
-    ('["man_made"="works"]', "industrie"),
-    ('["tourism"~"^(hotel|camp_site|guest_house|caravan_site)$"]', "gastgewerbe"),
-    ('["amenity"="driving_school"]', "dienstleistung"),
+    ('["office"~"^(property_management|engineer|surveyor|logistics|moving_company)$"]', "dienstleistung"),
+    ('["craft"~"^(boatbuilder|shipbuilder)$"]', "industrie"),
+    ('["industrial"="shipyard"]', "industrie"),
 ]
 
 LABELS = {
@@ -52,6 +48,8 @@ LABELS = {
     "dentist": "Zahnarztpraxis", "doctors": "Arztpraxis", "doctor": "Arztpraxis", "clinic": "Klinik",
     "veterinary": "Tierarztpraxis", "physiotherapist": "Physiotherapie", "rehabilitation": "Reha",
     "occupational_therapist": "Ergotherapie", "speech_therapist": "Logopädie", "care": "Pflege",
+    "cabinet_maker": "Tischlerei", "shipyard": "Werft", "moving_company": "Spedition/Umzüge",
+    "assisted_living": "Betreutes Wohnen", "day_care": "Tagespflege",
     "farm": "Hof", "farmyard": "Hof", "agrarian": "Agrarhandel", "car": "Autohaus",
     "furniture": "Möbel", "kitchen": "Küchenstudio", "bathroom_furnishing": "Bäder",
     "doityourself": "Baumarkt", "trade": "Fachhandel", "hardware": "Eisenwaren", "electronics": "Elektronik",

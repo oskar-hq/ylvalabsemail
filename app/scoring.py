@@ -13,14 +13,15 @@ import re
 from datetime import datetime
 from urllib.parse import urlparse
 
-BASE = 25  # Startwert, bevor eine Regel greift
-MIN_DEFAULT = 60  # ab dieser Punktzahl kommt ein Betrieb in die Pipeline (LEADS_RULE_MIN)
+BASE = 10  # Startwert, bevor eine Regel greift
+MIN_DEFAULT = 50  # Mindestpunktzahl (LEADS_RULE_MIN); ins CRM kommen pro Lauf nur die besten (LEADS_RUN_TOP)
 
-BRANCHE_POINTS = {"handwerk": 20, "pflege": 20, "landwirtschaft": 18, "industrie": 12, "dienstleistung": 10,
-                  "handel": 6, "gastgewerbe": 4}
-BRANCHE_LABELS = {"handwerk": "Handwerk", "pflege": "Pflege und Gesundheit", "landwirtschaft": "Landwirtschaft",
-                  "industrie": "Industrie und Produktion", "dienstleistung": "Dienstleistung", "handel": "Handel",
-                  "gastgewerbe": "Gastgewerbe"}
+# Wen wir suchen (siehe Gehirn, „Wen wir suchen“): Stufe A ist der Kern, Stufe B passt oft, alles andere selten.
+TIER_A = {"handwerk", "pflege", "landwirtschaft"}
+TIER_B = {"dienstleistung", "industrie"}
+BRANCHE_LABELS = {"handwerk": "Handwerk", "pflege": "Pflege", "landwirtschaft": "Landwirtschaft",
+                  "industrie": "Werft und Bootsbau", "dienstleistung": "Dienstleistung (Verwaltung, Planung, Logistik)",
+                  "handel": "Handel", "gastgewerbe": "Gastgewerbe"}
 # Typische Zeitfresser je Branche (aus „Beispiele, was wir bauen können“ im Gehirn)
 BRANCHE_ZEITFRESSER = {"handwerk": "Angebote, Aufmaß und Nachkalkulation",
                        "pflege": "Dokumentation nach jedem Einsatz",
@@ -28,28 +29,32 @@ BRANCHE_ZEITFRESSER = {"handwerk": "Angebote, Aufmaß und Nachkalkulation",
 
 # (Schlüssel, Punkte, Grund, Muster, Zeitfresser für den Entwurf). Muster werden im kleingeschriebenen Text gesucht.
 TEXT_RULES = [
-    ("fax", 8, "Faxnummer auf der Webseite", r"\b(?:tele)?fax\b\s*(?:nr\.?|nummer)?\s*[:.]?\s*[+(0-9]",
+    ("fax", 5, "Faxnummer auf der Webseite", r"\b(?:tele)?fax\b\s*(?:nr\.?|nummer)?\s*[:.]?\s*[+(0-9]",
      "Anfragen und Bestellungen per Fax und Telefon"),
-    ("notdienst", 4, "Notdienst oder Bereitschaft, also viele spontane Anfragen",
+    ("telefon", 5, "Anfragen laufen vor allem übers Telefon",
+     r"rufen sie (?:uns )?(?:gerne |einfach )?an|telefonisch (?:erreichbar|vereinbaren|unter)|termin(?:e)? nach telefonischer",
+     "Anfragen, die alle übers Telefon laufen"),
+    ("notdienst", 5, "Notdienst oder Bereitschaft, also viele spontane Anfragen",
      r"notdienst|rund um die uhr|24\s*/\s*7|24[ -]?h\b|24[ -]stunden|bereitschaftsdienst", "viele spontane Kundenanfragen"),
     ("touren", 5, "Arbeitet vor Ort beim Kunden (Touren, Montage, Hausbesuche)",
      r"\btouren\b|tourenplan|ambulant|hausbesuch|beim kunden vor ort|montage|einsatzplanung|fuhrpark",
      "Einsatz- und Tourenplanung"),
     ("doku", 5, "Pflichtdokumentation, Nachweise oder Zertifizierung",
      r"dokumentation|nachweis|prüfprotokoll|wartungsprotokoll|zertifiziert|iso 9001|qualitätsmanagement|"
-     r"düngeverordnung|hygieneplan|gefährdungsbeurteilung", "Dokumentation und Nachweise"),
-    ("standorte", 5, "Mehrere Standorte oder Filialen", r"\b(?:filialen|standorte|niederlassungen|zweigstellen)\b", None),
+     r"düngeverordnung|hygieneplan|gefährdungsbeurteilung|bautagebuch", "Dokumentation und Nachweise"),
     ("inhaber", 3, "Inhabergeführt (Familien- oder Meisterbetrieb)", r"familienbetrieb|familienunternehmen|meisterbetrieb|"
      r"inhabergeführt|in (?:zweiter|dritter|vierter|\d\.) generation", None),
-    ("telefon", 3, "Anfragen laufen vor allem übers Telefon",
-     r"rufen sie (?:uns )?(?:gerne |einfach )?an|telefonisch (?:erreichbar|vereinbaren|unter)|termin(?:e)? nach telefonischer",
-     "Anfragen, die alle übers Telefon laufen"),
 ]
 OFFICE_JOB = re.compile(r"bürokauf|kauffrau für büro|kaufmann für büro|büromanagement|verwaltungsangestellt|"
                         r"sachbearbeit|bürokraft|büroassist|assistenz der geschäftsführung|disponent|disposition|"
                         r"buchhalt|bürohilfe|mitarbeiter(?:in)? (?:im |für das |fürs )?büro|kaufmännische")
 ANY_JOB = re.compile(r"wir suchen|stellenangebot|stellenanzeige|karriere|offene stellen|jobs bei|verstärkung|"
                      r"bewirb dich|bewerben sie sich|ausbildungsplatz|wir stellen ein")
+GROWTH = re.compile(r"neuer? (?:standort|niederlassung|filiale|halle|betriebshof)|(?:wir )?(?:wachsen|expandieren)|"
+                    r"erweitern unser team|eröffne(?:n|t) (?:im|in|unsere)|neubau unserer")
+JOB_TAG = re.compile(r"\((?:m|w|d)\s*/\s*(?:m|w|d)\s*/\s*(?:m|w|d)\)")
+DIGITAL = re.compile(r"kundenportal|online-portal|zur app|unsere app|app herunterladen|online-terminbuchung|"
+                     r"termin online buchen|online buchen|jetzt online termin")
 IT_FIRM = re.compile(r"webdesign|softwareentwicklung|it-dienstleist|it-service|digitalagentur|werbeagentur|"
                      r"online-marketing|app-entwicklung|ki-beratung|ki-lösungen|seo-agentur|internetagentur")
 AUTHORITY = re.compile(r"\b(?:amt|ämter|gemeinde|stadtverwaltung|kreisverwaltung|landesamt|behörde|bundesagentur)\b")
@@ -130,82 +135,92 @@ def is_personal(addr):
 def score(lead, research, learned=None, now=None):
     """Bewertet einen Betrieb. `research` kommt von finder.research_website, `learned` von learned_adjustments.
 
-    Gibt {score, signals: [(punkte, grund)], email, contact_name, groesse, zeitfresser, auszug} zurück."""
+    Gibt {score, signals: [(punkte, grund)], ko: [gründe], email, contact_name, groesse, zeitfresser, auszug} zurück.
+    Ein Ausschlussgrund (ko) heißt: kommt nie ins CRM, egal wie viele Punkte."""
     now = now or datetime.now()
     pages = research.get("pages") or []
     raw = "\n".join(p.get("text", "") for p in pages)
     text = raw.lower()
     title = " ".join((p.get("title") or "") for p in pages[:1]).lower()
     links = [link.lower() for link in research.get("links") or []]
-    signals = []
+    signals, ko = [], []
 
     def add(points, reason):
         signals.append((points, reason))
 
-    # Branche und Entfernung
-    branche = lead.get("branche") or "sonstige"
-    if BRANCHE_POINTS.get(branche):
-        add(BRANCHE_POINTS[branche], f"Branche {BRANCHE_LABELS[branche]}"
-            + (" (Vorrang)" if branche in BRANCHE_ZEITFRESSER else ""))
+    # Branche: Stufe A ist der Kern
+    branche = (lead.get("branche") or "sonstige").lower()
+    label = BRANCHE_LABELS.get(branche, branche.capitalize())
+    if branche in TIER_A:
+        add(20, f"Kernbranche {label}")
+    elif branche in TIER_B:
+        add(8, f"Passende Branche: {label}")
 
-    # Größe
+    # Größe: 10–100 ist ideal für einen Piloten
     size = extract_size(text)
     if size is not None:
-        if 5 <= size <= 250:
-            add(15, f"Etwa {size} Mitarbeitende, passende Größe")
+        if 10 <= size <= 100:
+            add(15, f"Etwa {size} Mitarbeitende, ideale Größe")
+        elif 5 <= size < 10:
+            add(5, f"Etwa {size} Mitarbeitende, eher klein")
+        elif 100 < size <= 250:
+            add(8, f"Etwa {size} Mitarbeitende, eher groß")
         elif size > 250:
             add(-10, f"Groß ({size} Mitarbeitende), entscheidet vermutlich nicht vor Ort")
         else:
-            add(-15, f"Sehr klein ({size} Mitarbeitende), kaum Verwaltung")
+            ko.append(f"Sehr klein ({size} Mitarbeitende), kaum Verwaltung")
 
-    # Anzeichen für Verwaltungsaufwand
+    # Akuter Druck: sucht Leute fürs Büro, wächst
+    jobs = len(JOB_TAG.findall(text))
+    if OFFICE_JOB.search(text) and ANY_JOB.search(text):
+        add(25, "Sucht Personal fürs Büro, die Verwaltung oder die Disposition")
+    elif ANY_JOB.search(text):
+        add(5, "Sucht Personal")
+    if jobs >= 2 or GROWTH.search(text):
+        add(10, f"Wächst ({jobs} offene Stellen)" if jobs >= 2 else "Wächst (neuer Standort oder Ausbau)")
+
+    # Anzeichen für Papierkram und analoge Abläufe
     zeitfresser = []
     if branche in BRANCHE_ZEITFRESSER:
         zeitfresser.append(BRANCHE_ZEITFRESSER[branche])
+    if OFFICE_JOB.search(text) and ANY_JOB.search(text):
+        zeitfresser.append("ein knapp besetztes Büro")
     for key, points, reason, pattern, fresser in TEXT_RULES:
         if re.search(pattern, text):
             add(points, reason)
             if fresser:
                 zeitfresser.append(fresser)
-    if OFFICE_JOB.search(text) and ANY_JOB.search(text):
-        add(12, "Sucht Personal fürs Büro oder die Verwaltung")
-        zeitfresser.append("ein knapp besetztes Büro")
-    elif ANY_JOB.search(text):
-        add(5, "Sucht Personal")
     pdfs = [link for link in links if link.split("?")[0].endswith(".pdf") and PDF_FORM.search(link)]
     if pdfs:
-        add(8, "Formulare als PDF zum Ausdrucken")
+        add(5, "Formulare als PDF zum Ausdrucken")
         zeitfresser.append("Formulare, die ausgedruckt und abgetippt werden")
     years = [int(y) for y in COPYRIGHT_RE.findall(text)]
     if years and max(years) <= now.year - 5:
-        add(5, f"Webseite lange nicht aktualisiert (© {max(years)})")
-    if pages and pages[0].get("url", "").startswith("http://"):
-        add(2, "Webseite ohne HTTPS")
+        add(3, f"Webseite lange nicht aktualisiert (© {max(years)})")
 
-    # Gegenanzeichen
-    if any(h in link for link in links for h in BOOKING_HOSTS) or "online-terminbuchung" in text \
-            or "termin online buchen" in text:
-        add(-6, "Termine sind schon online buchbar")
+    # Schon digital: weniger Potenzial
+    if any(h in link for link in links for h in BOOKING_HOSTS) or DIGITAL.search(text):
+        add(-10, "Schon digital (Online-Buchung, Kundenportal oder App)")
+
+    # Ausschlussgründe
     if IT_FIRM.search(text) or IT_FIRM.search(title):
-        add(-30, "IT-Firma oder Agentur, baut so etwas selbst")
+        ko.append("IT-Firma oder Agentur, baut so etwas selbst")
     if AUTHORITY.search(title) or AUTHORITY.search((lead.get("name") or "").lower()):
-        add(-25, "Behörde oder Verwaltung")
+        ko.append("Behörde oder Verwaltung")
     if FRANCHISE.search(text):
-        add(-15, "Teil einer Gruppe oder Franchise, entscheidet vermutlich nicht vor Ort")
+        ko.append("Teil einer Gruppe, Kette oder Franchise, entscheidet nicht vor Ort")
 
-    # Erreichbarkeit
+    # Erreichbarkeit: die Person, die entscheidet, direkt per Mail
     contact = extract_contact(raw)
     email = pick_email(research.get("emails"), lead.get("website"), contact, lead.get("email") or "")
-    if email:
-        add(5, "E-Mail-Adresse gefunden")
-        if is_personal(email):
-            add(3, "Persönliche Adresse statt info@")
-    else:
-        add(-15, "Keine E-Mail-Adresse gefunden (ohne kommt der Betrieb nicht ins CRM)")
     if contact:
-        add(3, f"Ansprechperson im Impressum: {contact}")
+        add(5, f"Inhaber oder Geschäftsführung im Impressum: {contact}")
+    if email and is_personal(email):
+        add(5, "Persönliche E-Mail-Adresse statt info@")
+    if not email:
+        ko.append("Keine E-Mail-Adresse gefunden")
     if not pages:
-        add(-10, "Webseite nicht lesbar")
+        ko.append("Webseite nicht lesbar")
 
     # Gelernt aus euren Ergebnissen (gezählt, keine KI)
     adj = (learned or {}).get(lead.get("category")) or (learned or {}).get(lead.get("branche"))
@@ -214,15 +229,17 @@ def score(lead, research, learned=None, now=None):
 
     total = max(0, min(100, BASE + sum(p for p, _ in signals)))
     excerpt = _compact(pages[0]["text"])[:2500] if pages else ""
-    return {"score": total, "signals": signals, "email": email, "contact_name": contact,
+    return {"score": total, "signals": signals, "ko": ko, "email": email, "contact_name": contact,
             "groesse": f"ca. {size} Mitarbeitende" if size else "unklar",
             "zeitfresser": list(dict.fromkeys(zeitfresser)), "auszug": excerpt}
 
 
 def summary(result, threshold):
-    """Ein Satz für die Übersicht, z. B. „72/100: Branche Handwerk, Faxnummer …“."""
+    """Ein Satz für die Übersicht, z. B. „72/100, passt: Kernbranche Handwerk; Sucht Personal fürs Büro …“."""
     top = [r for p, r in sorted(result["signals"], key=lambda s: -abs(s[0])) if p][:4]
-    verdict = "passt" if result["score"] >= threshold else "passt nicht"
+    if result.get("ko"):
+        return f"Regeln: {result['score']}/100, ausgeschlossen: " + "; ".join(result["ko"]) + "."
+    verdict = "passt" if result["score"] >= threshold else "zu wenig Punkte"
     return f"Regeln: {result['score']}/100, {verdict}. " + "; ".join(top) + "."
 
 
@@ -242,19 +259,26 @@ def learned_adjustments(rows):
 
 
 def rules_table():
-    """Für die Seite „So bewertet der Algorithmus“."""
-    rows = [(p, f"Branche {BRANCHE_LABELS[b]}") for b, p in BRANCHE_POINTS.items()]
-    rows += [(15, "5 bis 250 Mitarbeitende laut Webseite"), (-10, "Mehr als 250 Mitarbeitende"),
-             (-15, "Weniger als 5 Mitarbeitende")]
+    """Für die Seite „So wird bewertet“: (Punkte oder None für Ausschluss, Regel)."""
+    rows = [(20, "Kernbranche: Handwerk (Heizung/Sanitär, Elektro, Tischlerei, Metallbau, Dach, Bau, GaLaBau), "
+                 "Pflege, Landwirtschaft"),
+            (8, "Passende Branche: Hausverwaltung, Ingenieur- und Vermessungsbüro, Spedition, Werft und Bootsbau"),
+            (25, "Sucht Personal fürs Büro, die Verwaltung oder die Disposition"), (5, "Sucht Personal (andere Stellen)"),
+            (10, "Wächst: mindestens 2 offene Stellen oder neuer Standort"),
+            (15, "10 bis 100 Mitarbeitende laut Webseite"), (8, "101 bis 250 Mitarbeitende"),
+            (5, "5 bis 9 Mitarbeitende"), (-10, "Mehr als 250 Mitarbeitende")]
     rows += [(p, r) for _, p, r, _, _ in TEXT_RULES]
-    rows += [(12, "Sucht Personal fürs Büro oder die Verwaltung"), (5, "Sucht Personal (andere Stellen)"),
-             (8, "Formulare als PDF zum Ausdrucken"), (5, "Webseite seit mindestens 5 Jahren nicht aktualisiert (©)"),
-             (2, "Webseite ohne HTTPS"), (-6, "Termine sind schon online buchbar"),
-             (-30, "IT-Firma oder Agentur"), (-25, "Behörde"), (-15, "Teil einer Gruppe oder Franchise"),
-             (5, "E-Mail-Adresse gefunden"), (3, "Persönliche Adresse statt info@"),
-             (-15, "Keine E-Mail-Adresse (dann nie ins CRM)"), (3, "Ansprechperson im Impressum gefunden"),
+    rows += [(5, "Formulare als PDF zum Ausdrucken"), (3, "Webseite seit mindestens 5 Jahren nicht aktualisiert (©)"),
+             (5, "Inhaber oder Geschäftsführung im Impressum gefunden"), (5, "Persönliche E-Mail-Adresse statt info@"),
+             (-10, "Schon digital: Online-Terminbuchung, Kundenportal oder App"),
              (10, "Bis zu ±10: Erfahrung mit der Branche aus euren Ergebnissen")]
     return rows
+
+
+KO_RULES = ["Keine E-Mail-Adresse (der Kontakt läuft per Mail)", "Weniger als 5 Mitarbeitende",
+            "Kette, Gruppe oder Franchise (auch laut Kartendaten)", "IT-Firma oder Agentur", "Behörde",
+            "Webseite fehlt oder ist nicht lesbar", "Außerhalb von Schleswig-Holstein (wird gar nicht gesucht)"]
+
 
 # ---------------------------------------------------------------- Antworten einordnen (ohne KI)
 

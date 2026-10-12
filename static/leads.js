@@ -46,7 +46,7 @@
           const budget = parseFloat(String(runForm.budget_eur.value).replace(',', '.')) || 0;
           est.innerHTML = (e.eur ? `KI geschätzt: <b>ca. ${euro(e.eur)}</b>` : 'Ohne KI-Kosten.')
             + (e.entwuerfe ? ` · ${e.entwuerfe} Entwürfe` : '') + (e.erinnerungen ? ` · ${e.erinnerungen} Erinnerungen` : '')
-            + ' Passende Betriebe landen als „Neu“ im <a href="/crm">CRM</a>.'
+            + ' Nur die besten passenden Betriebe landen als „Neu“ im <a href="/crm">CRM</a>.'
             + (e.eur > budget ? ' <span class="err">Das KI-Budget reicht dafür vermutlich nicht, der Lauf stoppt dann vorher.</span>' : '');
         } catch {}
       }, 250);

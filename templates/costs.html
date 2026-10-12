@@ -34,7 +34,7 @@
       <tbody>{% for r in runs %}<tr>
         <td>{{ r.started_at|kurzdatum }} <span class="muted">{{ r.started_at[11:16] }}</span></td><td class="small">{{ r.started_by }}</td>
         <td>{{ {'fertig': 'Fertig', 'gestoppt': 'Gestoppt', 'fehler': 'Fehler', 'laeuft': 'Läuft', 'wartet': 'Startet', 'abgebrochen': 'Abgebrochen'}.get(r.status, r.status) }}{% if r.message %}<br><span class="muted small">{{ r.message }}</span>{% endif %}</td>
-        <td>{{ r.counts.bewertet or r.counts.vorgeprueft or 0 }} <span class="muted">→ {{ r.counts.passen or r.counts.analyse_durch or 0 }} passen</span></td>
+        <td>{{ r.counts.bewertet or r.counts.vorgeprueft or 0 }} <span class="muted">→ {{ r.counts.passen or r.counts.analyse_durch or 0 }} passen{% if r.counts.ins_crm is defined %}, {{ r.counts.ins_crm }} ins CRM{% endif %}</span></td>
         <td><b>{{ r.counts.entwuerfe or 0 }}</b></td><td>{{ euro(r.params.budget_eur or 0) }}</td><td><b>{{ euro(r.eur) }}</b></td></tr>{% endfor %}</tbody>
     </table></div>
     {% else %}<p class="muted small empty">Noch kein Lauf.</p>{% endif %}

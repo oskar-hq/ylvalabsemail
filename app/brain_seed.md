@@ -34,15 +34,17 @@ Feedback und aus den Antworten der Firmen fort.
 
 - Mittelständische und kleinere Betriebe in Schleswig-Holstein. Wir sitzen in Kappeln und kommen
   im ganzen Land vor Ort vorbei.
-- Gut passend: 5 bis 250 Mitarbeitende, spürbar viel Verwaltung, Dokumentation oder Kundenkontakt,
-  wiederkehrende Abläufe, die heute von Hand laufen.
+- Ideal: inhabergeführt, 10 bis 100 Mitarbeitende, spürbar viel Verwaltung, Dokumentation oder Kundenkontakt,
+  wiederkehrende Abläufe, die heute von Hand laufen, und akuter Druck (sucht Leute fürs Büro, wächst).
+- Kernbranchen: Heizung/Sanitär, Elektro, Tischlerei und Innenausbau, Metallbau, Dachdecker, Bauunternehmen,
+  Garten- und Landschaftsbau, ambulante Pflege, Tagespflege und private Pflegeheime, Landwirtschaft und
+  Lohnunternehmen. Außerdem: Hausverwaltungen, Ingenieur- und Vermessungsbüros, Speditionen, Werften und Bootsbau.
 - Anzeichen für Bedarf: Kontakt nur per Telefon/Fax, Formulare als PDF zum Ausdrucken, Stellenanzeigen für
   Büro/Verwaltung, „wir suchen dringend …“, viele Standorte oder Touren, Pflichtdokumentation,
   veraltete oder sehr einfache Webseite bei gleichzeitig großem Betrieb.
-- Weniger passend: Ein-Personen-Betriebe ohne Verwaltung, Filialen großer Ketten (entscheiden nicht vor Ort),
-  reine IT-Firmen und Agenturen (bauen so etwas selbst), Behörden.
-- Branchen mit Vorrang: Handwerk, Pflege, Landwirtschaft. Andere Mittelständler sind willkommen,
-  wenn die Zeitfresser klar erkennbar sind.
+- Nicht passend: Betriebe unter 5 Leuten, Filialen und Franchise (entscheiden nicht vor Ort), IT-Firmen und
+  Agenturen (bauen so etwas selbst), Behörden, Einzelhandel, Gastronomie, Arzt- und Zahnarztpraxen
+  (feste Praxissoftware), Autohäuser (Software vom Hersteller).
 
 ## Stil der Nachrichten
 

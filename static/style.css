@@ -360,6 +360,7 @@ dialog ol{padding-left:18px;color:var(--body)}
 .mono.neg,.signals .neg{color:var(--err)}
 .meter{position:relative}
 .meter b{position:absolute;top:-3px;bottom:-3px;width:2px;background:var(--ink)}
+.ko-box{margin:0 0 21px}
 .write-help{background:var(--tint);padding:10px 12px;margin:0 0 14px}
 .write-help p{margin:0 0 8px;color:var(--body)}
 .write-help .btn-row{margin:0}

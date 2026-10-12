@@ -92,7 +92,7 @@ def status_payload():
 
 def run_defaults():
     est = agent.estimate(db(), SETTINGS["LEADS_RUN_DRAFTS"] if ai.available() else 0, followups=False)
-    return {"check": SETTINGS["LEADS_RUN_CHECK"], "drafts": SETTINGS["LEADS_RUN_DRAFTS"],
+    return {"check": SETTINGS["LEADS_RUN_CHECK"], "top": SETTINGS["LEADS_RUN_TOP"], "drafts": SETTINGS["LEADS_RUN_DRAFTS"],
             "budget": SETTINGS["LEADS_RUN_BUDGET_EUR"], "estimate": est, "models": ai.MODELS}
 
 # ---------------------------------------------------------------- Übersicht
@@ -122,6 +122,7 @@ def status_json():
 def run():
     try:
         params = {"bewerten": max(0, min(1000, int(request.form.get("bewerten", 0)))),
+                  "top": max(0, min(200, int(request.form.get("top", SETTINGS["LEADS_RUN_TOP"])))),
                   "entwuerfe": max(0, min(50, int(request.form.get("entwuerfe", 0)))),
                   "budget_eur": max(0.0, min(100.0, float(request.form.get("budget_eur", "0").replace(",", ".") or 0))),
                   "suchen": request.form.get("suchen") == "1",
@@ -420,7 +421,8 @@ def draft_template(lead_id):
 @bp.get("/leads/regeln")
 @login_required
 def rules():
-    return render_template("rules.html", account=g.account, rules=scoring.rules_table(), base=scoring.BASE,
+    return render_template("rules.html", account=g.account, rules=scoring.rules_table(), ko_rules=scoring.KO_RULES,
+                           base=scoring.BASE, top=SETTINGS["LEADS_RUN_TOP"],
                            threshold=SETTINGS["LEADS_RULE_MIN"], st=status_payload(), demo=SETTINGS["DEMO_MODE"])
 
 # ---------------------------------------------------------------- Erinnerung (Nachfassen)

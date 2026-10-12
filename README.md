@@ -34,8 +34,8 @@ alles in einem CRM. Die KI ist nur noch ein optionales Werkzeug zum Schreiben.
 
 | Schritt | Was passiert | Kosten |
 |---|---|---|
-| 1 · Suchen und Grobfilter | Betriebe aus OpenStreetMap in ganz Schleswig-Holstein (`LEADS_REGION=DE-SH`). Ketten, Betriebe ohne Webseite, reine Social-Media-Seiten, Kleinstbranchen und gesperrte Adressen fallen raus | kostenlos |
-| 2 · Bewertung nach Regeln | Startseite plus Impressum, Kontakt, Über uns, Karriere lesen. Punkte für Branche, Größe (5–250 Mitarbeitende), Faxnummer, PDF-Formulare, Stellen fürs Büro, Touren, Pflichtdokumentation, alte Webseite … Abzug für IT-Firmen, Behörden, Franchise, Online-Terminbuchung, fehlende E-Mail-Adresse. Ab `LEADS_RULE_MIN` Punkten (Standard 60) **und mit E-Mail-Adresse** kommt der Betrieb als „Neu“ ins CRM | kostenlos |
+| 1 · Suchen und Grobfilter | Nur passende Branchen aus OpenStreetMap, nur in Schleswig-Holstein (`LEADS_REGION=DE-SH`): Heizung/Sanitär, Elektro, Tischlerei, Metallbau, Dach, Bau, Garten- und Landschaftsbau, Pflege, Landwirtschaft, dazu Hausverwaltungen, Ingenieurbüros, Speditionen, Werften. Ketten, Betriebe ohne Webseite und gesperrte Adressen fallen raus | kostenlos |
+| 2 · Bewertung nach Regeln | Startseite plus Impressum, Kontakt, Über uns, Karriere lesen. Die stärksten Punkte: sucht Personal fürs Büro (+25), Kernbranche (+20), 10–100 Mitarbeitende (+15), wächst (+10), Inhaber im Impressum und persönliche Mail (je +5), Fax, PDF-Formulare, Touren, Doku (je +5); schon digital −10. Ausgeschlossen: keine E-Mail-Adresse, unter 5 Leute, Kette/Franchise, IT-Firma, Behörde. Ab `LEADS_RULE_MIN` (50) passt es, ins CRM kommen pro Lauf nur die besten `LEADS_RUN_TOP` (25) | kostenlos |
 | 3 · Entwurf (optional) | Für die Besten ohne Nachricht schreibt die KI einen Entwurf, mit Budget in Euro | ca. 5 Cent pro Entwurf |
 
 Jede Regel, die gegriffen hat, steht mit ihren Punkten in der Akte. Die Tabelle aller Regeln zeigt die Seite

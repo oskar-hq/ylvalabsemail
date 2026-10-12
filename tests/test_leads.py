@@ -77,10 +77,13 @@ class FinderTest(unittest.TestCase):
         self.assertIn("Webseite", found[1]["filter_reason"])  # nur E-Mail: nichts zu lesen
         self.assertIn("Kette", finder.rough_filter({"brand": "Edeka"}, "https://x.de", "x.de"))
         self.assertIn("Social", finder.rough_filter({}, "https://facebook.com/x", "facebook.com"))
-        self.assertIn('nwr(around:50000,54.6614,9.9311)["craft"]["name"];', finder.overpass_query(54.6614, 9.9311, 50))
+        query = finder.overpass_query(54.6614, 9.9311, 50)
+        self.assertIn('nwr(around:50000,54.6614,9.9311)["craft"~"^(hvac|plumber|', query)
+        self.assertNotIn("hairdresser", query)  # nur Branchen, die zu Ylva Labs passen
+        self.assertNotIn('["shop"~"^(car', query)
         q = finder.overpass_query(54.6614, 9.9311, 50, "DE-SH")
         self.assertIn('area["ISO3166-2"="DE-SH"]->.gebiet;', q)
-        self.assertIn('nwr(area.gebiet)["craft"]["name"];', q)
+        self.assertIn('nwr(area.gebiet)["healthcare"~"^(home_care|nursing_home)$"]["name"];', q)
         self.assertNotIn("around", q)
         # Mit Region gilt kein Radius: auch Betriebe weit weg (aber im Land) bleiben drin
         self.assertIn("Zu weit", [f["name"] for f in finder.parse_elements(elements, 54.6614, 9.9311)])
@@ -194,7 +197,7 @@ class AgentTest(unittest.TestCase):
         self.assertGreaterEqual(lead["fit_score"], 60)
         self.assertEqual(lead["email"], "jens.hansen@tischlerei-a.de")  # persönlich, eigene Domain
         self.assertEqual(lead["contact_name"], "Jens Hansen")
-        self.assertIn("Sucht Personal fürs Büro oder die Verwaltung", [r for _, r in lead["research"]["signale"]])
+        self.assertIn("Sucht Personal fürs Büro, die Verwaltung oder die Disposition", [r for _, r in lead["research"]["signale"]])
         self.assertEqual(leaddb.tab_of(lead), "passt")
 
     def test_score_stage_rejects_without_ai(self):
@@ -217,7 +220,7 @@ class AgentTest(unittest.TestCase):
         lead = leaddb.get_lead(self.c, lead_id)
         self.assertGreaterEqual(lead["fit_score"], 60)  # passt inhaltlich …
         self.assertEqual((lead["status"], lead["stage"]), ("aussortiert", None))  # … aber ohne Mail nicht ins CRM
-        self.assertIn("keine E-Mail-Adresse", lead["fit_reason"])
+        self.assertIn("keine e-mail-adresse", lead["fit_reason"].lower())
 
     def test_imported_lead_stays_in_pipeline(self):
         lead_id, _ = crm.create_lead(self.c, {"name": "Kleiner Betrieb", "website": "klein.example"}, "t")
@@ -242,7 +245,7 @@ class AgentTest(unittest.TestCase):
         self.assertEqual(w.call_args[0][2]["auszug"], "Küchen")  # Auszug der Startseite statt ganzer Webseite
         self.assertEqual(leaddb.get_lead(self.c, lead_id)["subject"], "B")
 
-    def _run(self, check, drafts, budget):
+    def _run(self, check, drafts, budget, top=25):
         """Ein ganzer Lauf: Bewertung ohne KI, Entwürfe mit nachgebauter KI, die wie die echte ihre Kosten meldet."""
         def fake(stage, usd, result):
             def call(*args, **kw):
@@ -250,8 +253,8 @@ class AgentTest(unittest.TestCase):
                             usd, None)
                 return result
             return call
-        run_id, err = agent.start_run({"bewerten": check, "entwuerfe": drafts, "budget_eur": budget, "suchen": False},
-                                      "test")
+        run_id, err = agent.start_run({"bewerten": check, "top": top, "entwuerfe": drafts, "budget_eur": budget,
+                                       "suchen": False}, "test")
         self.assertIsNone(err)
         def site(url):  # jede Webseite mit eigener Adresse, sonst wären es Dubletten
             host = url.split("//")[1]
@@ -271,6 +274,16 @@ class AgentTest(unittest.TestCase):
         self.assertIn("Ohne KI-Kosten", run["message"])
         self.assertEqual(self.c.execute("SELECT COUNT(*) FROM ai_usage").fetchone()[0], 0)
         self.assertEqual(self.c.execute("SELECT COUNT(*) FROM leads WHERE status='kandidat'").fetchone()[0], 2)
+
+    def test_run_puts_only_the_best_into_crm(self):
+        for i in range(6):
+            self.add(f"T{i}", website=f"https://t{i}.example.org")
+        with mock.patch.object(ai, "available", return_value=False):
+            run = self._run(check=6, drafts=0, budget=0, top=2)
+        counts = json.loads(run["counts"])
+        self.assertEqual((counts["passen"], counts["ins_crm"]), (6, 2))
+        self.assertEqual(self.c.execute("SELECT COUNT(*) FROM leads WHERE stage='neu'").fetchone()[0], 2)
+        self.assertEqual(leaddb.tab_counts(self.c)["passt"], 6)  # der Rest wartet im Reiter „Passt“
 
     def test_run_with_drafts_and_budget(self):
         for i in range(10):
@@ -404,15 +417,21 @@ class ScoringTest(unittest.TestCase):
                 "emails": ["kontakt@pflege-b.de"], "links": ["https://doctolib.example/b"], "errors": []}
         res = scoring.score(lead, good, now=datetime(2026, 10, 1))
         reasons = dict((r, p) for p, r in res["signals"])
-        self.assertEqual(reasons["Etwa 35 Mitarbeitende, passende Größe"], 15)
+        self.assertEqual(reasons["Kernbranche Pflege"], 20)
+        self.assertEqual(reasons["Etwa 35 Mitarbeitende, ideale Größe"], 15)
         self.assertIn("Webseite lange nicht aktualisiert (© 2016)", reasons)
-        self.assertEqual(reasons["Termine sind schon online buchbar"], -6)
+        self.assertEqual(reasons["Schon digital (Online-Buchung, Kundenportal oder App)"], -10)
         self.assertEqual(res["email"], "kontakt@pflege-b.de")
         self.assertIn("Dokumentation und Nachweise", res["zeitfresser"])
-        self.assertGreaterEqual(res["score"], scoring.MIN_DEFAULT)
+        self.assertEqual(res["ko"], [])
+        # Mit Stellenanzeige fürs Büro und ohne Online-Buchung wird es ein Top-Lead
+        hot = {**good, "links": [], "pages": [{**good["pages"][0], "text": good["pages"][0]["text"]
+               + " Wir suchen eine Verwaltungsangestellte (m/w/d) und Pflegefachkräfte (m/w/d)."}]}
+        self.assertGreaterEqual(scoring.score(lead, hot, now=datetime(2026, 10, 1))["score"], 80)
         tiny = {"pages": [{"url": "http://x.de", "title": "", "text": "Ich arbeite allein mit 1 Mitarbeiter."}],
                 "emails": [], "links": [], "errors": []}
-        self.assertLess(scoring.score({**lead, "branche": "handel"}, tiny)["score"], scoring.MIN_DEFAULT)
+        self.assertEqual(scoring.score({**lead, "branche": "handel"}, tiny)["ko"],
+                         ["Sehr klein (1 Mitarbeitende), kaum Verwaltung", "Keine E-Mail-Adresse gefunden"])
         self.assertEqual(scoring.extract_size("seit 1995, über 2000 Kunden, team aus 12 leuten"), 12)
 
     def test_learned_adjustments(self):

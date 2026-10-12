@@ -238,8 +238,9 @@ def _json(data):
 # ---------------------------------------------------------------- Bewertung nach Regeln (kostenlos) und Entwurf (KI)
 
 
-def stage_score(c, lead_id, learned):
-    """Webseite lesen und nach Regeln bewerten. Gibt True zurück, wenn der Betrieb passt."""
+def stage_score(c, lead_id, learned, promote=True):
+    """Webseite lesen und nach Regeln bewerten. Gibt True zurück, wenn der Betrieb passt.
+    promote=False (im Lauf): Passende bleiben erst im Reiter „Passt“; ins CRM kommen am Ende nur die besten."""
     lead = leaddb.get_lead(c, lead_id)
     in_pipeline = lead["stage"] is not None  # von Hand angelegt oder importiert: bleibt drin
     leaddb.update_lead(c, lead_id, status="recherche")
@@ -248,14 +249,11 @@ def stage_score(c, lead_id, learned):
     result = scoring.score(lead, research, learned)
     threshold = S("LEADS_RULE_MIN")
     email_addr = result["email"] or lead["email"] or None
-    passes = result["score"] >= threshold and bool(email_addr)  # Kontakt läuft per Mail
-    info = {"signale": result["signals"], "groesse": result["groesse"], "zeitfresser": result["zeitfresser"],
+    passes = result["score"] >= threshold and not result["ko"]
+    info = {"signale": result["signals"], "ko": result["ko"], "groesse": result["groesse"], "zeitfresser": result["zeitfresser"],
             "auszug": result["auszug"], "pages": [p["url"] for p in research["pages"]], "emails": research["emails"],
             "errors": research["errors"]}
-    reason = scoring.summary(result, threshold)
-    if result["score"] >= threshold and not email_addr:
-        reason = f"Regeln: {result['score']}/100, passt inhaltlich, aber keine E-Mail-Adresse gefunden."
-    common = dict(fit_score=result["score"], fit_reason=reason, research=_json(info),
+    common = dict(fit_score=result["score"], fit_reason=scoring.summary(result, threshold), research=_json(info),
                   contact_name=lead["contact_name"] or result["contact_name"] or None, email=email_addr)
 
     blocked = set(leaddb.kv_get(c, "blocklist", []))
@@ -275,11 +273,21 @@ def stage_score(c, lead_id, learned):
         leaddb.update_lead(c, lead_id, status="passt", rejected_by=None, **common)
         note = "" if passes else " Laut Regeln eher nicht, bleibt aber in der Pipeline, weil ihr den Betrieb angelegt habt."
         leaddb.add_event(c, lead_id, "status", common["fit_reason"] + note, author="Regeln")
-        crm.advance(c, lead_id, "neu")
+        if promote or in_pipeline:
+            crm.advance(c, lead_id, "neu")
         return passes
     leaddb.update_lead(c, lead_id, status="aussortiert", rejected_by="regel", **common)
     leaddb.add_event(c, lead_id, "status", common["fit_reason"], author="Regeln")
     return False
+
+
+def promote_best(c, top):
+    """Nur die besten passenden Betriebe kommen als „Neu“ ins CRM, der Rest bleibt im Reiter „Passt“ als Reserve."""
+    rows = c.execute("SELECT id FROM leads WHERE status='passt' AND stage IS NULL AND interest IS NULL "
+                     "ORDER BY fit_score DESC, distance_km LIMIT ?", (max(0, top),)).fetchall()
+    for r in rows:
+        crm.advance(c, r["id"], "neu", author="Regeln")
+    return len(rows)
 
 
 def _analysis(lead):
@@ -433,7 +441,9 @@ def execute_run(c, run_id):
     p = json.loads(run["params"])
     check, drafts, budget = int(p.get("bewerten", 0)), int(p.get("entwuerfe", 0)), float(p.get("budget_eur", 0))
     use_ai = ai.available()
-    counts = {"neu_gefunden": 0, "grobfilter": 0, "bewertet": 0, "passen": 0, "entwuerfe": 0, "erinnerungen": 0}
+    top = int(p.get("top", S("LEADS_RUN_TOP")))
+    counts = {"neu_gefunden": 0, "grobfilter": 0, "bewertet": 0, "passen": 0, "ins_crm": 0, "entwuerfe": 0,
+              "erinnerungen": 0}
     RUN.update(id=run_id, cancel=False)
     _local.run_id = run_id
     c.execute("UPDATE runs SET status='laeuft' WHERE id=?", (run_id,))
@@ -455,13 +465,14 @@ def execute_run(c, run_id):
                 break
             _progress(f"Schritt 2/3 · Bewertet {i + 1}/{check}: {leaddb.get_lead(c, lead_id)['name']} (kostenlos)")
             counts["bewertet"] += 1
-            counts["passen"] += stage_score(c, lead_id, learned)
+            counts["passen"] += stage_score(c, lead_id, learned, promote=False)
+        counts["ins_crm"] = promote_best(c, top)
 
         # Schritt 3 (nur auf Wunsch): Entwürfe für die besten passenden Betriebe ohne Nachricht (KI)
         if drafts and use_ai:
             brain = leaddb.brain(c)
             best = c.execute("SELECT id, name FROM leads WHERE status='passt' AND interest IS NULL AND IFNULL(body,'')='' "
-                             "ORDER BY email IS NOT NULL DESC, fit_score DESC, distance_km LIMIT ?", (drafts,)).fetchall()
+                             "ORDER BY stage IS NOT NULL DESC, fit_score DESC, distance_km LIMIT ?", (drafts,)).fetchall()
             for i, row in enumerate(best):
                 check_budget(c, run_id, budget, "entwurf")
                 _progress(f"Schritt 3/3 · Schreibt Entwurf {i + 1}/{len(best)}: {row['name']}")
@@ -494,7 +505,7 @@ def execute_run(c, run_id):
         c.execute("UPDATE leads SET status='fehler', updated_at=? WHERE status='recherche'", (leaddb.now(),))
         _local.run_id = None
         cost = ai.eur(leaddb._sum(c, "run_id = ?", (run_id,))["usd"])
-        summary = (f"{counts['bewertet']} bewertet, {counts['passen']} passen"
+        summary = (f"{counts['bewertet']} bewertet, {counts['passen']} passen, {counts['ins_crm']} davon ins CRM"
                    + (f", {counts['entwuerfe']} Entwürfe" if counts["entwuerfe"] else "")
                    + (f", {counts['erinnerungen']} Erinnerungen" if counts["erinnerungen"] else "")
                    + (f". KI-Kosten: {_eur(cost)}." if cost else ". Ohne KI-Kosten."))

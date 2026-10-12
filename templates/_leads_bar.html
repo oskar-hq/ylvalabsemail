@@ -25,19 +25,20 @@
   <form class="run-box" id="runForm" data-per="{{ rd.estimate.per_stage_eur|tojson|forceescape }}">
     <div class="run-fields">
       <label><span class="sub">Betriebe bewerten <em>kostenlos</em></span><input type="number" name="bewerten" min="0" max="1000" value="{{ rd.check }}" inputmode="numeric"></label>
+      <label><span class="sub">Davon die besten ins CRM</span><input type="number" name="top" min="0" max="200" value="{{ rd.top }}" inputmode="numeric"></label>
       <label><span class="sub">Entwürfe schreiben <em>KI, optional</em></span><input type="number" name="entwuerfe" min="0" max="50" value="{{ rd.drafts if st.ai else 0 }}" inputmode="numeric" {{ 'disabled' if not st.ai }}></label>
       <label><span class="sub">Budget für die KI</span><span class="unit"><input type="number" name="budget_eur" min="0" max="100" step="0.05" value="{{ '%.2f'|format(rd.budget) }}" inputmode="decimal" {{ 'disabled' if not st.ai }}><em>€</em></span></label>
       <label class="check"><input type="checkbox" name="suchen" value="1" {{ 'checked' if not st.counts.kandidaten }}> Vorher neu suchen</label>
       {% if st.ai %}<label class="check"><input type="checkbox" name="erinnerungen" value="1"> Fällige Erinnerungen schreiben{% if st.counts.nachfassen %} ({{ st.counts.nachfassen }}){% endif %}</label>{% endif %}
     </div>
-    <p class="estimate small" id="estimate">{% if rd.estimate.eur %}KI geschätzt: <b>ca. {{ '%.2f'|format(rd.estimate.eur)|replace('.', ',') }} €</b>{% else %}Ohne KI-Kosten.{% endif %} Passende Betriebe landen als „Neu“ im <a href="{{ url_for('crm.board') }}">CRM</a>.{% if rd.estimate.ohne_entwurf == 1 %} 1 passender Betrieb hat noch keine Nachricht.{% elif rd.estimate.ohne_entwurf %} {{ rd.estimate.ohne_entwurf }} passende Betriebe haben noch keine Nachricht.{% endif %}</p>
+    <p class="estimate small" id="estimate">{% if rd.estimate.eur %}KI geschätzt: <b>ca. {{ '%.2f'|format(rd.estimate.eur)|replace('.', ',') }} €</b>{% else %}Ohne KI-Kosten.{% endif %} Nur die besten passenden Betriebe landen als „Neu“ im <a href="{{ url_for('crm.board') }}">CRM</a>, die übrigen warten im Reiter „Passt“.{% if rd.estimate.ohne_entwurf == 1 %} 1 passender Betrieb hat noch keine Nachricht.{% elif rd.estimate.ohne_entwurf %} {{ rd.estimate.ohne_entwurf }} passende Betriebe haben noch keine Nachricht.{% endif %}</p>
     <div class="run-actions">
       <button class="btn primary">Lauf starten</button>
       <a class="btn" href="{{ url_for('leads.rules') }}">So wird bewertet</a>
     </div>
     <ol class="funnel three small">
       <li><b>Suchen und Grobfilter</b><span>ganz Schleswig-Holstein, Karte und feste Regeln · kostenlos</span></li>
-      <li><b>Bewertung nach Regeln</b><span>Webseite lesen, Punkte vergeben, ab {{ st.rule_min }} und mit E-Mail-Adresse passt es · kostenlos, ohne KI</span></li>
+      <li><b>Bewertung nach Regeln</b><span>nur passende Branchen, Webseite lesen, Punkte und Ausschlussgründe, die besten ins CRM · kostenlos, ohne KI</span></li>
       <li><b>Entwurf</b><span>nur wenn du willst · {{ rd.models.entwurf }} · ca. {{ '%.1f'|format(rd.estimate.per_stage_eur.entwurf * 100)|replace('.', ',') }} ct · oder Vorlage, kostenlos</span></li>
     </ol>
   </form>
