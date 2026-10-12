@@ -4,7 +4,7 @@ from datetime import date
 
 from flask import Blueprint, Response, abort, g, jsonify, render_template, request
 
-from . import crm, leaddb
+from . import agent, crm, leaddb, regions
 from .leads_views import db, lead_or_404, status_payload, who
 from .main import SETTINGS, login_required
 
@@ -127,5 +127,47 @@ def export_csv():
 @login_required
 def heatmap():
     points = crm.map_points(db())
+    store = leaddb.kv_get(db(), "regionen", {}) or {}
+    kreise = regions.summary(store)
+    per_kreis = {}
+    for p in points:
+        if p["passend"] and p.get("kreis"):
+            per_kreis[p["kreis"]] = per_kreis.get(p["kreis"], 0) + 1
+    for k in kreise:
+        k["passend"] = per_kreis.get(k["key"], 0)
+    geo = leaddb.kv_get(db(), "kreise_geo") or {}
     return render_template("karte.html", account=g.account, points=points, hotspots=crm.hotspots(points),
+                           kreise=kreise, geo=geo, stand=store.get("stand") or {}, kinds=regions.KINDS,
+                           has_stats=bool(store.get("gewerbe") or store.get("bau")), top=regions.TOP,
                            stage_labels=crm.STAGE_LABELS, st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+
+
+@bp.post("/crm/regionen/import")
+@login_required
+def import_region_stats():
+    """CSV mit Werten je Kreis (Gewerbeanmeldungen, Baugenehmigungen oder Einwohner) übernehmen."""
+    kind = request.form.get("kind", "")
+    file = request.files.get("file")
+    if kind not in regions.KINDS or not file:
+        return jsonify(error="Bitte Art der Zahlen wählen und eine CSV-Datei anhängen."), 400
+    values = regions.parse_stats_csv(file.read())
+    if len(values) < 5:
+        return jsonify(error=f"Nur {len(values)} Kreise erkannt. Erwartet wird eine Zeile je Kreis mit Kreisschlüssel "
+                             "(z. B. 01058) oder Kreisname und dem Wert dahinter."), 400
+    store = leaddb.kv_get(db(), "regionen", {}) or {}
+    store[kind] = values
+    label = request.form.get("label", "").strip() or "ohne Zeitangabe"
+    store.setdefault("stand", {})[kind] = f"{label} · importiert {crm.fmt_day(crm.today())} von {who()}"
+    leaddb.kv_set(db(), "regionen", store)
+    return jsonify(ok=True, count=len(values), missing=[regions.KREISE[k][0] for k in regions.KREISE if k not in values])
+
+
+@bp.post("/crm/regionen/grenzen")
+@login_required
+def load_borders():
+    """Kreisgrenzen (neu) laden lassen; das macht der Hintergrund-Arbeiter."""
+    if not SETTINGS["LEADS_WORKER"]:
+        return jsonify(error="Der Hintergrund-Arbeiter ist aus (LEADS_WORKER=false)."), 400
+    leaddb.kv_set(db(), "request:kreise", True)
+    agent.wake()
+    return jsonify(ok=True, message="Die Kreisgrenzen werden geladen. Das dauert etwa eine Minute.")

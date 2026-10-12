@@ -221,6 +221,22 @@
       setTimeout(() => location.reload(), r.skipped_count ? 6000 : 1500);
     } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
   });
+  // Karte: Zahlen je Kreis importieren, Kreisgrenzen laden
+  $('#regionForm')?.addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const btn = $('button.primary', ev.target);
+    busy(btn, true, 'Importiert …');
+    try {
+      const r = await post('/crm/regionen/import', new FormData(ev.target));
+      toast(`${r.count} Kreise übernommen.` + (r.missing.length ? ` Ohne Wert: ${r.missing.join(', ')}.` : ''));
+      setTimeout(() => location.reload(), r.missing.length ? 4000 : 1200);
+    } catch (e) { toast(e.message, true); busy(btn, false); }
+  });
+  $('#loadBorders')?.addEventListener('click', async (ev) => {
+    busy(ev.target, true);
+    try { toast((await post('/crm/regionen/grenzen')).message); } catch (e) { toast(e.message, true); }
+    finally { busy(ev.target, false); }
+  });
   $$('.drop input[type=file]').forEach(inp => inp.addEventListener('change', () => {
     inp.nextElementSibling.textContent = inp.files[0]?.name || 'CSV-Datei auswählen';
   }));

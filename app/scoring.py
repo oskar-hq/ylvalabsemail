@@ -13,6 +13,8 @@ import re
 from datetime import datetime
 from urllib.parse import urlparse
 
+from .regions import BAU_CATEGORIES
+
 BASE = 10  # Startwert, bevor eine Regel greift
 MIN_DEFAULT = 50  # Mindestpunktzahl (LEADS_RULE_MIN); ins CRM kommen pro Lauf nur die besten (LEADS_RUN_TOP)
 
@@ -132,9 +134,10 @@ def is_personal(addr):
     return bool(local) and local not in GENERIC_LOCAL and not local.startswith(("info", "kontakt", "mail"))
 
 
-def score(lead, research, learned=None, now=None):
+def score(lead, research, learned=None, region=None, now=None):
     """Bewertet einen Betrieb. `research` kommt von finder.research_website, `learned` von learned_adjustments.
 
+    `region` kommt von regions.bonus_info: Wachstumsregionen nach Gewerbeanmeldungen und Baugenehmigungen.
     Gibt {score, signals: [(punkte, grund)], ko: [gründe], email, contact_name, groesse, zeitfresser, auszug} zurück.
     Ein Ausschlussgrund (ko) heißt: kommt nie ins CRM, egal wie viele Punkte."""
     now = now or datetime.now()
@@ -222,6 +225,15 @@ def score(lead, research, learned=None, now=None):
     if not pages:
         ko.append("Webseite nicht lesbar")
 
+    # Wachstumsregion (Statistik je Kreis): kleiner Zuschlag, ersetzt nicht die Prüfung des Betriebs
+    info = (region or {}).get(lead.get("kreis"))
+    if info:
+        if info.get("gewerbe_top"):
+            add(5, f"Wachstumsregion: viele Gewerbeanmeldungen im Kreis {info['name']}")
+        bau_gewerk = lead.get("category") in BAU_CATEGORIES or (not lead.get("category") and branche == "handwerk")
+        if info.get("bau_top") and bau_gewerk:
+            add(8, f"Viele Baugenehmigungen im Kreis {info['name']}, volle Auftragsbücher absehbar")
+
     # Gelernt aus euren Ergebnissen (gezählt, keine KI)
     adj = (learned or {}).get(lead.get("category")) or (learned or {}).get(lead.get("branche"))
     if adj and adj[0]:
@@ -271,6 +283,8 @@ def rules_table():
     rows += [(5, "Formulare als PDF zum Ausdrucken"), (3, "Webseite seit mindestens 5 Jahren nicht aktualisiert (©)"),
              (5, "Inhaber oder Geschäftsführung im Impressum gefunden"), (5, "Persönliche E-Mail-Adresse statt info@"),
              (-10, "Schon digital: Online-Terminbuchung, Kundenportal oder App"),
+             (5, "Wachstumsregion: Kreis unter den 5 mit den meisten Gewerbeanmeldungen je 1.000 Einwohner"),
+             (8, "Bau-Gewerk in einem der 5 Kreise mit den meisten Baugenehmigungen je 1.000 Einwohner"),
              (10, "Bis zu ±10: Erfahrung mit der Branche aus euren Ergebnissen")]
     return rows
 

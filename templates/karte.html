@@ -17,12 +17,20 @@
           <button type="button" class="on" data-layer="passend">Passende Betriebe</button>
           <button type="button" data-layer="alle">Alle bewerteten</button>
         </div>
+        {% if has_stats %}
+        <div class="seg" role="group" aria-label="Wachstum je Kreis">
+          <button type="button" class="on" data-kreise="">Kreise aus</button>
+          <button type="button" data-kreise="gewerbe">Gewerbeanmeldungen</button>
+          <button type="button" data-kreise="bau">Baugenehmigungen</button>
+        </div>
+        {% endif %}
         <label class="check"><input type="checkbox" id="showPipeline" checked> Betriebe im CRM als Punkte</label>
         <span class="muted small">{{ points|selectattr('passend')|list|length }} passende von {{ points|length }} bewerteten Betrieben</span>
       </div>
       <div id="map" class="map" aria-label="Karte von Schleswig-Holstein"></div>
       <div class="map-legend small">
         <span><i class="heat-scale"></i> Dichte, gewichtet nach Punkten</span>
+        <span class="kreis-legend" hidden><i class="kreis-scale"></i> je 1.000 Einwohner, wenig → viel</span>
         {% for key in ['neu', 'kontaktiert', 'antwort', 'gespraech', 'angebot', 'kunde'] %}<span><i class="dot-stage stage-{{ key }}"></i>{{ stage_labels[key] }}</span>{% endfor %}
       </div>
       {% if not points %}<p class="note small">Noch keine bewerteten Betriebe mit Koordinaten. Nach dem ersten Lauf unter „Leads“ füllt sich die Karte.</p>{% endif %}
@@ -46,16 +54,48 @@
         {% else %}<p class="muted small">Noch keine passenden Betriebe.</p>{% endif %}
       </div>
       <div class="side-block">
-        <span class="label">Was als Nächstes dazukommen kann</span>
-        <p class="small">Signale von außen als zusätzliche Ebene: Gewerbeanmeldungen je Kreis (Statistikamt Nord), Neubau- und Gewerbegebiete. Daraus könnten Zusatzpunkte für Betriebe in wachsenden Gegenden werden.</p>
+        <span class="label">Wachstum je Kreis</span>
+        {% if has_stats %}
+        <div class="table-wrap"><table class="stats small kreis-table">
+          <thead><tr><th>Kreis</th><th title="Gewerbeanmeldungen je 1.000 Einwohner">Gewerbe</th><th title="Baugenehmigungen je 1.000 Einwohner">Bau</th><th title="Passende Betriebe">Passt</th></tr></thead>
+          <tbody>{% for k in kreise|sort(attribute='bau_1000', reverse=true) if k.gewerbe_1000 is not none or k.bau_1000 is not none %}
+            <tr><td>{{ k.name }}</td>
+              <td class="{{ 'is-top' if k.gewerbe_top }}">{{ ('%.1f'|format(k.gewerbe_1000))|replace('.', ',') if k.gewerbe_1000 is not none else '–' }}</td>
+              <td class="{{ 'is-top' if k.bau_top }}">{{ ('%.1f'|format(k.bau_1000))|replace('.', ',') if k.bau_1000 is not none else '–' }}</td>
+              <td>{{ k.passend }}</td></tr>{% endfor %}</tbody>
+        </table></div>
+        <p class="muted small">Je 1.000 Einwohner. <b class="top-mark">Fett</b> = unter den {{ top }} stärksten Kreisen: Betriebe dort bekommen +5 (Gewerbe) bzw. Bau-Gewerke +8 (Baugenehmigungen).</p>
+        {% for kind, label in stand.items() %}<p class="muted small">{{ kinds[kind] }}: {{ label }}</p>{% endfor %}
+        {% else %}
+        <p class="small">Noch keine Zahlen. Exportiert aus der <a href="https://www.regionalstatistik.de" target="_blank" rel="noopener">Regionaldatenbank Deutschland</a> je eine Tabelle für Schleswig-Holstein auf Kreis-Ebene als CSV: Gewerbeanmeldungen (Statistik 52311) und Baugenehmigungen (Statistik 31111), mit einem Merkmal und einem Zeitraum. Dann hier importieren.</p>
+        {% endif %}
+        <details class="more region-import" {{ 'open' if not has_stats }}>
+          <summary class="small">Zahlen importieren</summary>
+          <form id="regionForm" class="region-form">
+            <label class="field"><span class="sub">Was steht in der Datei?</span>
+              <select name="kind" id="regionKind">{% for key, label in kinds.items() %}<option value="{{ key }}">{{ label }}</option>{% endfor %}</select></label>
+            <label class="field"><span class="sub">Zeitraum</span><input type="text" name="label" id="regionLabel" placeholder="z. B. 2025 oder 10/2025–09/2026"></label>
+            <label class="drop"><input type="file" name="file" id="regionFile" accept=".csv,text/csv" required><span>CSV-Datei auswählen</span></label>
+            <button class="btn small primary">Importieren</button>
+          </form>
+          <p class="muted small">Je Zeile ein Kreis (Schlüssel wie 01058 oder Name), der Wert ist die letzte Zahl der Zeile. Einwohner sind schon ungefähr hinterlegt, ein Import macht sie genau. Quelle: Statistische Ämter des Bundes und der Länder, Datenlizenz Deutschland – Namensnennung 2.0.</p>
+        </details>
+      </div>
+      <div class="side-block">
+        <span class="label">Kreisgrenzen</span>
+        <p class="small">{% if geo %}{{ geo|length }} Kreise geladen (OpenStreetMap). Jeder Betrieb wird seinem Kreis zugeordnet.{% else %}Noch nicht geladen. Das passiert beim nächsten Lauf automatisch. Bis dahin zeigt die Karte die Kreise als Kreise um die Kreisstadt.{% endif %}</p>
+        <button type="button" class="btn small" id="loadBorders">{{ 'Neu laden' if geo else 'Jetzt laden' }}</button>
       </div>
     </aside>
   </div>
 </main>
 <script type="application/json" id="mapData">{{ points|tojson }}</script>
+<script type="application/json" id="kreiseData">{{ kreise|tojson }}</script>
+<script type="application/json" id="geoData">{{ geo|tojson }}</script>
 {% endblock %}
 {% block scripts %}
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/leaflet/leaflet-heat.js') }}"></script>
+<script src="{{ url_for('static', filename='leads.js') }}"></script>
 <script src="{{ url_for('static', filename='karte.js') }}"></script>
 {% endblock %}

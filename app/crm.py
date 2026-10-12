@@ -301,7 +301,7 @@ PASSEND = ("passt", "entwurf", "versendet", "beantwortet")
 
 def map_points(conn):
     """Alle bewerteten Betriebe mit Koordinaten, für die Heatmap."""
-    rows = conn.execute("""SELECT id, name, lat, lon, fit_score, status, stage, interest, city, category_label, branche
+    rows = conn.execute("""SELECT id, name, lat, lon, fit_score, status, stage, interest, city, category_label, branche, kreis
                            FROM leads WHERE lat IS NOT NULL AND lon IS NOT NULL AND NOT (lat = 0 AND lon = 0)
                              AND fit_score IS NOT NULL""").fetchall()
     points = []

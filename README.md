@@ -69,6 +69,13 @@ Mails stehen in der Akte, der Betrieb rückt auf „Kontaktiert“.
   dazu die Betriebe im CRM als Punkte nach Stufe und eine Liste der stärksten Gegenden (Umkreis 12 km) mit den
   besten Betrieben darin. Gedacht für Vor-Ort-Tage. Leaflet liegt in `static/vendor/leaflet` (BSD-Lizenz), nur
   die Kartenkacheln kommen von OpenStreetMap.
+- **Wachstum je Kreis** (auf der Karte): Gewerbeanmeldungen und Baugenehmigungen je 1.000 Einwohner, als
+  eingefärbte Kreise und als Tabelle. Die Zahlen importiert ihr als CSV aus der
+  [Regionaldatenbank Deutschland](https://www.regionalstatistik.de) (Statistik 52311 Gewerbeanzeigen, 31111
+  Baugenehmigungen; Kreis-Ebene, ein Merkmal, ein Zeitraum; Datenlizenz Deutschland – Namensnennung 2.0).
+  Die 5 stärksten Kreise sind Wachstumsregionen: Betriebe dort bekommen +5 Punkte (Gewerbe), Bau-Gewerke +8
+  (Baugenehmigungen). Die Kreisgrenzen lädt der Server einmal über OpenStreetMap und ordnet jedem Betrieb
+  seinen Kreis zu. Einwohner sind gerundet hinterlegt, ein CSV-Import macht sie genau.
 - **Firma anlegen** von Hand (Messe, Empfehlung) und **CSV importieren** (Spalten Firma, E-Mail, Telefon,
   Webseite, Ansprechpartner, Ort, Adresse, Branche, Notiz; Dubletten werden übersprungen).
   **CSV exportieren** für Excel.
@@ -217,6 +224,7 @@ app/leads_views.py     Akquise: Übersicht, Akte mit Chat, Regeln, Gehirn, Web-A
 app/crm_views.py       CRM: Pipeline-Board, Karte, Wiedervorlagen, Kontaktdaten, Firma anlegen, CSV
 app/crm.py             Pipeline-Stufen, Wiedervorlagen, Import/Export, Versand aus „Verfassen“ in der Akte
 app/scoring.py         Bewertung nach Regeln und Einordnen von Antworten, beides ohne KI
+app/regions.py         Kreise: Grenzen, Statistik je Kreis, Wachstumsregionen
 app/agent.py           Hintergrund-Arbeiter: suchen, bewerten, Antworten lesen, Entwürfe auf Wunsch
 app/ai.py              KI (Claude) nur zum Schreiben: Entwurf, Chat, Erinnerung, Lernen
 app/finder.py          Betriebe aus OpenStreetMap, Webseiten lesen

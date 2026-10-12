@@ -25,7 +25,7 @@ from email.message import EmailMessage
 from email.utils import formataddr, formatdate, parseaddr
 from urllib.parse import urlparse
 
-from . import ai, crm, emailbuild, finder, leaddb, scoring, webpush
+from . import ai, crm, emailbuild, finder, leaddb, regions, scoring, webpush
 
 log = logging.getLogger("ylva.leads")
 
@@ -246,7 +246,7 @@ def stage_score(c, lead_id, learned, promote=True):
     leaddb.update_lead(c, lead_id, status="recherche")
     research = finder.research_website(lead["website"]) if lead["website"] else \
         {"pages": [], "emails": [], "links": [], "errors": ["keine Webseite"]}
-    result = scoring.score(lead, research, learned)
+    result = scoring.score(lead, research, learned, regions.bonus_info(leaddb.kv_get(c, "regionen")))
     threshold = S("LEADS_RULE_MIN")
     email_addr = result["email"] or lead["email"] or None
     passes = result["score"] >= threshold and not result["ko"]
@@ -454,6 +454,8 @@ def execute_run(c, run_id):
         if p.get("suchen") or (check and not c.execute("SELECT 1 FROM leads WHERE status='kandidat'").fetchone()):
             counts["neu_gefunden"], counts["grobfilter"] = run_search(c)
         counts["grobfilter"] += learned_filter(c)
+        ensure_boundaries(c)
+        assign_kreise(c)
 
         # Schritt 2: nach Regeln bewerten (kostenlos, nur die Webseite wird gelesen)
         learned = scoring.learned_adjustments(leaddb.category_outcomes(c))
@@ -769,6 +771,10 @@ def tick():
             if leaddb.kv_get(c, "request:reflect") and ai.available():
                 leaddb.kv_set(c, "request:reflect", False)
                 maybe_reflect(c, force=True)
+            if leaddb.kv_get(c, "request:kreise"):
+                leaddb.kv_set(c, "request:kreise", False)
+                ensure_boundaries(c, force=True)
+                assign_kreise(c, everything=True)
             wanted = leaddb.kv_get(c, "request:lead")
             if wanted:
                 leaddb.kv_set(c, "request:lead", None)
@@ -784,6 +790,37 @@ def tick():
         finally:
             c.close()
             set_activity("Wartet")
+
+
+def ensure_boundaries(c, force=False):
+    """Kreisgrenzen einmal über OpenStreetMap laden (nur für Schleswig-Holstein). Fehler halten nichts auf."""
+    if S("LEADS_REGION") != "DE-SH" or (leaddb.kv_get(c, "kreise_geo") and not force):
+        return False
+    set_activity("Lädt die Kreisgrenzen von Schleswig-Holstein (einmalig) …")
+    try:
+        geo = regions.load_boundaries(S("OVERPASS_URL"), S("LEADS_REGION"))
+    except Exception as exc:
+        log.warning("Kreisgrenzen nicht geladen: %s", exc)
+        STATE["error"], STATE["error_at"] = f"Kreisgrenzen konnten nicht geladen werden ({exc}).", time.time()
+        return False
+    if len(geo) < 10:  # unvollständig: lieber nicht speichern
+        log.warning("Nur %s Kreise in der Antwort, Grenzen nicht gespeichert", len(geo))
+        return False
+    leaddb.kv_set(c, "kreise_geo", geo)
+    return True
+
+
+def assign_kreise(c, everything=False):
+    """Jedem Betrieb mit Koordinaten seinen Kreis zuordnen (Punkt in Kreisgrenze)."""
+    geo = leaddb.kv_get(c, "kreise_geo")
+    if not geo:
+        return 0
+    where = "lat IS NOT NULL" + ("" if everything else " AND kreis IS NULL")
+    rows = c.execute(f"SELECT id, lat, lon FROM leads WHERE {where}").fetchall()
+    for r in rows:
+        c.execute("UPDATE leads SET kreis=? WHERE id=?", (regions.kreis_of(geo, r["lat"], r["lon"]), r["id"]))
+    c.commit()
+    return len(rows)
 
 
 def recheck_lead(c, lead_id):

@@ -36,6 +36,40 @@
   document.getElementById('showPipeline')?.addEventListener('change', (e) => {
     if (e.target.checked) pipeline.addTo(map); else map.removeLayer(pipeline);
   });
+  // Wachstum je Kreis: Flächen (wenn Grenzen geladen sind), sonst Kreise um die Kreisstadt
+  const kreise = JSON.parse(document.getElementById('kreiseData')?.textContent || '[]');
+  const geo = JSON.parse(document.getElementById('geoData')?.textContent || '{}');
+  const SCALE = ['#e9f4fd', '#bfe2fb', '#8fd0ff', '#5aa9e6', '#f6d36d', '#e8833a'];
+  map.createPane('kreise').style.zIndex = 350;  // unter der Heatmap
+  let kreisLayer = null;
+  function showKreise(kind) {
+    if (kreisLayer) { map.removeLayer(kreisLayer); kreisLayer = null; }
+    document.querySelector('.kreis-legend')?.toggleAttribute('hidden', !kind);
+    if (!kind) return;
+    const field = kind + '_1000';
+    const vals = kreise.map(k => k[field]).filter(v => v != null).sort((a, b) => a - b);
+    if (!vals.length) return;
+    const colorOf = (v) => {
+      if (v == null) return '#f1f4f7';
+      const rank = vals.indexOf(v) / Math.max(1, vals.length - 1);
+      return SCALE[Math.min(SCALE.length - 1, Math.floor(rank * SCALE.length))];
+    };
+    const label = kind === 'bau' ? 'Baugenehmigungen' : 'Gewerbeanmeldungen';
+    kreisLayer = L.layerGroup(kreise.map(k => {
+      const v = k[field];
+      const tip = `<b>${esc(k.name)}</b><br>${label}: ${v == null ? 'keine Zahl' : String(v).replace('.', ',') + ' je 1.000 Einwohner'}`
+        + (k[kind + '_rang'] ? `<br>Platz ${k[kind + '_rang']} von ${vals.length}` : '') + `<br>${k.passend} passende Betriebe`;
+      const style = { pane: 'kreise', color: '#4a525c', weight: 1, fillColor: colorOf(v), fillOpacity: 0.55 };
+      if (geo[k.key]) return L.polygon(geo[k.key].rings, style).bindTooltip(tip, { sticky: true });
+      const r = v == null ? 6 : 8 + 22 * (vals.indexOf(v) / Math.max(1, vals.length - 1));
+      return L.circleMarker([k.lat, k.lon], { ...style, radius: r, fillOpacity: 0.7 }).bindTooltip(tip);
+    })).addTo(map);
+  }
+  document.querySelectorAll('[data-kreise]').forEach(b => b.addEventListener('click', () => {
+    document.querySelectorAll('[data-kreise]').forEach(x => x.classList.toggle('on', x === b));
+    showKreise(b.dataset.kreise);
+  }));
+
   document.querySelectorAll('.hs-head').forEach(b => b.addEventListener('click', () => {
     map.flyTo([+b.dataset.lat, +b.dataset.lon], 11, { duration: 0.8 });
     el.scrollIntoView({ block: 'nearest', behavior: 'smooth' });

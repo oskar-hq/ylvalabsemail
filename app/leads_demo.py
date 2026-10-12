@@ -12,6 +12,18 @@ ORTE = {"Kappeln": (54.661, 9.931), "Arnis": (54.630, 9.932), "Süderbrarup": (5
         "Neumünster": (54.073, 9.984), "Husum": (54.477, 9.052), "Heide": (54.196, 9.093), "Itzehoe": (53.925, 9.516),
         "Lübeck": (53.866, 10.686), "Bad Segeberg": (53.936, 10.309), "Eutin": (54.137, 10.618), "Plön": (54.162, 10.421),
         "Elmshorn": (53.754, 9.652), "Niebüll": (54.789, 8.829), "Bad Oldesloe": (53.811, 10.374), "Ratzeburg": (53.700, 10.757)}
+# Kreis je Ort (Kreisschlüssel)
+ORT_KREIS = {"Kappeln": "01059", "Arnis": "01059", "Süderbrarup": "01059", "Rabenkirchen-Faulück": "01059",
+             "Schleswig": "01059", "Eckernförde": "01058", "Damp": "01058", "Rendsburg": "01058", "Kiel": "01002",
+             "Flensburg": "01001", "Neumünster": "01004", "Husum": "01054", "Niebüll": "01054", "Heide": "01051",
+             "Itzehoe": "01061", "Lübeck": "01003", "Bad Segeberg": "01060", "Eutin": "01055", "Plön": "01057",
+             "Elmshorn": "01056", "Bad Oldesloe": "01062", "Ratzeburg": "01053"}
+# Erfundene Beispielzahlen je 1.000 Einwohner (Gewerbeanmeldungen, Baugenehmigungen), nur für die Demo
+BEISPIEL_JE_1000 = {"01001": (8.1, 1.4), "01002": (9.4, 1.6), "01003": (8.6, 1.5), "01004": (7.2, 1.9),
+                    "01051": (6.4, 2.6), "01053": (7.9, 3.1), "01054": (6.9, 2.4), "01055": (7.4, 2.8),
+                    "01056": (9.1, 2.9), "01057": (6.6, 2.2), "01058": (7.0, 2.7), "01059": (6.8, 3.0),
+                    "01060": (8.3, 3.3), "01061": (6.2, 2.0), "01062": (8.8, 3.4)}
+
 # Reserve: passende Betriebe ohne Nachricht, verteilt übers Land (Anzahl je Ort), damit die Karte etwas zeigt
 RESERVE = {"Kiel": 7, "Flensburg": 6, "Schleswig": 4, "Rendsburg": 4, "Eckernförde": 3, "Neumünster": 4, "Husum": 2,
            "Heide": 2, "Lübeck": 5, "Bad Segeberg": 2, "Itzehoe": 1, "Elmshorn": 2, "Kappeln": 3}
@@ -177,6 +189,14 @@ def seed(conn):
             leaddb.add_event(conn, lead_id, "classify", d["reply_summary"], author="Regeln",
                              meta={"grund": d["grund"], "naechster_schritt": d["schritt"]})
     _seed_reserve(conn, t0)
+    for city, key in ORT_KREIS.items():
+        conn.execute("UPDATE leads SET kreis=? WHERE city=? AND source_id LIKE 'demo:%'", (key, city))
+    if not leaddb.kv_get(conn, "regionen"):
+        from .regions import EINWOHNER_UNGEFAEHR
+        leaddb.kv_set(conn, "regionen", {
+            "gewerbe": {k: round(g * EINWOHNER_UNGEFAEHR[k] / 1000) for k, (g, _) in BEISPIEL_JE_1000.items()},
+            "bau": {k: round(b * EINWOHNER_UNGEFAEHR[k] / 1000) for k, (_, b) in BEISPIEL_JE_1000.items()},
+            "stand": {"gewerbe": "Beispielzahlen, erfunden", "bau": "Beispielzahlen, erfunden"}})
     # Wiedervorlagen, damit „Heute dran“ etwas zeigt
     if not conn.execute("SELECT 1 FROM tasks").fetchone():
         names = {r["name"]: r["id"] for r in conn.execute("SELECT id, name FROM leads WHERE source_id LIKE 'demo:%'")}

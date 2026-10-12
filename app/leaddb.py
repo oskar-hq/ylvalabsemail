@@ -101,6 +101,8 @@ MIGRATIONS = [
     "ALTER TABLE leads ADD COLUMN stage TEXT",
     "ALTER TABLE leads ADD COLUMN stage_at TEXT",
     "ALTER TABLE leads ADD COLUMN deal_eur REAL",
+    # Kreisschlüssel (z. B. 01058), aus den Kreisgrenzen bestimmt
+    "ALTER TABLE leads ADD COLUMN kreis TEXT",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.

@@ -377,6 +377,14 @@ dialog ol{padding-left:18px;color:var(--body)}
 .hs-head:hover b,.hs-head:focus-visible b{color:var(--blue)}
 .hotspots ul{margin:6px 0 0}
 @media (max-width:1000px){.map-grid{grid-template-columns:minmax(0,1fr)}.map{height:60vh}}
+.kreis-scale{display:inline-block;width:46px;height:8px;background:linear-gradient(90deg,#e9f4fd,#bfe2fb,#8fd0ff,#5aa9e6,#f6d36d,#e8833a)}
+.kreis-table td.is-top,.top-mark{font-weight:600;color:var(--ink)}
+.kreis-table td{font-variant-numeric:tabular-nums}
+.region-import{margin-top:10px}
+.region-form{display:flex;flex-direction:column;gap:4px;margin:8px 0}
+.region-form select,.region-form input[type=text]{padding:6px 10px;font:400 13px/1.5 var(--sans);border:1px solid var(--line);background:var(--paper);width:100%}
+.region-form .drop{min-height:56px;margin-bottom:6px}
+.region-form .btn{align-self:flex-start}
 .ko-box{margin:0 0 21px}
 .write-help{background:var(--tint);padding:10px 12px;margin:0 0 14px}
 .write-help p{margin:0 0 8px;color:var(--body)}
