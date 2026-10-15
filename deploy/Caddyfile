@@ -1,0 +1,8 @@
+# HTTPS-Zertifikat holt Caddy automatisch, sobald die Domain auf diesen Server zeigt.
+{$DOMAIN} {
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+	}
+	reverse_proxy mailer:8080
+}

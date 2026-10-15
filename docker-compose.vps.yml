@@ -1,0 +1,38 @@
+# Für einen gemieteten Server (VPS) mit eigener Domain: Caddy davor besorgt automatisch ein
+# HTTPS-Zertifikat (Let's Encrypt). Die App selbst ist von außen nicht direkt erreichbar.
+# deploy/setup.sh trägt COMPOSE_FILE=docker-compose.vps.yml in die .env ein, dann reicht überall
+# ein einfaches `docker compose …`.
+services:
+  mailer:
+    build: .
+    container_name: ylva-mailer
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      TRUST_PROXY: proxy
+      COOKIE_SECURE: "true"
+    expose:
+      - "8080"
+    volumes:
+      - mailer-data:/data
+
+  caddy:
+    image: caddy:2
+    container_name: ylva-caddy
+    restart: unless-stopped
+    depends_on:
+      - mailer
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?DOMAIN fehlt in der .env}
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+volumes:
+  mailer-data:
+  caddy-data:
+  caddy-config:

@@ -683,6 +683,16 @@ class ViewsTest(unittest.TestCase):
         self.assertEqual(lead["status"], "versendet")
         self.assertIn("Gestaltete Mail", c.execute("SELECT text FROM lead_events WHERE lead_id=? AND kind='sent'",
                                                    (new_id,)).fetchone()[0])
+        # Systemcheck ohne echte Netzwerkzugriffe
+        from app import systemcheck
+        with mock.patch.object(systemcheck.urllib.request, "urlopen", side_effect=OSError("gesperrt")), \
+                mock.patch.object(finder, "fetch_page", return_value=("https://ylvalabs.de/", "<html></html>")):
+            html = self.client.get("/leads/system").get_data(as_text=True)
+        self.assertIn("Kartensuche (OpenStreetMap)", html)
+        self.assertIn("overpass-api.de erreichen", html)   # Hinweis bei Fehler
+        self.assertIn("DEMO_MODE ist an", html)            # Test läuft im Demo-Modus
+        self.assertIn("Bewertung, CRM und Vorlage laufen trotzdem", html)  # ohne KI-Schlüssel nur ein Hinweis
+        self.assertIn("Kreise und Wachstumszahlen", html)
         self.assertEqual(len(webpush.b64u_decode(self.client.get("/push/key").get_json()["key"])), 65)
 
 
