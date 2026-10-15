@@ -1,10 +1,11 @@
-"""Systemcheck: Ist alles eingerichtet? Prüft Einstellungen, Postfach, KI, Kartensuche, Webseiten und Push.
+"""Systemcheck: Ist alles eingerichtet? Prüft Einstellungen, Postfach, KI, Kartensuche, Kreisdaten, Webseiten und Push.
 
 In der App unter „Leads → Systemcheck“, oder im Terminal auf dem Server:
     docker compose exec mailer python -m app.systemcheck      (mit Docker)
     /opt/ylva-mailer/.venv/bin/python -m app.systemcheck       (ohne Docker, im Ordner /opt/ylva-mailer)
 
 Kostet nichts: Es wird keine KI-Anfrage gestellt, nur geprüft, ob Schlüssel und Modelle freigeschaltet sind.
+Der KI-Schlüssel ist optional; ohne ihn laufen Bewertung (nach Regeln), CRM und die Vorlage trotzdem.
 """
 import imaplib
 import os
@@ -21,6 +22,7 @@ FAIL_HINTS = {
                           "Die Firewall des Servers muss ausgehend Port 465 bzw. 587 erlauben.",
     "Posteingang (IMAP)": "IMAP_HOST prüfen (Strato: imap.strato.de) und ausgehend Port 993 erlauben.",
     "KI-Schlüssel und Modelle": "Schlüssel in console.anthropic.com prüfen; der Server muss api.anthropic.com erreichen.",
+    "Kreise und Wachstumszahlen": "Datenbank prüfen; notfalls CRM → Karte → Kreisgrenzen neu laden.",
     "Kartensuche (OpenStreetMap)": "Der Server muss overpass-api.de erreichen. Ist der Dienst überlastet, später erneut prüfen.",
     "Webseiten lesen": "Der Server muss ausgehend beliebige Webseiten über HTTPS (Port 443) erreichen.",
     "Datenordner": "Rechte des Datenordners prüfen (Docker: Volume mailer-data).",
@@ -100,17 +102,34 @@ def run(settings, smtp_connect, sent_folder, data_dir):
 
     def ai_check():
         if not ai.available():
-            return FAIL, "ANTHROPIC_API_KEY fehlt", "Schlüssel in der Anthropic Console erzeugen und in die .env eintragen."
+            return WARN, "Kein ANTHROPIC_API_KEY: Bewertung, CRM und Vorlage laufen trotzdem, nur KI-Entwürfe nicht", \
+                "Optional: Schlüssel in der Anthropic Console erzeugen (mit Ausgabenlimit) und in die .env eintragen."
         client = ai.client()
-        found = []
-        for stage in ("vorpruefung", "analyse", "entwurf"):
-            model = ai.MODELS[stage]
+        models = sorted(set(ai.MODELS.values()))
+        for model in models:
             try:
                 client.models.retrieve(model)
-                found.append(model)
             except Exception as exc:
-                return FAIL, f"Modell {model} nicht verfügbar: {exc}", "AI_MODEL_QUICK / AI_MODEL_ANALYSE / AI_MODEL prüfen."
-        return OK, "Schlüssel gültig, freigeschaltet: " + ", ".join(dict.fromkeys(found)), None
+                return FAIL, f"Modell {model} nicht verfügbar: {exc}", "AI_MODEL / AI_MODEL_ANALYSE in der .env prüfen."
+        return OK, "Schlüssel gültig, freigeschaltet: " + ", ".join(models), None
+
+    def regions_check():
+        if S["LEADS_REGION"] != "DE-SH":
+            return OK, f"Suchgebiet: Umkreis {S['LEADS_RADIUS_KM']:g} km (keine Kreisdaten nötig)", None
+        c = leaddb.connect(data_dir / "mailer.db")
+        try:
+            geo = leaddb.kv_get(c, "kreise_geo")
+            store = leaddb.kv_get(c, "regionen", {}) or {}
+        finally:
+            c.close()
+        stand = " ".join((store.get("stand") or {}).values())
+        if not geo:
+            return WARN, "Kreisgrenzen noch nicht geladen", \
+                "Werden beim ersten Lauf automatisch über OpenStreetMap geladen (oder CRM → Karte)."
+        if not (store.get("gewerbe") or store.get("bau")) or "erfunden" in stand:
+            return WARN, f"Kreisgrenzen da ({len(geo)} Kreise), aber keine echten Wachstumszahlen", \
+                "CRM → Karte: Gewerbeanmeldungen und Baugenehmigungen als CSV vom Statistikamt Nord importieren."
+        return OK, f"{len(geo)} Kreise, Wachstumszahlen: {stand or 'importiert'}", None
 
     def overpass_check():
         url = S["OVERPASS_URL"].rsplit("/", 1)[0] + "/status"
@@ -157,7 +176,7 @@ def run(settings, smtp_connect, sent_folder, data_dir):
     checks = [
         ("Grundeinstellungen", config), ("HTTPS-Adresse", https), ("Datenordner", storage),
         ("Postausgang (SMTP)", smtp_check), ("Posteingang (IMAP)", imap_check), ("KI-Schlüssel und Modelle", ai_check),
-        ("Kartensuche (OpenStreetMap)", overpass_check), ("Webseiten lesen", web_check), ("Push-Benachrichtigungen", push_check),
+        ("Kartensuche (OpenStreetMap)", overpass_check), ("Kreise und Wachstumszahlen", regions_check), ("Webseiten lesen", web_check), ("Push-Benachrichtigungen", push_check),
         ("Benachrichtigung per Mail", notify_check), ("Budget und Versand", budget_check), ("Hintergrund-Arbeiter", worker_check),
     ]
     return [_check(name, func) for name, func in checks]

@@ -7,6 +7,7 @@
   <p class="crumbs mono"><a href="{{ url_for('leads.overview') }}">← Leads</a></p>
   <span class="label">03 · Leads · Kosten</span>
   <h1 class="title">Was die KI kostet.</h1>
+  <p class="muted measure">Suche, Bewertung nach Regeln, Einordnen der Antworten und das CRM kosten nichts. Geld kostet nur, was die KI schreibt: Entwürfe, Überarbeitungen im Chat, Erinnerungen und das Lernen des Stils.</p>
 
   <div class="costs big">
     <div class="cost"><span class="label">Heute</span><b>{{ euro(money(summary.today.usd)) }}</b><span class="muted small">{{ num(summary.today.tin + summary.today.tout) }} Tokens</span></div>
@@ -16,7 +17,7 @@
   </div>
 
   <section class="lead-section">
-    <div class="section-head"><h2>Nach Stufe, dieser Monat</h2><span class="muted small">Je später die Stufe, desto stärker das Modell und desto weniger Betriebe.</span></div>
+    <div class="section-head"><h2>Wofür, dieser Monat</h2><span class="muted small">Jede Anfrage an die KI, nach Zweck.</span></div>
     {% if stages %}
     <div class="table-wrap"><table class="stats">
       <thead><tr><th>Stufe</th><th>Modell</th><th>Anfragen</th><th>Tokens rein</th><th>Tokens raus</th><th>Kosten</th><th>pro Anfrage</th></tr></thead>
@@ -26,15 +27,14 @@
   </section>
 
   <section class="lead-section">
-    <div class="section-head"><h2>Läufe</h2><span class="muted small">Die KI arbeitet nur in Läufen, die ihr startet.</span></div>
+    <div class="section-head"><h2>Läufe</h2><span class="muted small">Nur Läufe, die ihr startet. Die KI schreibt darin nur, wenn ihr Entwürfe anfordert.</span></div>
     {% if runs %}
     <div class="table-wrap"><table class="stats">
-      <thead><tr><th>Start</th><th>Von</th><th>Status</th><th>Vorgeprüft</th><th>Analysiert</th><th>Entwürfe</th><th>Budget</th><th>Kosten</th></tr></thead>
+      <thead><tr><th>Start</th><th>Von</th><th>Status</th><th>Bewertet</th><th>Entwürfe</th><th>Budget</th><th>Kosten</th></tr></thead>
       <tbody>{% for r in runs %}<tr>
         <td>{{ r.started_at|kurzdatum }} <span class="muted">{{ r.started_at[11:16] }}</span></td><td class="small">{{ r.started_by }}</td>
         <td>{{ {'fertig': 'Fertig', 'gestoppt': 'Gestoppt', 'fehler': 'Fehler', 'laeuft': 'Läuft', 'wartet': 'Startet', 'abgebrochen': 'Abgebrochen'}.get(r.status, r.status) }}{% if r.message %}<br><span class="muted small">{{ r.message }}</span>{% endif %}</td>
-        <td>{{ r.counts.vorgeprueft or 0 }} <span class="muted">→ {{ r.counts.vorpruefung_durch or 0 }} weiter</span></td>
-        <td>{{ r.counts.analysiert or 0 }} <span class="muted">→ {{ r.counts.analyse_durch or 0 }} passen</span></td>
+        <td>{{ r.counts.bewertet or r.counts.vorgeprueft or 0 }} <span class="muted">→ {{ r.counts.passen or r.counts.analyse_durch or 0 }} passen{% if r.counts.ins_crm is defined %}, {{ r.counts.ins_crm }} ins CRM{% endif %}</span></td>
         <td><b>{{ r.counts.entwuerfe or 0 }}</b></td><td>{{ euro(r.params.budget_eur or 0) }}</td><td><b>{{ euro(r.eur) }}</b></td></tr>{% endfor %}</tbody>
     </table></div>
     {% else %}<p class="muted small empty">Noch kein Lauf.</p>{% endif %}
@@ -45,8 +45,8 @@
     <p class="small muted measure">Jede Anfrage meldet ihre Tokens. Daraus rechnet die App mit der Preisliste von Anthropic den Betrag in US-Dollar aus und rechnet ihn mit {{ '%.2f'|format(eur_rate)|replace('.', ',') }} € pro Dollar um (<code>EUR_PER_USD</code> in der .env). Zwischengespeicherte Tokens (Prompt-Caching) werden mit dem vergünstigten Satz gezählt. Maßgeblich bleibt eure Rechnung in der Anthropic Console, die Werte hier sind eine sehr genaue Schätzung.</p>
     <div class="table-wrap"><table class="stats small">
       <thead><tr><th>Modell</th><th>Eingesetzt für</th><th>$ je 1 Mio. Tokens rein</th><th>$ je 1 Mio. Tokens raus</th></tr></thead>
-      <tbody>{% for key, model in [('vorpruefung', models.vorpruefung), ('analyse', models.analyse), ('entwurf', models.entwurf)] %}
-        <tr><td><code>{{ model }}</code></td><td>{{ stage_labels[key] }}{% if key == 'analyse' %}, Antworten einordnen, Lernen{% elif key == 'entwurf' %}, Chat{% endif %}</td><td>{{ prices.get(model, ('?', '?'))[0] }}</td><td>{{ prices.get(model, ('?', '?'))[1] }}</td></tr>{% endfor %}</tbody>
+      <tbody>{% for key, model, use in [('entwurf', models.entwurf, 'Entwurf schreiben, Chat'), ('lernen', models.lernen, 'Erinnerung schreiben, Lernen')] %}
+        <tr><td><code>{{ model }}</code></td><td>{{ use }}</td><td>{{ prices.get(model, ('?', '?'))[0] }}</td><td>{{ prices.get(model, ('?', '?'))[1] }}</td></tr>{% endfor %}</tbody>
     </table></div>
   </section>
 </main>

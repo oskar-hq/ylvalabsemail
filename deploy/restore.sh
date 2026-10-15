@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Spielt eine Sicherung aus deploy/backup.sh zurück (Docker-Variante), z. B. beim Umzug auf einen neuen Server.
 # Aufruf aus dem Projektordner:  bash deploy/restore.sh ~/ylva-backups/ylva-mailer_<DATUM>.tar.gz
-# Achtung: Ersetzt die aktuelle Datenbank (Leads, Gehirn, Kosten) durch die aus der Sicherung.
+# Achtung: Ersetzt die aktuelle Datenbank (Leads, CRM, Gehirn, Kosten) durch die aus der Sicherung.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 

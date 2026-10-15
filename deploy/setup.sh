@@ -95,9 +95,17 @@ if [ -z "${SKIP_ENV:-}" ]; then
   ask FOOTER "Fußzeile der Mails (Firmenname und Anschrift wie im Impressum)" "Ylva Labs · Schleswig-Holstein"
 
   echo
-  bold "KI"
+  bold "Suchgebiet"
+  echo "  DE-SH = ganz Schleswig-Holstein (mit Kreisen und Wachstumskarte)"
+  echo "  umkreis = Umkreis um Kappeln (Radius LEADS_RADIUS_KM, Standard 50 km)"
+  ask REGION "Suchgebiet (DE-SH oder umkreis)" "DE-SH"
+  case "$REGION" in [uU]mkreis) REGION="" ;; esac
+
+  echo
+  bold "KI (optional)"
+  echo "Bewertung, CRM und die Vorlage laufen ohne KI. Der Schlüssel wird nur für KI-Entwürfe gebraucht."
   echo "Schlüssel aus console.anthropic.com → API Keys. Dort auch ein Ausgabenlimit setzen!"
-  ask_secret ANTHROPIC_API_KEY "ANTHROPIC_API_KEY (leer lassen = später eintragen)"
+  ask_secret ANTHROPIC_API_KEY "ANTHROPIC_API_KEY (leer lassen = ohne KI)"
   ask BUDGET "Monatsbudget für die KI in Euro (harte Grenze)" "20"
 
   for pair in "Passwort:$OUTREACH_PASSWORD" "Schlüssel:$ANTHROPIC_API_KEY" "Absendername:$SENDER" "Fußzeile:$FOOTER"; do
@@ -133,6 +141,7 @@ if [ -z "${SKIP_ENV:-}" ]; then
     echo "NOTIFY_EMAILS=$NOTIFY_EMAILS"
     echo "LEADS_SENDER_NAME='$SENDER'"
     echo "LEADS_MONTHLY_BUDGET_EUR=$BUDGET"
+    echo "LEADS_REGION=$REGION"
   } > .env
   chmod 600 .env
   echo

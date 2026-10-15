@@ -1,6 +1,6 @@
 # Auf dem eigenen PC ausprobieren
 
-So läuft der Mailer mit der KI-Akquise auf deinem Laptop, ganz ohne Server. Gut für einen ersten
+So läuft der Mailer mit Akquise und CRM auf deinem Laptop, ganz ohne Server. Gut für einen ersten
 echten Test mit kleinem Budget, bevor alles auf einen Server umzieht.
 
 **Was dabei nicht geht:** Push-Nachrichten aufs Handy (dafür braucht es HTTPS), und Läufe laufen nur,
@@ -36,11 +36,13 @@ Dann im Browser **http://localhost:8080** öffnen und mit deinem `@ylvalabs.de`-
 
 ## 3. Erster Lauf
 
-1. „03 Leads“ öffnen. Oben links bei „Systemcheck →“ sollte alles grün oder gelb sein.
-2. Einen **kleinen** Lauf starten: 10 Betriebe vorprüfen, höchstens 2 Entwürfe, Budget 1 €,
-   „Vorher neu suchen“ angehakt.
-3. Die Kosten laufen oben live mit. Nach ein paar Minuten liegen die Entwürfe unter „Zur Prüfung“.
-4. Entwürfe lesen, im Chat verbessern lassen und unter „Kosten im Detail“ ansehen, was es gekostet hat.
+1. „03 Leads“ öffnen. Oben bei „Systemcheck →“ sollte alles grün oder gelb sein.
+2. Einen **kleinen** Lauf starten: 30 Betriebe bewerten, die besten 10 ins CRM, „Vorher neu suchen“ angehakt.
+   Die Bewertung läuft nach festen Regeln und kostet nichts. Der erste Lauf lädt außerdem einmalig die Kreisgrenzen.
+3. Nach ein paar Minuten liegen die besten Betriebe im CRM („04 CRM“). In jeder Akte steht, welche Regel wie viele
+   Punkte gegeben hat. Unter „So wird bewertet“ seht ihr alle Regeln.
+4. Für einen Betrieb einen Entwurf erstellen: mit der Vorlage (kostenlos) oder, falls ein KI-Schlüssel eingetragen
+   ist, von der KI. Die Kosten der KI stehen unter „Kosten im Detail“.
 
 ## Stoppen, starten, aktualisieren
 
@@ -50,7 +52,7 @@ docker compose start                      # wieder starten
 git pull && docker compose up -d --build  # auf den neuesten Stand bringen
 ```
 
-Die Daten (Leads, Gehirn, Kosten) bleiben dabei erhalten. Sie liegen in einem Docker-Volume, nicht im Projektordner.
+Die Daten (Leads, CRM, Gehirn, Kosten) bleiben dabei erhalten. Sie liegen in einem Docker-Volume, nicht im Projektordner.
 
 ## Später auf den Server umziehen
 
@@ -65,4 +67,5 @@ Die Daten (Leads, Gehirn, Kosten) bleiben dabei erhalten. Sie liegen in einem Do
 | `docker: command not found` / „Cannot connect to the Docker daemon“ | Docker Desktop starten und warten, bis „Engine running“ steht. |
 | Port 8080 belegt | Ein anderes Programm nutzt den Port. In `docker-compose.yml` `"8080:8080"` z. B. in `"8090:8080"` ändern und http://localhost:8090 öffnen. |
 | Systemcheck: Postausgang/Posteingang „Fehlt“ | Adresse und Passwort des Akquise-Postfachs prüfen. Mit `bash deploy/setup.sh` neu eingeben. |
-| Systemcheck: KI-Schlüssel „Fehlt“ | Schlüssel in console.anthropic.com prüfen, Guthaben vorhanden? |
+| Systemcheck: KI-Schlüssel „Hinweis“ | Normal ohne Schlüssel: Bewertung, CRM und Vorlage laufen trotzdem. Für KI-Entwürfe einen Schlüssel aus console.anthropic.com eintragen. |
+| Systemcheck: Kreise „Hinweis“ | Die Kreisgrenzen kommen mit dem ersten Lauf. Echte Wachstumszahlen unter „CRM → Karte“ importieren. |

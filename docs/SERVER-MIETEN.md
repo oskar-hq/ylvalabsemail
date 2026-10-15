@@ -51,7 +51,7 @@ bash deploy/setup.sh
 - Bei „Wo soll die App laufen?“ **1** wählen (gemieteter Server).
 - Domain: `mail.ylvalabs.de`.
 - Das Skript bietet an, Docker zu installieren: mit **j** bestätigen.
-- Zugangsdaten eintippen: Akquise-Postfach, KI-Schlüssel, Monatsbudget.
+- Zugangsdaten eintippen: Akquise-Postfach, Suchgebiet (Standard: ganz Schleswig-Holstein), optional KI-Schlüssel und Monatsbudget.
 - Am Ende läuft der **Systemcheck**, und das Skript bietet die **tägliche Sicherung** an: mit **j** bestätigen.
 
 Ist das Repository privat, braucht der Server einen Lesezugang. Am einfachsten ist ein
@@ -91,7 +91,7 @@ bash deploy/restore.sh ~/ylva-backups/ylva-mailer_<DATUM>.tar.gz
 Die Sicherungsdatei vorher auf den Server kopieren, z. B. vom PC aus mit
 `scp ylva-mailer_<DATUM>.tar.gz root@<IP>:ylva-backups/`.
 
-Danach sind Leads, Gehirn, Kosten und angemeldete Geräte wieder da. Die Handys müssen sich
+Danach sind Leads, CRM, Gehirn, Kosten und angemeldete Geräte wieder da. Die Handys müssen sich
 nach einem Umzug auf eine andere Adresse einmal neu für Benachrichtigungen anmelden.
 
 ## Sicherheit

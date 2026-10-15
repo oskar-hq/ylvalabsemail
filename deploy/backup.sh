@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Sichert alles, was nicht im Code steckt: Datenbank (Leads, Gehirn, Kosten), Push-Schlüssel,
+# Sichert alles, was nicht im Code steckt: Datenbank (Leads, CRM, Gehirn, Kosten), Push-Schlüssel,
 # Sitzungsschlüssel und hochgeladene Bilder. Die .env (Passwörter) wird NICHT mitgesichert.
 #
 # Aufruf aus dem Projektordner:  bash deploy/backup.sh [Zielordner]

@@ -32,17 +32,19 @@ Feedback und aus den Antworten der Firmen fort.
 
 ## Wen wir suchen
 
-- Mittelständische und kleinere Betriebe im Umkreis von 50 km um Kappeln (Schlei, Angeln, Schwansen,
-  Flensburg, Eckernförde, Schleswig).
-- Gut passend: 5 bis 250 Mitarbeitende, spürbar viel Verwaltung, Dokumentation oder Kundenkontakt,
-  wiederkehrende Abläufe, die heute von Hand laufen.
+- Mittelständische und kleinere Betriebe in Schleswig-Holstein. Wir sitzen in Kappeln und kommen
+  im ganzen Land vor Ort vorbei.
+- Ideal: inhabergeführt, 10 bis 100 Mitarbeitende, spürbar viel Verwaltung, Dokumentation oder Kundenkontakt,
+  wiederkehrende Abläufe, die heute von Hand laufen, und akuter Druck (sucht Leute fürs Büro, wächst).
+- Kernbranchen: Heizung/Sanitär, Elektro, Tischlerei und Innenausbau, Metallbau, Dachdecker, Bauunternehmen,
+  Garten- und Landschaftsbau, ambulante Pflege, Tagespflege und private Pflegeheime, Landwirtschaft und
+  Lohnunternehmen. Außerdem: Hausverwaltungen, Ingenieur- und Vermessungsbüros, Speditionen, Werften und Bootsbau.
 - Anzeichen für Bedarf: Kontakt nur per Telefon/Fax, Formulare als PDF zum Ausdrucken, Stellenanzeigen für
   Büro/Verwaltung, „wir suchen dringend …“, viele Standorte oder Touren, Pflichtdokumentation,
   veraltete oder sehr einfache Webseite bei gleichzeitig großem Betrieb.
-- Weniger passend: Ein-Personen-Betriebe ohne Verwaltung, Filialen großer Ketten (entscheiden nicht vor Ort),
-  reine IT-Firmen und Agenturen (bauen so etwas selbst), Behörden.
-- Branchen mit Vorrang: Handwerk, Pflege, Landwirtschaft. Andere Mittelständler sind willkommen,
-  wenn die Zeitfresser klar erkennbar sind.
+- Nicht passend: Betriebe unter 5 Leuten, Filialen und Franchise (entscheiden nicht vor Ort), IT-Firmen und
+  Agenturen (bauen so etwas selbst), Behörden, Einzelhandel, Gastronomie, Arzt- und Zahnarztpraxen
+  (feste Praxissoftware), Autohäuser (Software vom Hersteller).
 
 ## Stil der Nachrichten
 
@@ -53,6 +55,17 @@ Feedback und aus den Antworten der Firmen fort.
 - Genau eine Bitte am Ende: ein kostenloses Gespräch von 30 Minuten, am Telefon oder vor Ort.
 - Ehrlich: keine erfundenen Zahlen, keine Versprechen, keine Referenzkunden, die es nicht gibt.
 - Absender ist Oskar Jacobsen von Ylva Labs.
+
+## Vorlage (ohne KI)
+
+Betreff: Weniger Papierkram bei {firma}?
+Anrede: {anrede}
+
+ich bin Oskar Jacobsen von Ylva Labs, einem kleinen KI-Lab aus Schleswig-Holstein. Wir bauen mit Betrieben aus der Region Werkzeuge, die Papierkram und Routine abnehmen.
+
+Bei Betrieben wie {firma} kostet oft das hier viel Zeit: {zeitfresser}. Genau an solchen Stellen setzen wir an. Sie bringen das Problem aus dem Alltag mit, wir bauen die Lösung und tragen das Entwicklungsrisiko.
+
+Hätten Sie Lust auf ein kostenloses Gespräch von 30 Minuten, am Telefon oder bei Ihnen vor Ort?
 
 ## Gelernt
 

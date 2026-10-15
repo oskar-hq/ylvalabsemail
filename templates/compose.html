@@ -8,6 +8,11 @@
   <div class="editor-head">
     <span class="label">01 · Verfassen</span>
     <h1 class="title">Neue Mail.</h1>
+    {% if lead %}
+    <input type="hidden" name="lead_id" value="{{ lead.id }}">
+    <p class="note small lead-link">Für <a href="{{ url_for('leads.detail', lead_id=lead.id) }}">{{ lead.name }}</a> aus dem CRM.
+      Nach dem Senden steht die Mail in der Akte und der Betrieb rückt auf „Kontaktiert“.{% if fields.reply_to %} Antworten gehen an {{ fields.reply_to }}, dort werden sie erkannt.{% endif %}</p>
+    {% endif %}
     <p class="draft-note mono muted" id="draftNote" hidden>Entwurf wiederhergestellt · <button type="button" class="link mono" id="resetDraft">Verwerfen</button></p>
   </div>
 

@@ -12,25 +12,21 @@ from html.parser import HTMLParser
 
 USER_AGENT = "YlvaLabsLeadBot/1.0 (+https://ylvalabs.de; info@ylvalabs.de)"
 
-# Welche OpenStreetMap-Einträge als Betrieb in Frage kommen, und in welche Branche sie fallen.
-# Nur Einträge mit Webseite oder E-Mail werden übernommen, sonst kann die KI nichts recherchieren.
+# Welche OpenStreetMap-Einträge gesucht werden, und in welche Branche sie fallen. Bewusst nur Branchen, die zu
+# Ylva Labs passen (siehe Gehirn, „Wen wir suchen“), statt alle Betriebe im Land.
+# Stufe A: handwerk, pflege, landwirtschaft. Stufe B: dienstleistung, industrie (Werften).
 QUERIES = [
-    ('["craft"]', "handwerk"),
-    ('["office"~"^(company|accountant|tax_advisor|lawyer|notary|estate_agent|insurance|architect|engineer|'
-     'logistics|consulting|surveyor|property_management|employment_agency)$"]', "dienstleistung"),
-    ('["amenity"~"^(nursing_home|social_facility|dentist|doctors|clinic|veterinary)$"]', "pflege"),
-    ('["healthcare"~"^(nursing_home|home_care|physiotherapist|doctor|dentist|clinic|rehabilitation|'
-     'occupational_therapist|speech_therapist|care)$"]', "pflege"),
-    ('["social_facility"]', "pflege"),
+    ('["craft"~"^(hvac|plumber|heating_engineer|electrician|carpenter|joiner|cabinet_maker|metal_construction|'
+     'roofer|builder|window_construction|gardener|landscaper)$"]', "handwerk"),
+    ('["healthcare"~"^(home_care|nursing_home)$"]', "pflege"),
+    ('["amenity"="nursing_home"]', "pflege"),
+    ('["social_facility"~"^(nursing_home|assisted_living|day_care)$"]', "pflege"),
+    ('["craft"="agricultural_engines"]', "landwirtschaft"),
+    ('["shop"="agrarian"]', "landwirtschaft"),
     ('["place"="farm"]', "landwirtschaft"),
-    ('["landuse"="farmyard"]["name"]', "landwirtschaft"),
-    ('["shop"~"^(farm|agrarian)$"]', "landwirtschaft"),
-    ('["shop"~"^(car_repair|car|furniture|kitchen|bathroom_furnishing|doityourself|trade|hardware|'
-     'electronics|bicycle|optician|hearing_aids|boat|tyres|motorcycle)$"]', "handel"),
-    ('["industrial"]', "industrie"),
-    ('["man_made"="works"]', "industrie"),
-    ('["tourism"~"^(hotel|camp_site|guest_house|caravan_site)$"]', "gastgewerbe"),
-    ('["amenity"="driving_school"]', "dienstleistung"),
+    ('["office"~"^(property_management|engineer|surveyor|logistics|moving_company)$"]', "dienstleistung"),
+    ('["craft"~"^(boatbuilder|shipbuilder)$"]', "industrie"),
+    ('["industrial"="shipyard"]', "industrie"),
 ]
 
 LABELS = {
@@ -52,6 +48,8 @@ LABELS = {
     "dentist": "Zahnarztpraxis", "doctors": "Arztpraxis", "doctor": "Arztpraxis", "clinic": "Klinik",
     "veterinary": "Tierarztpraxis", "physiotherapist": "Physiotherapie", "rehabilitation": "Reha",
     "occupational_therapist": "Ergotherapie", "speech_therapist": "Logopädie", "care": "Pflege",
+    "cabinet_maker": "Tischlerei", "shipyard": "Werft", "moving_company": "Spedition/Umzüge",
+    "assisted_living": "Betreutes Wohnen", "day_care": "Tagespflege",
     "farm": "Hof", "farmyard": "Hof", "agrarian": "Agrarhandel", "car": "Autohaus",
     "furniture": "Möbel", "kitchen": "Küchenstudio", "bathroom_furnishing": "Bäder",
     "doityourself": "Baumarkt", "trade": "Fachhandel", "hardware": "Eisenwaren", "electronics": "Elektronik",
@@ -69,10 +67,14 @@ def haversine_km(lat1, lon1, lat2, lon2):
     return 2 * r * math.asin(math.sqrt(a))
 
 
-def overpass_query(lat, lon, radius_km):
-    around = f"(around:{int(radius_km * 1000)},{lat},{lon})"
-    parts = "".join(f"nwr{around}{sel}[\"name\"];" for sel, _ in QUERIES)
-    return f"[out:json][timeout:180];({parts});out center tags;"
+def overpass_query(lat, lon, radius_km, region=""):
+    """Suche in einem Bundesland (ISO-Code, z. B. DE-SH) oder, ohne Region, im Umkreis um einen Punkt."""
+    if region:
+        head, where = f'area["ISO3166-2"="{region}"]->.gebiet;', "(area.gebiet)"
+    else:
+        head, where = "", f"(around:{int(radius_km * 1000)},{lat},{lon})"
+    parts = "".join(f"nwr{where}{sel}[\"name\"];" for sel, _ in QUERIES)
+    return f"[out:json][timeout:300];{head}({parts});out center tags;"
 
 
 def classify(tags):
@@ -124,7 +126,7 @@ def rough_filter(tags, website, host):
     return None
 
 
-def parse_elements(elements, lat, lon, radius_km):
+def parse_elements(elements, lat, lon, radius_km=None):
     """Overpass-Antwort -> Liste von Firmen (nur mit Webseite oder E-Mail)."""
     found, seen = [], set()
     for el in elements:
@@ -139,7 +141,7 @@ def parse_elements(elements, lat, lon, radius_km):
         if plat is None or plon is None:
             continue
         dist = haversine_km(lat, lon, plat, plon)
-        if dist > radius_km:
+        if radius_km and dist > radius_km:
             continue
         host = urllib.parse.urlparse(website).netloc.lower().removeprefix("www.") if website else ""
         dedupe = host or name.lower()
@@ -161,12 +163,13 @@ def parse_elements(elements, lat, lon, radius_km):
     return found
 
 
-def search_osm(lat, lon, radius_km, overpass_url):
-    data = urllib.parse.urlencode({"data": overpass_query(lat, lon, radius_km)}).encode()
+def search_osm(lat, lon, radius_km, overpass_url, region=""):
+    """Mit Region (z. B. DE-SH) zählt nur das Bundesland, Entfernung dient dann nur der Anzeige."""
+    data = urllib.parse.urlencode({"data": overpass_query(lat, lon, radius_km, region)}).encode()
     req = urllib.request.Request(overpass_url, data=data, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=240) as resp:
+    with urllib.request.urlopen(req, timeout=330) as resp:
         payload = json.load(resp)
-    return parse_elements(payload.get("elements", []), lat, lon, radius_km)
+    return parse_elements(payload.get("elements", []), lat, lon, None if region else radius_km)
 
 # ---------------------------------------------------------------- Webseite lesen
 
@@ -281,12 +284,12 @@ def fetch_page(url, robots_cache):
 
 
 def research_website(url, max_pages=4, chars_per_page=6000):
-    """Startseite plus Impressum/Kontakt/Über uns lesen. Gibt Texte, E-Mails und Fehler zurück."""
-    robots, pages, emails, errors = {}, [], set(), []
+    """Startseite plus Impressum/Kontakt/Über uns lesen. Gibt Texte, Links, E-Mails und Fehler zurück."""
+    robots, pages, emails, errors, links = {}, [], set(), [], []
     try:
         final_url, html = fetch_page(url, robots)
     except Exception as exc:
-        return {"pages": [], "emails": [], "errors": [f"{url}: {exc}"]}
+        return {"pages": [], "emails": [], "links": [], "errors": [f"{url}: {exc}"]}
     queue, done = [(final_url, html)], {final_url}
     host = urllib.parse.urlparse(final_url).netloc
     while queue and len(pages) < max_pages:
@@ -298,6 +301,7 @@ def research_website(url, max_pages=4, chars_per_page=6000):
             pass
         pages.append({"url": page_url, "title": parser.title.strip()[:200], "text": parser.text()[:chars_per_page]})
         emails.update(extract_emails(html))
+        links.extend(urllib.parse.urljoin(page_url, h) for h in parser.links[:300])
         if len(pages) == 1:  # Unterseiten nur von der Startseite aus
             candidates = []
             for href in parser.links:
@@ -313,4 +317,4 @@ def research_website(url, max_pages=4, chars_per_page=6000):
                     queue.append(fetch_page(link, robots))
                 except Exception as exc:
                     errors.append(f"{link}: {exc}")
-    return {"pages": pages, "emails": sorted(emails), "errors": errors}
+    return {"pages": pages, "emails": sorted(emails), "links": list(dict.fromkeys(links))[:600], "errors": errors}

@@ -1,11 +1,11 @@
-# Übergabe: Ylva Labs Mailer mit KI-Akquise
+# Übergabe: Ylva Labs Mailer mit Akquise und CRM
 
 Diese Datei ist für die Person, die den Server betreut, und für das Ylva-Labs-Team.
 Sie fasst zusammen, was gebaut wurde, was noch offen ist und welche Fragen vor der
 Installation geklärt werden müssen. Antworten könnt ihr direkt in diese Datei schreiben
 (auf GitHub: Datei öffnen → Stift-Symbol → „Commit changes“) oder als Kommentar im Pull Request.
 
-**Stand:** 03.10.2026
+**Stand:** 15.10.2026
 
 ## Links
 
@@ -13,12 +13,11 @@ Installation geklärt werden müssen. Antworten könnt ihr direkt in diese Datei
 |---|---|
 | Repository | https://github.com/oskar-hq/ylvalabsemail |
 | Aktueller Stand | Standard-Branch `claude/practical-dijkstra-nnnz1b` (es gibt keinen `main`; ein einfaches `git clone` holt automatisch den richtigen) |
-| Erste Version (gemergt) | https://github.com/oskar-hq/ylvalabsemail/pull/1 |
 | Einrichtung auf einem gemieteten Server | [docs/SERVER-MIETEN.md](docs/SERVER-MIETEN.md) |
 | Ausprobieren auf dem eigenen PC | [docs/LOKAL-TESTEN.md](docs/LOKAL-TESTEN.md) |
-| Ausführliche Anleitung | [README.md](README.md), Abschnitte „KI-Akquise“, „Installation auf Proxmox“, „Zugriff über das Internet“ |
+| Ausführliche Anleitung | [README.md](README.md), Abschnitte „Akquise und CRM“, „Installation auf Proxmox“, „Zugriff über das Internet“ |
 | Alle Einstellungen, kommentiert | [.env.example](.env.example) |
-| Klickbare Vorschau mit Beispieldaten | https://claude.ai/artifact/NDSnMqjBbghuj9dqbCPXmg (privat, Oskar muss sie erst über „Teilen“ freigeben) |
+| Bisherige Pull Requests | [#1 KI-Akquise](https://github.com/oskar-hq/ylvalabsemail/pull/1), [#2 Regeln und CRM](https://github.com/oskar-hq/ylvalabsemail/pull/2) |
 
 Ist das Repository privat, muss Oskar dich unter *Settings → Collaborators* einladen,
 damit du es sehen und klonen kannst.
@@ -26,30 +25,42 @@ damit du es sehen und klonen kannst.
 ## Worum es geht
 
 Der **Ylva Labs Mailer** ist eine kleine Web-App (Python/Flask), die gestaltete HTML-Mails
-über das eigene Postfach verschickt. Neu ist der Bereich **„03 Leads“**, eine KI-Akquise:
+über das eigene Postfach verschickt. Dazu kommen zwei Bereiche:
 
-1. Sie sucht Betriebe im Umkreis von 50 km um Kappeln (OpenStreetMap).
-2. Ein kostenloser Grobfilter sortiert Unpassendes aus. Danach prüft die KI in Stufen,
-   von günstig nach teuer: Haiku sieht sich die Startseite an, Sonnet analysiert gründlicher,
-   und Opus schreibt nur für die besten Betriebe einen Entwurf.
-3. Das Team prüft jeden Entwurf, ändert ihn oder sagt der KI im Chat, was anders werden soll.
-   **Nichts geht ohne Freigabe raus.**
-4. Antworten der Firmen werden gelesen und als Qualified, Mittel oder Kein Interesse eingeordnet.
-   Nach 7 Tagen ohne Antwort schlägt die App einmalig eine kurze Erinnerung vor.
-5. Die KI lernt aus Feedback und Antworten (das „Gehirn“).
-6. Die KI läuft **nur, wenn jemand einen Lauf startet**, mit Budget in Euro. Die Kosten sind
-   jederzeit sichtbar, dazu gibt es ein Monatsbudget als harte Grenze.
-7. Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App Store) und per Mail.
+**03 Leads: passende Betriebe finden**
+
+1. Die App sucht Betriebe in ganz Schleswig-Holstein (OpenStreetMap), nur in passenden Branchen und nur mit E-Mail-Adresse.
+2. Sie liest die Webseiten und bewertet jeden Betrieb **nach festen Regeln, ohne KI und kostenlos**
+   (`app/scoring.py`). Zum Beispiel: sucht Personal fürs Büro +25, Kernbranche +20, 10–100 Mitarbeitende +15,
+   wächst +10. Ketten, IT-Firmen und Behörden fallen raus. In der Akte steht jede Regel, die gegriffen hat.
+3. Pro Lauf kommen nur die besten (Standard 25) ins CRM. Läufe startet ihr von Hand.
+4. Antworten der Firmen werden nach Stichworten eingeordnet (Interesse, später, Absage, Abmeldung), auch ohne KI.
+5. Nach 7 Tagen ohne Antwort schlägt die App einmalig eine Erinnerung vor.
+6. Die Bewertung lernt aus euren Ergebnissen mit (bis zu ±10 Punkte je Branche).
+
+**04 CRM: Kontakte im Blick**
+
+- Pipeline von Neu bis Kunde mit Ziehen und Ablegen, Akte je Betrieb, Auftragswert, Wiedervorlagen.
+- Karte mit Heatmap der passenden Betriebe und Wachstum je Kreis (Gewerbeanmeldungen, Baugenehmigungen).
+- Firmen von Hand anlegen, CSV-Import und -Export.
+
+**KI: nur zum Schreiben, nur auf Knopfdruck, optional**
+
+- Entwurf, Chat zum Überarbeiten und Erinnerung schreibt die KI, wenn ihr es anfordert, mit sichtbaren Kosten und
+  Monatsbudget. Ohne KI-Schlüssel gibt es eine feste Vorlage (im „Gehirn“ anpassbar).
+- **Nichts geht ohne Freigabe raus.** Der Erstkontakt per Mail ist gesperrt, bis § 7 UWG geklärt ist (siehe unten).
+
+Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App Store) und per Mail.
 
 ## Was fertig ist und was nicht
 
-- Fertig und getestet: 22 automatische Tests (`python -m unittest discover tests`).
-  Die Oberfläche lief im Browser auf Desktop und Handy ohne Fehler.
+- 38 automatische Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
+  Desktop und Handy ohne Fehler.
 - Einrichtungs-Skript, Docker-Container, HTTPS über Caddy, Sicherung und Zurückspielen wurden
   echt in Docker durchgespielt.
-- **Noch nie getestet:** mit einem echten KI-Schlüssel, mit der echten Kartensuche und mit
-  dem echten Postfach. In der Entwicklungsumgebung waren diese Dienste gesperrt.
-  Deshalb sollte der erste echte Lauf klein sein (siehe „Danach“ unten).
+- **Noch nie getestet:** die echte Kartensuche über ganz Schleswig-Holstein, echte Firmen-Webseiten, das
+  echte Postfach und ein echter KI-Schlüssel. In der Entwicklungsumgebung waren diese Dienste gesperrt.
+  Deshalb sollte der erste echte Lauf klein sein, danach die Gewichte unter „So wird bewertet“ nachjustieren.
 
 ---
 
@@ -59,28 +70,28 @@ Bitte kurz beantworten, dann lässt sich die Installation passend vorbereiten.
 
 1. **Was läuft auf dem Server?** Proxmox, Ubuntu/Debian direkt, Raspberry Pi oder etwas anderes?
    Antwort:
-2. **Docker oder direkt?** Es gibt beide Wege: `docker compose` oder das Skript
+2. **Docker oder direkt?** Empfohlen ist Docker mit `deploy/setup.sh`. Ohne Docker gibt es
    `deploy/install-lxc.sh` für einen Debian/Ubuntu-Container. Was ist dir lieber?
    Antwort:
 3. **Ressourcen:** Die App ist sparsam. 1 CPU-Kern, 1 GB RAM und 5 GB Speicher reichen.
    Passt das?
    Antwort:
 4. **Ausgehende Verbindungen:** Der Server muss diese Adressen erreichen können:
-   - `api.anthropic.com` (KI)
-   - `overpass-api.de` (Kartensuche)
-   - beliebige Firmen-Webseiten über HTTP/HTTPS (Recherche)
-   - den Mailserver von Strato (SMTP 587 oder 465, IMAP 993)
+   - `overpass-api.de` (Kartensuche und Kreisgrenzen)
+   - beliebige Firmen-Webseiten über HTTP/HTTPS (für die Bewertung)
+   - den Mailserver von Strato (SMTP 465 oder 587, IMAP 993)
+   - `api.anthropic.com`, nur wenn KI-Entwürfe genutzt werden
    - bei Push-Benachrichtigungen die Push-Dienste von Apple, Google und Mozilla
 
    Gibt es eine Firewall, die das einschränkt?
    Antwort:
-5. **Zugriff von außen:** Für HTTPS und die Handy-App empfiehlt die README einen
-   **Cloudflare Tunnel** mit Cloudflare Access davor. Dafür muss kein Port geöffnet werden.
-   Ist das für dich in Ordnung, oder gibt es schon einen anderen Weg (Reverse Proxy, VPN)?
+5. **Zugriff von außen:** Für HTTPS und die Handy-App gibt es zwei Wege: Caddy mit eigenem Zertifikat
+   (wenn der Server eine öffentliche IP hat, Ports 80 und 443) oder ein **Cloudflare Tunnel** ohne offenen Port.
+   Was passt bei dir?
    Antwort:
-6. **Backups:** Alle Daten liegen in einem Ordner: Datenbank, Gehirn und Schlüssel für Push.
-   Bei Docker ist das das Volume `mailer-data`, sonst `/opt/ylva-mailer/data`.
-   Wird dieser Ordner bereits gesichert, oder soll das eingerichtet werden?
+6. **Backups:** Alle Daten liegen in einem Ordner: Datenbank (Leads, CRM, Gehirn, Kosten) und Schlüssel für Push.
+   Bei Docker ist das das Volume `mailer-data`, sonst `/opt/ylva-mailer/data`. `deploy/setup.sh` kann eine
+   tägliche Sicherung einrichten. Reicht das, oder sicherst du ohnehin schon?
    Antwort:
 7. **Wer darf auf den Server?** Wer außer dir soll Updates einspielen können?
    Antwort:
@@ -89,31 +100,29 @@ Bitte kurz beantworten, dann lässt sich die Installation passend vorbereiten.
 
 - [ ] **Rechtliches:** Werbe-Mails ohne vorherige Einwilligung sind nach § 7 UWG auch an Firmen
       unzulässig. Der Mailversand für den Erstkontakt ist deshalb aus (`OUTREACH_EMAIL=false`).
-      Bis das geklärt ist (Anwalt oder IHK), laufen Erstkontakte per Brief oder Telefon.
-- [ ] **KI-Schlüssel:** In console.anthropic.com Konto anlegen, Guthaben aufladen, API-Schlüssel
-      erzeugen **und ein Ausgabenlimit setzen**. Den Schlüssel nur direkt in die `.env` auf dem
-      Server eintragen, nie in Chats, Mails oder ins Repository.
+      Bis das geklärt ist (Anwalt oder IHK), laufen Erstkontakte per Brief oder Telefon. Nach einer Antwort
+      des Betriebs sind gestaltete Mails möglich.
 - [ ] **Akquise-Postfach** bei Strato anlegen, z. B. `kontakt@ylvalabs.de`. Darüber gehen
       Nachrichten raus, und dort liest die App die Antworten.
-- [ ] **Budget:** Monatsbudget festlegen (Standard 20 €, `LEADS_MONTHLY_BUDGET_EUR`).
-- [ ] **Modelle:** Vorprüfung mit Haiku, Analyse mit Sonnet, Entwurf mit Opus. Passt das, oder soll
-      auch das Schreiben günstiger mit Sonnet laufen (`AI_MODEL`)?
-- [ ] **Antworten automatisch einordnen:** Kostet ca. 1–2 Cent pro echter Antwort und läuft
-      ohne Knopfdruck. Beibehalten oder auch auf „nur von Hand“ stellen?
+- [ ] **KI ja oder nein:** Ohne Schlüssel läuft alles außer KI-Entwürfen. Wer die KI nutzen will:
+      in console.anthropic.com Konto anlegen, API-Schlüssel erzeugen **und ein Ausgabenlimit setzen**.
+      Den Schlüssel nur direkt in die `.env` auf dem Server eintragen, nie in Chats, Mails oder ins Repository.
 - [ ] **Wo läuft die App?** Server des Freundes oder ein eigener gemieteter Server (ca. 4–6 € im Monat,
       siehe [docs/SERVER-MIETEN.md](docs/SERVER-MIETEN.md)). Empfehlung: mieten, dann ist niemand
       auf fremde Hardware und Zeit angewiesen.
+- [ ] **Gehirn und Vorlage prüfen:** In der App unter „Leads → Gehirn und Vorlage“ die Texte über Ylva Labs,
+      Zielgruppe, Stil und die Vorlage ohne KI kontrollieren. Die Startfassung steht in `app/brain_seed.md`.
+- [ ] **Wachstumszahlen** (optional): Gewerbeanmeldungen und Baugenehmigungen je Kreis als CSV vom
+      Statistikamt Nord laden und unter „CRM → Karte“ importieren. Bis dahin gibt es keinen Wachstumszuschlag.
 - [ ] Optional: den Standard-Branch auf GitHub in `main` umbenennen (Settings → Branches), das ist
       übersichtlicher. Server holen sich dann einfach den neuen Namen per `git pull`.
-- [ ] **Gehirn prüfen:** In der App unter „Leads → Gehirn ansehen“ die Texte über Ylva Labs,
-      Zielgruppe und Stil kontrollieren. Die Startfassung steht in `app/brain_seed.md`.
 
 ---
 
 ## Einrichtung Schritt für Schritt
 
-Das meiste erledigt das Einrichtungs-Skript `deploy/setup.sh`. Es fragt die Zugangsdaten ab, schreibt
-die `.env` (nur für root lesbar), installiert bei Bedarf Docker, startet die App, macht den Systemcheck
+Das meiste erledigt das Einrichtungs-Skript `deploy/setup.sh`. Es fragt die Zugangsdaten und das Suchgebiet ab,
+schreibt die `.env` (nur für root lesbar), installiert bei Bedarf Docker, startet die App, macht den Systemcheck
 und richtet auf Wunsch die tägliche Sicherung ein.
 
 ```bash
@@ -131,7 +140,7 @@ Das Skript fragt zuerst, wo die App läuft:
 | 3 · Eigener Rechner | zum Ausprobieren | keins, http://localhost:8080 |
 
 Die Zugangsdaten tippt am besten Oskar selbst ein, wenn das Skript danach fragt (Passwort des
-Akquise-Postfachs, KI-Schlüssel). Sie werden beim Tippen nicht angezeigt und landen nur in der `.env`.
+Akquise-Postfachs, optional KI-Schlüssel). Sie werden beim Tippen nicht angezeigt und landen nur in der `.env`.
 
 **Danach:**
 
@@ -140,7 +149,8 @@ Akquise-Postfachs, KI-Schlüssel). Sie werden beim Tippen nicht angezeigt und la
    `docker compose exec mailer python -m app.systemcheck`.
 2. **Handy:** In Safari `https://mail.ylvalabs.de/leads` öffnen → *Teilen* → *Zum Home-Bildschirm*,
    App öffnen und auf **Benachrichtigungen an** tippen (ab iOS 16.4).
-3. **Erster echter Lauf, bewusst klein:** 10 Vorprüfungen, 2 Entwürfe, 1 € Budget, „Vorher neu suchen“ anhaken.
+3. **Erster echter Lauf, bewusst klein:** 30 Betriebe bewerten, die besten 10 ins CRM, „Vorher neu suchen“ anhaken.
+   Danach unter „So wird bewertet“ prüfen, ob die Punkte passen, und im CRM die ersten Kontakte anlegen.
 
 **Wichtige Befehle:**
 
@@ -161,14 +171,12 @@ und der `.env` von Hand, siehe README.
 - `DEMO_MODE=false` im Betrieb, `ALLOWED_DOMAINS=ylvalabs.de` gesetzt lassen.
 - Die App braucht genau einen Gunicorn-Worker (ist so eingestellt), weil Anmeldungen und der
   Hintergrund-Arbeiter im Arbeitsspeicher dieses Prozesses laufen.
-- Die KI liest nur öffentliche Webseiten. Adressen im eigenen Netz sind gesperrt, damit niemand
+- Webseiten werden nur unter öffentlichen Adressen gelesen. Adressen im eigenen Netz sind gesperrt, damit niemand
   über manipulierte Kartendaten Geräte im Heimnetz abfragen lassen kann.
 
 ## Ideen für später
 
-- Test mit echtem Schlüssel und kleinem Budget, danach Schwellenwerte nachjustieren
-  (`LEADS_QUICK_MIN`, `LEADS_ANALYSE_MIN`).
-- Wochenbericht per Mail: neue Qualified, Kosten, was die KI gelernt hat.
-- Export der Qualified-Leads als CSV, z. B. für ein CRM.
+- Nach den ersten echten Läufen die Gewichte der Regeln nachjustieren (`app/scoring.py`, `LEADS_RULE_MIN`, Standard 50).
+- Wochenbericht per Mail: neue Kontakte im CRM, fällige Wiedervorlagen, Antworten.
 - Website ylvalabs.de (Repository `oskar-hq/kilab-`): offene Punkte aus deren README,
   z. B. „Enforce HTTPS“ in GitHub Pages aktivieren.

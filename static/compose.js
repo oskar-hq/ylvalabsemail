@@ -16,7 +16,7 @@
   function serialize() {
     const data = {};
     for (const [k, v] of new FormData(form)) {
-      if (k === '_csrf') continue;
+      if (k === '_csrf' || k === 'lead_id') continue;  // Betrieb aus dem CRM nicht im Entwurf merken
       if (k === 'info_label' || k === 'info_value') (data[k] ||= []).push(v);
       else data[k] = v;
     }
@@ -230,8 +230,10 @@
       }
       const json = await res.json().catch(() => ({ error: `Serverfehler (${res.status})` }));
       if (res.status === 401) { location.href = '/login?next=/compose'; return; }
+      const leadId = form.lead_id?.value;
       if (json.demo) {
         await openDialog({ label: 'Demo', title: 'Im Demo-Modus wird nichts verschickt.', body: `<p>Mit einem echten Postfach ginge diese Mail jetzt an ${json.would_send} ${json.would_send === 1 ? 'Person' : 'Personen'}.</p>`, ok: '', cancel: 'Schließen' });
+        if (leadId) location.href = `/leads/${leadId}`;
       } else if (json.error) {
         await openDialog({ label: 'Fehler', title: 'Nicht gesendet.', body: `<p>${esc(json.error)}</p>`, ok: '', cancel: 'Schließen' });
       } else {
@@ -242,6 +244,7 @@
           + (failed ? `<ul>${failed}</ul>` : '') + (json.warning ? `<p class="small">${esc(json.warning)}</p>` : '');
         if (!json.test && json.sent.length) store.clear();
         await openDialog({ label: json.test ? 'Test' : 'Gesendet', title, body, ok: '', cancel: 'Schließen' });
+        if (leadId && !json.test && json.sent.length) location.href = `/leads/${leadId}`;  // zurück in die Akte
       }
     } catch (e) {
       await openDialog({ label: 'Fehler', title: 'Keine Verbindung.', body: `<p>${esc(e.message)}</p>`, ok: '', cancel: 'Schließen' });

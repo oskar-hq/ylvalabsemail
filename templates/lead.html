@@ -1,20 +1,21 @@
 {% extends "base.html" %}
 {% block title %}{{ lead.name }} · Leads{% endblock %}
-{% set editable = lead.status in ('entwurf', 'aussortiert', 'fehler') and not lead.interest %}
+{% set editable = lead.status in ('passt', 'entwurf', 'aussortiert', 'fehler') and not lead.interest %}
 {% set chat = events|selectattr('kind', 'in', ['feedback', 'ai'])|list %}
 {% set replies = events|selectattr('kind', 'equalto', 'reply')|list %}
 {% set classified = events|selectattr('kind', 'equalto', 'classify')|list %}
 {% block content %}
 <main class="page wide" data-lead="{{ lead.id }}">
-  <p class="crumbs mono"><a href="{{ url_for('leads.overview') }}">← Leads</a> <span class="muted">/</span>
+  <p class="crumbs mono"><a href="{{ url_for('crm.board') }}">← CRM</a> <span class="muted">/</span>
     <a href="{{ url_for('leads.overview', tab=tab) }}">{{ (tabs|selectattr(0, 'equalto', tab)|first)[1] }}</a></p>
 
   <header class="lead-head">
     <h1 class="title">{{ lead.name }}</h1>
-    <p class="muted">{{ lead.category_label }}{% if lead.address %} · {{ lead.address }}{% endif %} · {{ lead.distance_km }} km von Kappeln</p>
+    <p class="muted">{{ lead.category_label }}{% if lead.address %} · {{ lead.address }}{% endif %}{% if lead.distance_km is not none %} · {{ lead.distance_km }} km von Kappeln{% endif %}</p>
     <p>
+      {% if lead.stage %}<span class="pill stage-{{ lead.stage }}">{{ stage_labels[lead.stage] }}</span>{% endif %}
       <span class="pill st-{{ tab }}">{{ interest_labels.get(lead.interest) or lead_status_labels.get(lead.status, lead.status) }}</span>
-      {% if lead.fit_score is not none %}<span class="pill">Passung {{ lead.fit_score }}/100</span>{% endif %}
+      {% if lead.fit_score is not none %}<span class="pill">{{ lead.fit_score }} Punkte</span>{% endif %}
       {% if lead.channel %}<span class="pill">{{ {'email': 'per Mail', 'brief': 'per Brief', 'telefon': 'Telefon'}[lead.channel] }}{% if lead.sent_at %} · {{ lead.sent_at|kurzdatum }}{% endif %}</span>{% endif %}
     </p>
   </header>
@@ -28,11 +29,14 @@
         <span class="label">Antwort von {{ last.author }} · {{ last.at|kurzdatum }}</span>
         {% if cls %}
         <p class="reply-summary"><b>{{ cls.text }}</b></p>
-        {% if cls.meta.grund %}<p class="small"><span class="muted">Grund:</span> {{ cls.meta.grund }}</p>{% endif %}
+        {% if cls.meta.grund %}<p class="small"><span class="muted">Eingeordnet nach:</span> {{ cls.meta.grund }}</p>{% endif %}
         {% if cls.meta.naechster_schritt %}<p class="small"><span class="muted">Nächster Schritt:</span> {{ cls.meta.naechster_schritt }}</p>{% endif %}
         {% endif %}
         <details class="more"><summary class="small">Originaltext</summary><div class="quote">{{ last.text }}</div></details>
-        {% if lead.email %}<a class="btn small primary" href="mailto:{{ lead.email }}?subject={{ ('Re: ' ~ (lead.subject or ''))|urlencode }}">Selbst antworten</a>{% endif %}
+        <div class="btn-row">
+          {% if can_mail %}<a class="btn small primary" href="{{ url_for('compose', lead=lead.id) }}">Gestaltet antworten</a>{% endif %}
+          {% if lead.email %}<a class="btn small" href="mailto:{{ lead.email }}?subject={{ ('Re: ' ~ (lead.subject or ''))|urlencode }}">Im Mailprogramm antworten</a>{% endif %}
+        </div>
       </div>
       {% endif %}
 
@@ -51,7 +55,7 @@
         <div class="draft-actions">
           <button type="button" class="btn" data-fu="skip">Nicht nachfassen</button>
           <button type="button" class="btn" data-fu="mark">Schon erledigt</button>
-          <button type="button" class="btn primary" data-fu="write" {{ 'disabled' if not st.ai }}>Erinnerung schreiben lassen · ca. {{ '%.1f'|format(reminder_ct)|replace('.', ',') }} ct</button>
+          <button type="button" class="btn primary" data-fu="write" {{ 'disabled' if not st.ai }}>Erinnerung schreiben lassen · KI, ca. {{ '%.1f'|format(reminder_ct)|replace('.', ',') }} ct</button>
         </div>
         {% else %}
         <label class="field"><span class="sub">Betreff</span><input name="subject" type="text" value="{{ lead.followup_subject or '' }}" {{ 'readonly' if not fu_open }}></label>
@@ -70,15 +74,24 @@
       </form>
       {% endif %}
 
-      {% if lead.body or lead.subject %}
+      {% if lead.body or lead.subject or editable %}
       <form id="draft" class="draft">
         <div class="draft-head">
-          <span class="label">{% if editable %}Entwurf{% else %}Gesendete Nachricht{% endif %} · an {{ lead.contact_name ~ ' · ' if lead.contact_name }}{{ lead.email or 'keine E-Mail-Adresse bekannt' }}</span>
+          <span class="label">{% if editable %}{{ 'Nachricht' if not lead.body else 'Entwurf' }}{% else %}Gesendete Nachricht{% endif %} · an {{ lead.contact_name ~ ' · ' if lead.contact_name }}{{ lead.email or 'keine E-Mail-Adresse bekannt' }}</span>
           <div class="seg" role="tablist"><button type="button" class="on" data-view="edit">Text</button><button type="button" data-view="preview">Vorschau</button></div>
         </div>
+        {% if editable %}
+        <div class="write-help">
+          {% if not lead.body %}<p class="small">Noch keine Nachricht. Schreib selbst, nimm die Vorlage (kostenlos) oder lass die KI einen persönlichen Entwurf schreiben.</p>{% endif %}
+          <div class="btn-row">
+            <button type="button" class="btn small" data-act="template">Vorlage einsetzen · kostenlos</button>
+            <button type="button" class="btn small" data-act="ai-draft" {{ 'disabled' if not st.ai }} title="{{ '' if st.ai else 'Kein KI-Schlüssel eingetragen (ANTHROPIC_API_KEY).' }}">Von der KI schreiben lassen · ca. {{ '%.1f'|format(draft_ct)|replace('.', ',') }} ct</button>
+          </div>
+        </div>
+        {% endif %}
         <div data-pane="edit">
           <label class="field"><span class="sub">Betreff</span><input name="subject" type="text" value="{{ lead.subject or '' }}" {{ 'readonly' if not editable }}></label>
-          <label class="field"><span class="sub">Anrede</span><input name="greeting" type="text" value="{{ lead.greeting or '' }}" {{ 'readonly' if not editable }}></label>
+          <label class="field"><span class="sub">Anrede</span><input name="greeting" type="text" value="{{ lead.greeting or '' }}" {{ 'readonly' if not editable }} placeholder="Guten Tag,"></label>
           <label class="field"><span class="sub">Text <em>· Grußformel und Unterschrift kommen automatisch dazu</em></span><textarea name="body" rows="12" {{ 'readonly' if not editable }}>{{ lead.body or '' }}</textarea></label>
         </div>
         <div data-pane="preview" hidden>
@@ -89,35 +102,79 @@
           <button type="button" class="btn" data-act="save">Speichern</button>
           <a class="btn" href="{{ url_for('leads.letter', lead_id=lead.id) }}" target="_blank" data-act="letter">Als Brief drucken</a>
           <button type="button" class="btn" data-act="mark">Als versendet markieren</button>
+          <a class="btn" href="{{ url_for('compose', lead=lead.id) }}" data-act="design" title="{{ mail_hint or 'Mit Vorlage, Pixel-Band oder Bild im Mailer gestalten und von deinem Postfach senden' }}">Im Mailer gestalten</a>
           <button type="button" class="btn primary" data-act="send" {{ 'disabled' if not (st.email_enabled and lead.email) and not account.demo }}
             title="{{ '' if st.email_enabled else 'Versand per Mail ist ausgeschaltet (OUTREACH_EMAIL).' }}">Per Mail senden</button>
         </div>
+        {% if not can_mail and mail_hint %}<p class="muted small right">{{ mail_hint }}</p>{% endif %}
+        {% elif can_mail and lead.stage in ('kontaktiert', 'antwort', 'gespraech', 'angebot', 'kunde') and not replies %}
+        <div class="draft-actions"><a class="btn" href="{{ url_for('compose', lead=lead.id) }}">Neue gestaltete Mail</a></div>
         {% endif %}
       </form>
       {% elif lead.status in ('kandidat', 'recherche') %}
-      <p class="note">Dieser Betrieb ist noch nicht recherchiert. {% if lead.status == 'recherche' %}Die KI ist gerade dabei.{% endif %}</p>
+      <p class="note">Dieser Betrieb ist noch nicht bewertet. {% if lead.status == 'recherche' %}Die Webseite wird gerade gelesen.{% endif %}</p>
       {% endif %}
 
+      {% if st.ai or chat %}
       <section class="chat-wrap">
-        <span class="label">Chat mit der KI zu diesem Betrieb</span>
+        <span class="label">Chat mit der KI zu diesem Entwurf</span>
         <div class="chat" id="chat">
           {% for e in chat %}<div class="msg {{ 'me' if e.kind == 'feedback' else 'ai' }}"><span class="mono muted">{{ 'KI' if e.kind == 'ai' else e.author }} · {{ e.at|kurzdatum }}</span><p>{{ e.text }}</p></div>
-          {% else %}<p class="muted small" id="chatEmpty">Sagt der KI, was ihr ändern wollt, z. B. „kürzer“, „erwähne die Tourenplanung“ oder „der Betrieb duzt, bitte auch duzen“. Sie überarbeitet den Entwurf und merkt sich, was allgemein gilt.</p>{% endfor %}
+          {% else %}<p class="muted small" id="chatEmpty">Sag der KI, was du ändern willst, z. B. „kürzer“, „erwähne die Tourenplanung“ oder „der Betrieb duzt, bitte auch duzen“. Sie überarbeitet den Entwurf und merkt sich, was allgemein gilt.</p>{% endfor %}
         </div>
         <form id="chatForm" class="chat-form">
           <textarea name="text" rows="2" placeholder="Was soll anders werden?" required></textarea>
           <button class="btn primary">Senden</button>
         </form>
       </section>
+      {% endif %}
     </section>
 
     <aside class="lead-side">
+      <div class="side-block">
+        <span class="label">Pipeline</span>
+        <div class="row stage-row">
+          <select id="stageSelect" aria-label="Stufe">
+            {% if not lead.stage %}<option value="" selected>Nicht in der Pipeline</option>{% endif %}
+            {% for key, label, _ in stages %}<option value="{{ key }}" {{ 'selected' if lead.stage == key }}>{{ label }}</option>{% endfor %}
+          </select>
+        </div>
+        <form id="dealForm" class="deal-form">
+          <label class="sub" for="dealEur">Auftragswert</label>
+          <div class="row"><span class="unit"><input id="dealEur" type="text" name="deal_eur" inputmode="decimal" value="{{ ('%.0f'|format(lead.deal_eur)) if lead.deal_eur else '' }}" placeholder="z. B. 4500"><em>€</em></span>
+          <button class="btn small">Speichern</button></div>
+        </form>
+      </div>
+
+      <div class="side-block">
+        <span class="label">Wiedervorlagen</span>
+        {% if tasks %}
+        <ul class="tasks small">
+          {% for t in tasks %}<li class="{{ 'overdue' if t.due < st.today }}">
+            <button class="check-btn" data-task="{{ t.id }}" title="Erledigt">✓</button>
+            <span><b>{{ fmt_day(t.due) }}</b> · {{ t.text }}</span></li>{% endfor %}
+        </ul>
+        {% else %}<p class="muted small">Nichts geplant.</p>{% endif %}
+        <form id="taskForm" class="task-form">
+          <input type="text" name="text" placeholder="z. B. Anrufen, Angebot nachfassen" required>
+          <div class="row">
+            <select name="quick" aria-label="Wann">
+              <option value="morgen">morgen</option><option value="3t">in 3 Tagen</option><option value="1w" selected>in 1 Woche</option>
+              <option value="2w">in 2 Wochen</option><option value="1m">in 1 Monat</option><option value="">am …</option>
+            </select>
+            <input type="date" name="due" hidden>
+            <button class="btn small">Planen</button>
+          </div>
+        </form>
+      </div>
+
       {% if lead.fit_reason %}
       <div class="side-block">
-        <span class="label">Einschätzung der KI</span>
-        {% if lead.fit_score is not none %}<div class="meter" title="{{ lead.fit_score }}/100"><i style="width:{{ lead.fit_score }}%"></i></div>{% endif %}
-        <p>{{ lead.fit_reason }}</p>
-        {% if lead.research.groesse %}<p class="small"><span class="muted">Größe:</span> {{ lead.research.groesse }}</p>{% endif %}
+        <span class="label">Bewertung nach Regeln <a class="muted" href="{{ url_for('leads.rules') }}">· so geht’s</a></span>
+        {% if lead.fit_score is not none %}<div class="meter" title="{{ lead.fit_score }}/100"><i style="width:{{ lead.fit_score }}%"></i><b style="left:{{ st.rule_min }}%" title="Schwelle {{ st.rule_min }}"></b></div>{% endif %}
+        {% if lead.research.signale %}
+        <ul class="signals small">{% for points, reason in lead.research.signale %}<li><span class="mono {{ 'neg' if points < 0 }}">{{ '%+d'|format(points) }}</span> {{ reason }}</li>{% endfor %}</ul>
+        {% else %}<p class="small">{{ lead.fit_reason }}</p>{% endif %}
         {% if lead.research.zeitfresser %}<p class="small muted">Vermutete Zeitfresser</p><ul class="small tight">{% for z in lead.research.zeitfresser %}<li>{{ z }}</li>{% endfor %}</ul>{% endif %}
       </div>
       {% endif %}
@@ -130,19 +187,27 @@
         </div>
         <div class="btn-row">
           {% if lead.status not in ('aussortiert',) and not lead.interest %}<button class="btn small" data-act="reject">Passt nicht</button>{% endif %}
-          {% if lead.status in ('aussortiert', 'fehler') %}<button class="btn small" data-act="retry">Neu prüfen lassen</button>{% endif %}
+          {% if lead.status in ('kandidat', 'passt', 'aussortiert', 'fehler') and lead.website %}<button class="btn small" data-act="retry">Neu bewerten · kostenlos</button>{% endif %}
         </div>
       </div>
 
       <div class="side-block">
-        <span class="label">Kontakt</span>
-        <dl class="facts small">
-          {% if lead.contact_name %}<dt>Person</dt><dd>{{ lead.contact_name }}</dd>{% endif %}
+        <span class="label">Kontakt <button type="button" class="link mono" id="editContact">Bearbeiten</button></span>
+        <dl class="facts small" id="contactView">
+          <dt>Person</dt><dd>{{ lead.contact_name or '–' }}</dd>
           <dt>E-Mail</dt><dd>{% if lead.email %}<a href="mailto:{{ lead.email }}">{{ lead.email }}</a>{% else %}–{% endif %}</dd>
-          {% if lead.phone %}<dt>Telefon</dt><dd><a href="tel:{{ lead.phone|replace(' ', '') }}">{{ lead.phone }}</a></dd>{% endif %}
+          <dt>Telefon</dt><dd>{% if lead.phone %}<a href="tel:{{ lead.phone|replace(' ', '') }}">{{ lead.phone }}</a>{% else %}–{% endif %}</dd>
           {% if lead.website %}<dt>Webseite</dt><dd><a href="{{ lead.website }}" target="_blank" rel="noopener">{{ lead.website|replace('https://', '')|replace('http://', '') }}</a></dd>{% endif %}
           {% if lead.research.pages %}<dt>Gelesen</dt><dd>{% for p in lead.research.pages %}<a href="{{ p }}" target="_blank" rel="noopener">{{ p|replace('https://', '')|truncate(38, true) }}</a><br>{% endfor %}</dd>{% endif %}
         </dl>
+        <form id="contactForm" class="contact-form" hidden>
+          <label class="field"><span class="sub">Ansprechperson</span><input type="text" name="contact_name" value="{{ lead.contact_name or '' }}"></label>
+          <label class="field"><span class="sub">E-Mail</span><input type="email" name="email" value="{{ lead.email or '' }}"></label>
+          <label class="field"><span class="sub">Telefon</span><input type="text" name="phone" value="{{ lead.phone or '' }}"></label>
+          <label class="field"><span class="sub">Webseite</span><input type="url" name="website" value="{{ lead.website or '' }}"></label>
+          <label class="field"><span class="sub">Adresse</span><input type="text" name="address" value="{{ lead.address or '' }}"></label>
+          <div class="btn-row"><button class="btn small primary">Speichern</button><button type="button" class="btn small" id="cancelContact">Abbrechen</button></div>
+        </form>
       </div>
 
       <div class="side-block">
@@ -162,7 +227,7 @@
 
 <dialog id="markDlg"><form class="dlg" method="dialog">
   <h2>Wie ist die Nachricht rausgegangen?</h2>
-  <p class="small">Die KI merkt sich, welchen Weg ihr genommen habt. Antworten per Mail an das Akquise-Postfach werden trotzdem erkannt.</p>
+  <p class="small">Antworten per Mail an das Akquise-Postfach werden trotzdem erkannt.</p>
   <div class="dlg-actions">
     <button class="btn" value="cancel">Abbrechen</button>
     <button class="btn" value="telefon">Telefon</button>
@@ -172,7 +237,7 @@
 </form></dialog>
 <dialog id="reasonDlg"><form class="dlg" method="dialog">
   <h2 id="reasonTitle">Warum passt der Betrieb nicht?</h2>
-  <p class="small muted">Ein Satz reicht. Daraus lernt die KI, welche Betriebe sie künftig auslässt.</p>
+  <p class="small muted">Ein Satz reicht. Daraus lernt der Algorithmus, welche Branchen seltener passen.</p>
   <input type="text" name="reason" placeholder="z. B. Filiale einer Kette, zu klein, keine Verwaltung">
   <div class="dlg-actions"><button class="btn" value="cancel">Abbrechen</button><button class="btn primary" value="ok">Übernehmen</button></div>
 </form></dialog>
