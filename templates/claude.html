@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}Mit Claude recherchieren · Leads{% endblock %}
+{% block content %}
+<main class="page wide">
+  <p class="crumbs mono"><a href="{{ url_for('leads.overview') }}">← Leads</a></p>
+  <span class="label">03 · Leads · Recherche</span>
+  <h1 class="title">Mit Claude recherchieren.</h1>
+  {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if m.startswith('Nicht') or m.startswith('Bitte') else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
+
+  <div class="brain-grid">
+    <section>
+      <p class="measure">Statt der Kartensuche und ohne API-Schlüssel: Den Prompt unten in <b>Claude Code</b> oder auf
+        <b>claude.ai</b> mit Websuche eingeben. Claude sucht passende Betriebe, liest ihre Webseiten und legt die Datei
+        <code>{{ filename }}</code> an. Die ladet ihr hier hoch. Die Betriebe werden im nächsten Lauf zuerst nach den Regeln
+        bewertet, wie gefundene Betriebe, und die herausgesuchten Angaben landen in der Vorlage. Das läuft über euer
+        Claude-Abo, die App verbraucht dabei keine Tokens.</p>
+
+      <section class="lead-section">
+        <div class="section-head"><h2>1 · Prompt</h2><span class="muted small">Aus dem Gehirn, dem Suchgebiet und der Vorlage.</span></div>
+        <form method="get" class="run-fields claude-opts">
+          <label><span class="sub">Wie viele Betriebe</span><input type="number" name="anzahl" min="5" max="200" value="{{ count }}" inputmode="numeric"></label>
+          <label><span class="sub">Schwerpunkt</span><select name="branche"><option value="">alle passenden Branchen</option>
+            {% for b in branchen %}<option value="{{ b }}" {{ 'selected' if b == branche }}>{{ b|capitalize }}</option>{% endfor %}</select></label>
+          <button class="btn">Prompt anpassen</button>
+        </form>
+        <textarea class="prompt-box" id="promptBox" readonly rows="16">{{ prompt }}</textarea>
+        <div class="run-actions claude-actions"><button class="btn primary" type="button" id="copyPrompt">Prompt kopieren</button><span class="muted small" id="copied"></span></div>
+        <p class="muted small">Webseiten, die schon in der App sind, stehen im Prompt, damit Claude sie nicht noch einmal sucht. Doppelte werden beim Hochladen ohnehin übersprungen.</p>
+      </section>
+
+      <section class="lead-section">
+        <div class="section-head"><h2>2 · Ergebnis hochladen</h2>{% if waiting %}<span class="muted small">{{ waiting }} aus der Recherche warten auf die Bewertung.</span>{% endif %}</div>
+        <form method="post" action="{{ url_for('leads.claude_import') }}" enctype="multipart/form-data" class="restore-form">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <label class="field"><span class="sub">CSV-Datei von Claude</span><input type="file" name="file" accept=".csv,text/csv,text/plain"></label>
+          <label class="field"><span class="sub">… oder den Codeblock aus dem Chat hier einfügen</span><textarea name="text" rows="5" class="csv-box" placeholder="Firma;Webseite;E-Mail;…"></textarea></label>
+          <div class="run-actions claude-actions"><button class="btn primary">Übernehmen</button></div>
+        </form>
+      </section>
+
+      <section class="lead-section">
+        <div class="section-head"><h2>3 · Abarbeiten</h2></div>
+        <p class="measure">Auf der <a href="{{ url_for('leads.overview') }}">Leads-Seite</a> einen Lauf starten, „Vorher neu suchen“ <b>nicht</b> anhaken.
+          Die Betriebe aus der Recherche kommen zuerst dran: Die App liest ihre Webseite (kostenlos), vergibt Punkte und
+          bringt die besten ins CRM. Danach in der Akte „Vorlage nehmen“ oder selbst schreiben. Rausgeschickt wird nichts ohne eure Freigabe.</p>
+      </section>
+    </section>
+    <aside>
+      <div class="side-block">
+        <span class="label">Spalten und Platzhalter</span>
+        <p class="small">Diese Spalten fragt der Prompt ab. Mit Platzhalter: wird in der Vorlage eingesetzt.</p>
+        <table class="stats small"><tbody>
+          {% for header, field, required, desc, ph in columns %}<tr><td>{{ header }}{% if required %} *{% endif %}</td><td class="mono">{% if ph %}{{ ph }}{% if used and ph not in used %} <span class="muted">(nicht in der Vorlage)</span>{% endif %}{% endif %}</td></tr>{% endfor %}
+          {% for ph, desc in own.items() %}<tr><td class="muted">{{ desc }}</td><td class="mono">{{ ph }}</td></tr>{% endfor %}
+        </tbody></table>
+        <p class="small">Die Vorlage steht im <a href="{{ url_for('leads.brain') }}">Gehirn</a> unter „Vorlage (ohne KI)“. Ein Absatz mit <code>{aufhaenger}</code> fällt weg, wenn Claude nichts Belegtes gefunden hat.</p>
+      </div>
+      <div class="side-block">
+        <span class="label">Gut zu wissen</span>
+        <p class="small">Claude Code: <code>claude</code> im Terminal starten, Prompt einfügen. Die Datei liegt danach im aktuellen Ordner.</p>
+        <p class="small">claude.ai: Websuche einschalten, Prompt einfügen, den Codeblock kopieren und oben einfügen.</p>
+        <p class="small">Prüft Stichproben: Claude kann sich irren. Was in der CSV steht, seht ihr in jeder Akte.</p>
+      </div>
+    </aside>
+  </div>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='claude.js') }}"></script>{% endblock %}

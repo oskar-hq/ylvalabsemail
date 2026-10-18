@@ -194,6 +194,15 @@ Vermutete Zeitfresser: {"; ".join(analysis.get("zeitfresser", [])) or "–"}
 
 Suche dir aus dem Auszug ein bis zwei konkrete Beobachtungen für den ersten Satz. Stütze dich nur auf diese Angaben
 und das Gehirn. Ist keine Ansprechperson bekannt, wähle eine neutrale Anrede."""
+    rec = analysis.get("recherche")
+    if rec:
+        prompt += f"""
+
+<recherche_vorab>
+{rec.get("begruendung") or ""}
+{("Beobachtung: " + rec["aufhaenger"]) if rec.get("aufhaenger") else ""}
+</recherche_vorab>
+Diese Angaben kommen aus einer Recherche vorab und dürfen genauso verwendet werden."""
     schema = _obj(dict(DRAFT_FIELDS))
     return _call("entwurf", brain, prompt, schema, lead.get("id"))
 

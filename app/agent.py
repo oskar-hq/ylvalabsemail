@@ -209,7 +209,10 @@ def next_candidate(c):
             s = stats.setdefault(key, [0.0, 0.0])
             s[0] += 3 * (r["q"] or 0) + 1.5 * (r["m"] or 0) + 0.5 * (r["ok"] or 0)
             s[1] += (r["k"] or 0) + (r["rt"] or 0) + 0.5 * (r["rk"] or 0)
-    rows = c.execute("SELECT id, branche, category, distance_km FROM leads WHERE status='kandidat'").fetchall()
+    rows = c.execute("SELECT id, source_id, branche, category, distance_km FROM leads WHERE status='kandidat'").fetchall()
+    imported = [r for r in rows if (r["source_id"] or "").startswith("claude:")]
+    if imported:  # Betriebe aus der Claude-Recherche zuerst, die habt ihr gezielt suchen lassen
+        rows = imported
     if rows and random.random() < EXPLORE:
         return random.choice(rows)["id"]
     best, best_score = None, -1e9
@@ -246,13 +249,20 @@ def stage_score(c, lead_id, learned, promote=True):
     leaddb.update_lead(c, lead_id, status="recherche")
     research = finder.research_website(lead["website"]) if lead["website"] else \
         {"pages": [], "emails": [], "links": [], "errors": ["keine Webseite"]}
+    imported = lead["research"].get("import")  # aus der Claude-Recherche (CSV), bleibt erhalten
+    if imported and imported.get("groesse"):
+        research["size_hint"] = imported["groesse"]
     result = scoring.score(lead, research, learned, regions.bonus_info(leaddb.kv_get(c, "regionen")))
+    if imported:
+        result["zeitfresser"] = list(dict.fromkeys([*imported.get("zeitfresser", []), *result["zeitfresser"]]))
     threshold = S("LEADS_RULE_MIN")
     email_addr = result["email"] or lead["email"] or None
     passes = result["score"] >= threshold and not result["ko"]
     info = {"signale": result["signals"], "ko": result["ko"], "groesse": result["groesse"], "zeitfresser": result["zeitfresser"],
             "auszug": result["auszug"], "pages": [p["url"] for p in research["pages"]], "emails": research["emails"],
             "errors": research["errors"]}
+    if imported:
+        info["import"] = imported
     common = dict(fit_score=result["score"], fit_reason=scoring.summary(result, threshold), research=_json(info),
                   contact_name=lead["contact_name"] or result["contact_name"] or None, email=email_addr)
 
@@ -294,7 +304,7 @@ def _analysis(lead):
     info = lead["research"]
     return {"begruendung": lead["fit_reason"] or "", "groesse": info.get("groesse"),
             "zeitfresser": info.get("zeitfresser", []), "auszug": info.get("auszug", ""),
-            "ansprechpartner": lead["contact_name"]}
+            "ansprechpartner": lead["contact_name"], "recherche": info.get("import")}
 
 
 def stage_write(c, lead_id, brain):
@@ -312,7 +322,8 @@ TEMPLATE_HEADING = "Vorlage (ohne KI)"
 
 def template_draft(c, lead_id):
     """Entwurf aus der Vorlage im Gehirn (Abschnitt „Vorlage (ohne KI)“), kostenlos. Platzhalter:
-    {firma}, {anrede}, {zeitfresser}, {kategorie}, {ort}, {absender}."""
+    {firma}, {anrede}, {zeitfresser}, {kategorie}, {ort}, {absender}, {aufhaenger}.
+    Ein Absatz, dessen Platzhalter leer bleibt (z. B. {aufhaenger} ohne Recherche), fällt weg."""
     lead = leaddb.get_lead(c, lead_id)
     section = leaddb.brain_sections(leaddb.brain(c), [TEMPLATE_HEADING]).strip() \
         or leaddb.brain_sections(leaddb.BRAIN_SEED.read_text(encoding="utf-8"), [TEMPLATE_HEADING]).strip()
@@ -324,16 +335,23 @@ def template_draft(c, lead_id):
             subject = m.group(2)
         elif m:
             greeting = m.group(2)
+    imported = lead["research"].get("import") or {}
     fresser = (lead["research"].get("zeitfresser") or ["Papierkram und wiederkehrende Anfragen"])[:2]
     values = {"firma": lead["name"], "kategorie": lead["category_label"] or "Betrieb",
-              "anrede": f"Guten Tag {lead['contact_name']}," if lead["contact_name"] else "Guten Tag,",
+              "anrede": imported.get("anrede") or (f"Guten Tag {lead['contact_name']},"
+                                                   if lead["contact_name"] else "Guten Tag,"),
               "zeitfresser": " sowie ".join(fresser), "ort": lead["city"] or "Ihrer Region",
-              "absender": S("LEADS_SENDER_NAME")}
+              "absender": S("LEADS_SENDER_NAME"), "aufhaenger": imported.get("aufhaenger", "")}
 
     def fill(text):
         return re.sub(r"\{(\w+)\}", lambda m: values.get(m.group(1), m.group(0)), text).strip()
+
+    def fill_body(text):
+        keep = [p for p in re.split(r"\n\s*\n", text)
+                if not any(values.get(k) == "" for k in re.findall(r"\{(\w+)\}", p))]
+        return fill("\n\n".join(keep))
     fields = {"subject": fill(subject), "greeting": fill(greeting) or values["anrede"],
-              "body": fill("\n".join(lines))}
+              "body": fill_body("\n".join(lines))}
     leaddb.update_lead(c, lead_id, status="entwurf", **fields)
     leaddb.add_event(c, lead_id, "draft", "Entwurf aus der Vorlage erstellt (ohne KI).", author="Vorlage")
     return fields

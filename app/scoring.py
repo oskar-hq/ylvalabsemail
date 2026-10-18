@@ -160,7 +160,7 @@ def score(lead, research, learned=None, region=None, now=None):
         add(8, f"Passende Branche: {label}")
 
     # Größe: 10–100 ist ideal für einen Piloten
-    size = extract_size(text)
+    size = extract_size(text) or research.get("size_hint")  # sonst die Zahl aus der Claude-Recherche
     if size is not None:
         if 10 <= size <= 100:
             add(15, f"Etwa {size} Mitarbeitende, ideale Größe")

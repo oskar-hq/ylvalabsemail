@@ -63,6 +63,8 @@ Anrede: {anrede}
 
 ich bin Oskar Jacobsen von Ylva Labs, einem kleinen KI-Lab aus Schleswig-Holstein. Wir bauen mit Betrieben aus der Region Werkzeuge, die Papierkram und Routine abnehmen.
 
+{aufhaenger}
+
 Bei Betrieben wie {firma} kostet oft das hier viel Zeit: {zeitfresser}. Genau an solchen Stellen setzen wir an. Sie bringen das Problem aus dem Alltag mit, wir bauen die Lösung und tragen das Entwicklungsrisiko.
 
 Hätten Sie Lust auf ein kostenloses Gespräch von 30 Minuten, am Telefon oder bei Ihnen vor Ort?

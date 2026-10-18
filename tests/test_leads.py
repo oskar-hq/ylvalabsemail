@@ -23,7 +23,7 @@ from cryptography.hazmat.primitives import serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import ec  # noqa: E402
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: E402
 
-from app import agent, ai, crm, finder, leaddb, regions, scoring, webpush  # noqa: E402
+from app import agent, ai, claude_research, crm, finder, leaddb, regions, scoring, webpush  # noqa: E402
 from app.main import app  # noqa: E402
 
 
@@ -591,6 +591,64 @@ class CrmTest(unittest.TestCase):
                                 ("beantwortet", "verloren")])
 
 
+class ClaudeResearchTest(unittest.TestCase):
+    CSV = ("Firma;Webseite;E-Mail;Telefon;Ansprechperson;Anrede;Straße;PLZ;Ort;Branche;Kategorie;Mitarbeitende;"
+           "Zeitfresser;Aufhänger;Begründung;Quelle;Breite;Länge\n"
+           "Tischlerei A;tischlerei-a.de;jens.hansen@tischlerei-a.de;04642 1;Jens Hansen;Guten Tag Herr Hansen,;"
+           "Hafenstr. 1;24376;Kappeln;handwerk;Tischlerei;14;Aufmaß und Angebote|Tourenplanung;"
+           "Auf Ihrer Webseite habe ich gesehen, dass Sie eine Bürokraft suchen.;Sucht Büro;"
+           "https://tischlerei-a.de/impressum;54,66;9,93\n"
+           "Ohne Kontakt;;;;;;;;Kiel;pflege;Pflege;;;;;;;\n"
+           "Tischlerei A doppelt;https://www.tischlerei-a.de;;;;;;;Kappeln;handwerk;Tischlerei;;;;;;;\n")
+
+    def setUp(self):
+        self.c = leaddb.connect(os.path.join(tempfile.mkdtemp(), "t.db"))
+        agent.CFG["db_path"] = ":memory:"
+
+    def test_prompt_lists_columns_and_placeholders(self):
+        brain = leaddb.BRAIN_SEED.read_text(encoding="utf-8")
+        template = leaddb.brain_sections(brain, [agent.TEMPLATE_HEADING])
+        prompt = claude_research.build_prompt(brain, {"LEADS_REGION": "DE-SH"}, 30, "pflege", {"alt.example"}, template)
+        self.assertIn(";".join(claude_research.HEADERS), prompt)
+        self.assertIn("Finde 30 Betriebe in ganz Schleswig-Holstein", prompt)
+        self.assertIn("{aufhaenger}", prompt)
+        self.assertIn("alt.example", prompt)
+        self.assertIn("Wen wir suchen", prompt)
+        self.assertIn("{aufhaenger}", claude_research.placeholders(template))
+
+    def test_import_score_and_template(self):
+        result = claude_research.import_csv(self.c, self.CSV.encode("utf-8-sig"), "t", (54.6614, 9.9311))
+        self.assertEqual(result["neu"], 1)
+        self.assertEqual([line for line, _ in result["uebersprungen"]], [3, 4])  # ohne Kontakt, doppelt
+        lead = leaddb.get_lead(self.c, self.c.execute("SELECT id FROM leads").fetchone()[0])
+        self.assertEqual((lead["status"], lead["branche"], lead["city"]), ("kandidat", "handwerk", "Kappeln"))
+        self.assertEqual(lead["website"], "https://tischlerei-a.de")
+        self.assertLess(lead["distance_km"], 5)
+        self.assertEqual(lead["research"]["import"]["zeitfresser"], ["Aufmaß und Angebote", "Tourenplanung"])
+        # zuerst bewertet, vor Kandidaten aus der Kartensuche
+        self.c.execute("INSERT INTO leads (source_id, created_at, updated_at, name, branche, status) "
+                       "VALUES ('osm:1', ?, ?, 'Karte', 'handwerk', 'kandidat')", (leaddb.now(), leaddb.now()))
+        self.assertEqual(agent.next_candidate(self.c), lead["id"])
+        site = {"pages": [{"url": "https://tischlerei-a.de", "title": "Tischlerei A", "text": "Meisterbetrieb. Fax: 04642 1"}],
+                "emails": [], "links": [], "errors": []}
+        with mock.patch.object(finder, "research_website", return_value=site):
+            agent.stage_score(self.c, lead["id"], {})
+        lead = leaddb.get_lead(self.c, lead["id"])
+        self.assertIn("Etwa 14 Mitarbeitende, ideale Größe", [r for _, r in lead["research"]["signale"]])
+        self.assertEqual(lead["research"]["zeitfresser"][0], "Aufmaß und Angebote")
+        self.assertEqual(lead["email"], "jens.hansen@tischlerei-a.de")
+        fields = agent.template_draft(self.c, lead["id"])
+        self.assertEqual(fields["greeting"], "Guten Tag Herr Hansen,")
+        self.assertIn("dass Sie eine Bürokraft suchen", fields["body"])
+        self.assertIn("Aufmaß und Angebote sowie Tourenplanung", fields["body"])
+
+    def test_codeblock_and_missing_header(self):
+        text = "```csv\nFirma,Webseite,Ort,Branche,Kategorie\nHof B,hof-b.example,Süderbrarup,landwirtschaft,Hof\n```"
+        self.assertEqual(claude_research.import_csv(self.c, text, "t", (54.66, 9.93))["neu"], 1)
+        with self.assertRaises(claude_research.CsvError):
+            claude_research.import_csv(self.c, "a;b\n1;2\n", "t", (54.66, 9.93))
+
+
 class ViewsTest(unittest.TestCase):
     def setUp(self):
         self.client = app.test_client()
@@ -633,6 +691,10 @@ class ViewsTest(unittest.TestCase):
         self.assertIn("Pipeline.", html)
         self.assertIn("Anrufen, vormittags", html)  # Wiedervorlage von heute aus den Beispieldaten
         self.assertEqual(self.client.get("/leads/regeln").status_code, 200)
+        self.assertIn("Prompt kopieren", self.client.get("/leads/claude?anzahl=20&branche=pflege").get_data(as_text=True))
+        r = self.client.post("/leads/claude/import", data={"_csrf": self.csrf, "text": ClaudeResearchTest.CSV})
+        self.assertEqual(r.status_code, 302)
+        self.assertIn("1 Betriebe übernommen", self.client.get("/leads/claude").get_data(as_text=True))
         karte = self.client.get("/crm/karte").get_data(as_text=True)
         self.assertIn("Gegend Kiel", karte)  # Beispieldaten haben Koordinaten
         self.assertIn('id="mapData"', karte)

@@ -138,6 +138,17 @@ gemieteter Server mit automatischem HTTPS ([docs/SERVER-MIETEN.md](docs/SERVER-M
 und eigener Rechner zum Ausprobieren ([docs/LOKAL-TESTEN.md](docs/LOKAL-TESTEN.md)). Den Systemcheck gibt es auch
 in der App unter „03 Leads → Systemcheck“. Sicherung: `bash deploy/backup.sh`, zurückspielen: `bash deploy/restore.sh <Datei>`.
 
+## Recherche mit Claude (ohne API-Schlüssel)
+
+Unter **03 Leads → Mit Claude recherchieren** baut die App einen Prompt aus dem Gehirn („Über uns“, „Wen wir suchen“),
+dem Suchgebiet und den Platzhaltern der Vorlage. Den Prompt in Claude Code oder auf claude.ai mit Websuche eingeben:
+Claude sucht passende Betriebe, liest ihre Webseiten und liefert `ylva-recherche.csv` mit festen Spalten (Firma,
+Webseite, E-Mail, Ansprechperson, Anrede, Ort, Branche, Kategorie, Mitarbeitende, Zeitfresser, Aufhänger …).
+Die Datei (oder den Codeblock aus dem Chat) dort hochladen. Die Betriebe werden Kandidaten, im nächsten Lauf zuerst
+nach den Regeln bewertet (kostenlos), und die herausgesuchten Angaben füllen die Vorlage: `{anrede}`, `{zeitfresser}`,
+`{aufhaenger}` (ein Satz über genau diesen Betrieb; ohne Angabe fällt der Absatz weg), `{firma}`, `{ort}`,
+`{kategorie}`. Das läuft über das eigene Claude-Abo; die App verbraucht dabei keine Tokens.
+
 ## Einstellungen und Updates in der App
 
 Nach der Einrichtung muss niemand mehr auf den Server:
