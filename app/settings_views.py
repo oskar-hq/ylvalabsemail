@@ -18,16 +18,14 @@ def who():
     return g.account.get("address") or g.account.get("user") or "Team"
 
 
-def is_admin(account):
-    if account.get("demo"):
-        return False
-    admins = SETTINGS["ADMIN_USERS"]
-    return not admins or (account.get("address") or account.get("user", "")).lower() in admins
+def can_edit(account):
+    """Jede Person, die sich anmelden darf, darf auch ändern, einspielen und sichern; nur die Demo nicht."""
+    return not account.get("demo")
 
 
-def require_admin():
-    if not is_admin(g.account):
-        abort(403, "Nur für Admins (ADMIN_USERS in der .env).")
+def require_edit():
+    if not can_edit(g.account):
+        abort(403, "Im Demo-Modus nicht möglich.")
 
 
 def restart_soon(environ):
@@ -47,7 +45,7 @@ def restart_soon(environ):
 def settings():
     data_dir = SETTINGS["DATA_DIR"]
     if request.method == "POST":
-        require_admin()
+        require_edit()
         if agent.RUN.get("id"):
             flash("Gerade läuft ein Lauf. Bitte warten, bis er fertig ist, oder ihn stoppen.")
             return redirect(url_for("settings.settings"))
@@ -94,7 +92,7 @@ def settings():
         return redirect(url_for("settings.settings"))
     return render_template("settings.html", account=g.account, groups=config_store.view(data_dir),
                            read_only={k: os.environ.get(k, "") for k in config_store.READ_ONLY},
-                           admin=is_admin(g.account), admins_set=bool(SETTINGS["ADMIN_USERS"]),
+                           editable=can_edit(g.account),
                            demo=SETTINGS["DEMO_MODE"])
 
 
@@ -102,7 +100,7 @@ def settings():
 @login_required
 def software():
     return render_template("software.html", account=g.account, up=updater.state(SETTINGS["CONTROL_DIR"]),
-                           admin=is_admin(g.account), demo=SETTINGS["DEMO_MODE"])
+                           editable=can_edit(g.account), demo=SETTINGS["DEMO_MODE"])
 
 
 @bp.get("/einstellungen/software/status.json")
@@ -114,7 +112,7 @@ def software_status():
 @bp.post("/einstellungen/software/<kind>")
 @login_required
 def software_request(kind):
-    require_admin()
+    require_edit()
     control = SETTINGS["CONTROL_DIR"]
     if kind not in updater.KINDS:
         abort(404)
@@ -139,7 +137,7 @@ def software_request(kind):
 @login_required
 def backup_page():
     data_dir = SETTINGS["DATA_DIR"]
-    return render_template("backup.html", account=g.account, admin=is_admin(g.account), demo=SETTINGS["DEMO_MODE"],
+    return render_template("backup.html", account=g.account, editable=can_edit(g.account), demo=SETTINGS["DEMO_MODE"],
                            history=backups.history(data_dir), can_undo=backups.can_undo(data_dir),
                            pending=backups.pending(data_dir), host_backups=bool(SETTINGS["CONTROL_DIR"]))
 
@@ -147,7 +145,7 @@ def backup_page():
 @bp.get("/einstellungen/sicherung/herunterladen")
 @login_required
 def backup_download():
-    require_admin()
+    require_edit()
     data = backups.create(SETTINGS["DATA_DIR"])
     name = f"ylva-mailer_{datetime.now():%Y-%m-%d_%H%M}.tar.gz"
     agent.log.info("Sicherung heruntergeladen von %s", who())
@@ -165,7 +163,7 @@ def _restart_or_flash(what):
 @bp.post("/einstellungen/sicherung/zurueckspielen")
 @login_required
 def backup_restore():
-    require_admin()
+    require_edit()
     request.max_content_length = backups.MAX_BYTES
     if agent.RUN.get("id"):
         flash("Gerade läuft ein Lauf. Bitte warten, bis er fertig ist, oder ihn stoppen.")
@@ -191,7 +189,7 @@ def backup_restore():
 @bp.post("/einstellungen/sicherung/rueckgaengig")
 @login_required
 def backup_undo():
-    require_admin()
+    require_edit()
     try:
         backups.stage_undo(SETTINGS["DATA_DIR"])
     except backups.BackupError as exc:

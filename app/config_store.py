@@ -6,7 +6,7 @@ deshalb kurz neu. Passwörter und Schlüssel werden verschlüsselt abgelegt (Sch
 lesbar) und in der Oberfläche nie wieder angezeigt.
 
 Bewusst nicht in der App änderbar, weil man sich damit aussperren oder die Sicherheit aushebeln könnte:
-ALLOWED_DOMAINS, ALLOWED_USERS, ADMIN_USERS, SECRET_KEY, COOKIE_SECURE, TRUST_PROXY, DEMO_MODE, DATA_DIR.
+ALLOWED_DOMAINS, ALLOWED_USERS, SECRET_KEY, COOKIE_SECURE, TRUST_PROXY, DEMO_MODE, DATA_DIR.
 """
 import json
 import os
@@ -70,7 +70,7 @@ GROUPS = [
         ("INBOX_MINUTES", "Postfach prüfen alle (Minuten)", "float", "10", ""),
     ]),
 ]
-READ_ONLY = ["ALLOWED_DOMAINS", "ALLOWED_USERS", "ADMIN_USERS", "DEMO_MODE", "COOKIE_SECURE", "TRUST_PROXY"]
+READ_ONLY = ["ALLOWED_DOMAINS", "ALLOWED_USERS", "DEMO_MODE", "COOKIE_SECURE", "TRUST_PROXY"]
 FIELDS = {key: dict(key=key, label=label, type=typ, default=default, hint=hint, group=gid)
           for gid, _, items in GROUPS for key, label, typ, default, hint in items}
 _EMAIL = re.compile(r"^[^@\s,]+@[^@\s,]+\.[^@\s,]+$")

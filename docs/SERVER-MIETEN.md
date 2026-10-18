@@ -52,7 +52,6 @@ bash deploy/setup.sh
 - Domain: `mail.ylvalabs.de`.
 - Das Skript bietet an, Docker zu installieren: mit **j** bestätigen.
 - Zugangsdaten eintippen: Akquise-Postfach, Suchgebiet (Standard: ganz Schleswig-Holstein), optional KI-Schlüssel und Monatsbudget.
-- Das Skript fragt, wer **Admin** ist (darf Einstellungen ändern und Updates einspielen).
 - Am Ende bietet es an, **Updates per Knopf in der App** einzurichten und die **tägliche Sicherung**: beides mit **j** bestätigen.
   Danach muss niemand mehr auf den Server; Einstellungen und Updates gehen in der App.
 

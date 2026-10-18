@@ -91,7 +91,6 @@ if [ -z "${SKIP_ENV:-}" ]; then
   ask OUTREACH_USER "E-Mail-Adresse" "kontakt@ylvalabs.de"
   ask_secret OUTREACH_PASSWORD "Passwort (wird nicht angezeigt)"
   ask NOTIFY_EMAILS "Wer bekommt Benachrichtigungen per Mail? (mehrere mit Komma)" "oskar@ylvalabs.de"
-  ask ADMIN_USERS "Wer darf Einstellungen ändern und Updates einspielen? (Admin-Adressen, mit Komma)" "${NOTIFY_EMAILS%%,*}"
   ask SENDER "Name unter den Akquise-Nachrichten" "Oskar Jacobsen"
   ask FOOTER "Fußzeile der Mails (Firmenname und Anschrift wie im Impressum)" "Ylva Labs · Schleswig-Holstein"
 
@@ -143,7 +142,6 @@ if [ -z "${SKIP_ENV:-}" ]; then
     echo "LEADS_SENDER_NAME='$SENDER'"
     echo "LEADS_MONTHLY_BUDGET_EUR=$BUDGET"
     echo "LEADS_REGION=$REGION"
-    echo "ADMIN_USERS=$ADMIN_USERS"
   } > .env
   chmod 600 .env
   echo
@@ -186,7 +184,7 @@ if [ "$MODE" != 3 ] && command -v crontab >/dev/null 2>&1; then
   echo
   if confirm "Jede Nacht um 3:30 automatisch sichern (nach ~/ylva-backups, 14 Tage aufbewahren)?"; then
     LINE="30 3 * * * cd $DIR && bash deploy/backup.sh >> $DIR/backup.log 2>&1"
-    ( crontab -l 2>/dev/null | grep -v 'deploy/backup.sh' ; echo "$LINE" ) | crontab -
+    ( crontab -l 2>/dev/null | grep -v 'deploy/backup.sh' || true ; echo "$LINE" ) | crontab -
     echo "✓ Tägliche Sicherung eingerichtet."
   fi
 fi

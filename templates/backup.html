@@ -6,7 +6,7 @@
   <h1 class="title">Sicherung.</h1>
   {% include "_settings_tabs.html" %}
   {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if m.startswith('Nicht') or m.startswith('Bitte') else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
-  {% if not admin %}<p class="note warn small">Sicherungen herunterladen und zurückspielen dürfen nur Admins (<code>ADMIN_USERS</code>).</p>{% endif %}
+  {% if not editable %}<p class="note warn small">Demo-Modus: Sicherungen herunterladen und zurückspielen ist hier nicht möglich.</p>{% endif %}
   {% if pending %}<p class="note warn small">Eine Sicherung ist bereitgelegt und wird beim nächsten Neustart der App eingesetzt.</p>{% endif %}
 
   <section class="lead-section">
@@ -14,11 +14,11 @@
     <p class="measure">Leads, CRM, Gehirn, Kosten, in der App geänderte Einstellungen, Push-Schlüssel und hochgeladene Bilder,
       als eine Datei. Gut vor größeren Änderungen und für den Umzug auf einen anderen Server.</p>
     <p class="note warn small measure">Die Datei enthält Zugangsdaten (die Passwörter aus den Einstellungen samt Schlüssel). Wie ein Passwort behandeln: nicht per Mail verschicken, sicher ablegen.</p>
-    {% if admin %}<a class="btn primary" href="{{ url_for('settings.backup_download') }}">Sicherung herunterladen</a>{% endif %}
+    {% if editable %}<a class="btn primary" href="{{ url_for('settings.backup_download') }}">Sicherung herunterladen</a>{% endif %}
     {% if host_backups %}<p class="muted small">Zusätzlich sichert der Server jede Nacht nach <code>~/ylva-backups</code> und vor jedem Update.</p>{% endif %}
   </section>
 
-  {% if admin %}
+  {% if editable %}
   <section class="lead-section">
     <div class="section-head"><h2>Zurückspielen</h2><span class="muted small">Ersetzt die aktuellen Daten.</span></div>
     <form method="post" action="{{ url_for('settings.backup_restore') }}" enctype="multipart/form-data" class="restore-form">

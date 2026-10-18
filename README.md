@@ -145,7 +145,7 @@ Nach der Einrichtung muss niemand mehr auf den Server:
 - **Einstellungen** (Menü oben rechts): Postfach, Versand, Absender und Texte, Suchgebiet und Bewertung, KI und Budget,
   Benachrichtigungen. Was dort gespeichert wird, gilt vor der `.env`; die App startet danach kurz neu. Passwörter und
   der KI-Schlüssel werden verschlüsselt im Datenordner abgelegt und nie wieder angezeigt. Nur in der `.env` bleiben
-  Zugang und Sicherheit (`ALLOWED_DOMAINS`, `ALLOWED_USERS`, `ADMIN_USERS`, `COOKIE_SECURE`, `TRUST_PROXY`, `DEMO_MODE`),
+  Zugang und Sicherheit (`ALLOWED_DOMAINS`, `ALLOWED_USERS`, `COOKIE_SECURE`, `TRUST_PROXY`, `DEMO_MODE`),
   damit sich niemand aus Versehen aussperrt.
 - **Software und Updates**: zeigt die installierte Version und was auf GitHub neu ist. „Update einspielen“ sichert,
   holt den neuen Stand, baut neu und startet. Startet die neue Version nicht, wird automatisch die alte wieder
@@ -157,7 +157,7 @@ Nach der Einrichtung muss niemand mehr auf den Server:
   hochladen. Die Datei wird vor dem Einsetzen geprüft. Der vorherige Stand bleibt erhalten und lässt sich mit
   „Rückgängig“ zurückholen. Die Datei enthält Zugangsdaten, also so sicher ablegen wie ein Passwort.
   Dateien von `deploy/backup.sh` lassen sich dort ebenfalls zurückspielen.
-- Ändern, einspielen und sichern dürfen nur Admins (`ADMIN_USERS` in der `.env`, ohne Angabe alle, die sich anmelden dürfen).
+- Ändern, einspielen und sichern darf jede Person, die sich anmelden darf (`ALLOWED_DOMAINS` / `ALLOWED_USERS`).
 
 Die folgenden Abschnitte beschreiben die Einrichtung von Hand.
 

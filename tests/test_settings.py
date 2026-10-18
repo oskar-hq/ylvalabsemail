@@ -185,8 +185,8 @@ class SettingsViewsTest(unittest.TestCase):
         self.assertIn("bereitgelegt", self.client.get("/einstellungen/sicherung").get_data(as_text=True))
         import shutil
         shutil.rmtree(Path(main.SETTINGS["DATA_DIR"]) / backups.PENDING)
-        with mock.patch.dict(main.SETTINGS, {"ADMIN_USERS": ["chef@ylvalabs.de"]}):
-            self.assertEqual(self.client.get("/einstellungen/sicherung/herunterladen").status_code, 403)
+        main._sessions["test-admin"]["demo"] = True
+        self.assertEqual(self.client.get("/einstellungen/sicherung/herunterladen").status_code, 403)
 
     def test_restart_only_under_gunicorn(self):
         from app import settings_views
@@ -198,11 +198,13 @@ class SettingsViewsTest(unittest.TestCase):
                     t.join(timeout=2)
             kill.assert_called_once()
 
-    def test_admin_only(self):
-        with mock.patch.dict(main.SETTINGS, {"ADMIN_USERS": ["chef@ylvalabs.de"]}):
-            self.assertEqual(self.post("/einstellungen", {"ORG_NAME": "X"}).status_code, 403)
-            self.assertEqual(self.post("/einstellungen/software/update").status_code, 403)
-            self.assertIn("Nur Admins", self.client.get("/einstellungen").get_data(as_text=True))
+    def test_everyone_may_edit_except_demo(self):
+        main._sessions["test-admin"].update(user="kollegin@ylvalabs.de", address="kollegin@ylvalabs.de")
+        self.assertIn("Speichern und neu starten", self.client.get("/einstellungen").get_data(as_text=True))
+        main._sessions["test-admin"]["demo"] = True
+        self.assertEqual(self.post("/einstellungen", {"ORG_NAME": "X"}).status_code, 403)
+        self.assertEqual(self.post("/einstellungen/software/update").status_code, 403)
+        self.assertNotIn("Speichern und neu starten", self.client.get("/einstellungen").get_data(as_text=True))
 
     def test_software_requests(self):
         self.assertIn("nicht eingerichtet", self.client.get("/einstellungen/software").get_data(as_text=True))

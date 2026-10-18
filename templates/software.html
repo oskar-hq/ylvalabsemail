@@ -31,14 +31,14 @@
   </section>
   {% endif %}
 
-  {% if admin %}
+  {% if editable %}
   <div class="btn-row">
     <button class="btn" data-sw="check" {{ 'disabled' if up.pending['check'] }}>{{ 'Prüfung läuft …' if up.pending['check'] else 'Nach Updates suchen' }}</button>
     <button class="btn primary" data-sw="update" {{ 'disabled' if up.pending['update'] or s.state == 'running' }}>{{ 'Update läuft …' if up.pending['update'] or s.state == 'running' else ('Update einspielen' if v.behind else 'Neu bauen und starten') }}</button>
   </div>
   <p class="muted small measure">Vor jedem Update wird automatisch gesichert. Startet die neue Version nicht, wird die alte wieder eingespielt.
     Die App ist während des Updates etwa ein bis zwei Minuten nicht erreichbar, danach bitte neu anmelden.</p>
-  {% else %}<p class="note small">Updates einspielen dürfen nur Admins (<code>ADMIN_USERS</code>).</p>{% endif %}
+  {% else %}<p class="note small">Im Demo-Modus werden keine Updates eingespielt.</p>{% endif %}
 
   {% if s.log %}
   <section class="lead-section">

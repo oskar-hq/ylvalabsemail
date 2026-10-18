@@ -59,7 +59,6 @@ SETTINGS = {
     "DEMO_MODE": env("DEMO_MODE", "false").lower() in ("1", "true", "yes"),
     "DATA_DIR": _DATA_DIR,
     # Wer Einstellungen ändern und Updates einspielen darf (leer = alle, die sich anmelden dürfen)
-    "ADMIN_USERS": [u.lower() for u in re.split(r"[,\s]+", env("ADMIN_USERS")) if u],
     # Austauschordner mit dem Update-Dienst auf dem Server (deploy/install-updater.sh), leer = keine Updates aus der App
     "CONTROL_DIR": Path(env("CONTROL_DIR")) if env("CONTROL_DIR") else None,
     # Akquise (Bereich „Leads“) und CRM
