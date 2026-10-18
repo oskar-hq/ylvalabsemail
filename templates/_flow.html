@@ -1,0 +1,21 @@
+{# Weg eines Betriebs: von der Suche bis zum Kunden. Braucht st (status_payload). #}
+{% set c = st.counts %}
+{% set sg = st.stages %}
+{% set flow = [
+  ('finden', '1', 'Finden', c.kandidaten, 'warten auf die Bewertung', url_for('leads.overview') ~ '#lauf', 'Leads', false),
+  ('passt', '2', 'Bewertet', c.passt, 'passen, noch ohne Nachricht', url_for('leads.overview', tab='passt'), 'Leads', false),
+  ('entwurf', '3', 'Nachricht', c.entwurf, 'warten auf eure Freigabe', url_for('leads.overview', tab='entwurf'), 'Leads', c.entwurf > 0),
+  ('versendet', '4', 'Versendet', c.versendet + c.nachfassen, (c.nachfassen ~ ' zum Nachfassen fällig') if c.nachfassen else 'warten auf Antwort', url_for('leads.overview', tab='nachfassen' if c.nachfassen else 'versendet'), 'Leads', c.nachfassen > 0),
+  ('antwort', '5', 'Antwort', c.qualified + c.mittel, (c.qualified ~ ' mit Interesse') if c.qualified else 'Interesse oder Rückfrage', url_for('leads.overview', tab='qualified' if c.qualified else 'mittel'), 'Leads', c.qualified > 0),
+  ('crm', '6', 'Gespräch und Angebot', (sg.get('gespraech', 0)) + (sg.get('angebot', 0)), (sg.get('kunde', 0) ~ (' Kunde' if sg.get('kunde') == 1 else ' Kunden')) if sg.get('kunde') else 'im CRM weiterführen', url_for('crm.board'), 'CRM', st.due_tasks > 0),
+] %}
+<nav class="flow" aria-label="Weg eines Betriebs">
+  {% for key, num, title, n, sub, href, place, act in flow %}
+  <a class="flow-step f-{{ key }} {{ 'act' if act }} {{ 'here' if here == place }}" href="{{ href }}">
+    <span class="flow-place mono">{{ num }} · {{ '03 Leads' if place == 'Leads' else '04 CRM' }}</span>
+    <span class="flow-title">{{ title }}</span>
+    <b class="flow-n">{{ n }}</b>
+    <span class="flow-sub">{% if act %}<i class="flow-dot" aria-hidden="true"></i>{% endif %}{{ sub }}</span>
+  </a>
+  {% endfor %}
+</nav>

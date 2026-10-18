@@ -23,6 +23,8 @@
     <button class="btn small" id="stopRun">Stoppen</button>
   </div>
   {% else %}
+  <details class="run-details" id="lauf" {{ 'open' if not st.counts.values()|sum or request.args.get('lauf') }}>
+  <summary><span class="btn primary small">Neuen Lauf starten</span><span class="muted small">Betriebe suchen und bewerten, kostenlos. Entwürfe mit KI nur auf Wunsch.</span></summary>
   <form class="run-box" id="runForm" data-per="{{ rd.estimate.per_stage_eur|tojson|forceescape }}">
     <div class="run-fields">
       <label><span class="sub">Betriebe bewerten <em>kostenlos</em></span><input type="number" name="bewerten" min="0" max="1000" value="{{ rd.check }}" inputmode="numeric"></label>
@@ -35,8 +37,7 @@
     <p class="estimate small" id="estimate">{% if rd.estimate.eur %}KI geschätzt: <b>ca. {{ '%.2f'|format(rd.estimate.eur)|replace('.', ',') }} €</b>{% else %}Ohne KI-Kosten.{% endif %} Nur die besten passenden Betriebe landen als „Neu“ im <a href="{{ url_for('crm.board') }}">CRM</a>, die übrigen warten im Reiter „Passt“.{% if rd.estimate.ohne_entwurf == 1 %} 1 passender Betrieb hat noch keine Nachricht.{% elif rd.estimate.ohne_entwurf %} {{ rd.estimate.ohne_entwurf }} passende Betriebe haben noch keine Nachricht.{% endif %}</p>
     <div class="run-actions">
       <button class="btn primary">Lauf starten</button>
-      <a class="btn" href="{{ url_for('leads.rules') }}">So wird bewertet</a>
-      <a class="btn" href="{{ url_for('leads.claude') }}">Mit Claude recherchieren</a>
+      <a class="btn" href="{{ url_for('leads.claude') }}">Stattdessen mit Claude recherchieren</a>
     </div>
     <ol class="funnel three small">
       <li><b>Suchen und Grobfilter</b><span>ganz Schleswig-Holstein, Karte und feste Regeln · kostenlos</span></li>
@@ -44,13 +45,18 @@
       <li><b>Entwurf</b><span>nur wenn du willst · {{ rd.models.entwurf }} · ca. {{ '%.1f'|format(rd.estimate.per_stage_eur.entwurf * 100)|replace('.', ',') }} ct · oder Vorlage, kostenlos</span></li>
     </ol>
   </form>
+  </details>
   {% endif %}
 
+  {% set n_hints = st.warnings|length + (0 if st.ai else 1) + (0 if st.email_enabled else 1) + (1 if st.last_run and not st.run else 0) %}
+  {% if st.error %}<p class="note err small">Letzter Fehler: {{ st.error }}</p>{% endif %}
+  <details class="hints">
+  <summary class="small">Hinweise und letzter Lauf <span class="muted">({{ n_hints }})</span>{% if st.warnings %} <span class="pill st-mittel">{{ st.warnings|length }} zur Einrichtung</span>{% endif %}</summary>
   {% for w in st.warnings %}<p class="note warn small">{{ w }}</p>{% endfor %}
   {% if not st.ai %}<p class="note small">Kein KI-Schlüssel eingetragen. Das ist in Ordnung: Suche, Bewertung, CRM und Versand laufen ohne KI. Nachrichten schreibst du selbst oder nimmst die Vorlage.</p>{% endif %}
-  {% if st.error %}<p class="note err small">Letzter Fehler: {{ st.error }}</p>{% endif %}
   {% if st.last_run and not st.run %}<p class="note small">Letzter Lauf ({{ st.last_run.started_at|kurzdatum }}, {{ {'fertig': 'fertig', 'gestoppt': 'gestoppt', 'fehler': 'mit Fehler', 'abgebrochen': 'abgebrochen'}.get(st.last_run.status, st.last_run.status) }}): {{ st.last_run.message }}</p>{% endif %}
   {% if not st.email_enabled %}<p class="note small">Erstkontakt per Mail ist aus (<code>OUTREACH_EMAIL=false</code>, § 7 UWG). Freigegebene Nachrichten gehen als Brief raus oder dienen als Leitfaden fürs Telefonat. Hat ein Betrieb geantwortet, kannst du ihm gestaltete Mails schicken.</p>{% endif %}
+  </details>
 </div>
 <dialog id="iosDlg"><div class="dlg">
   <h2>Erst zum Home-Bildschirm.</h2>

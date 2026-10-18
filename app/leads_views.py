@@ -80,7 +80,8 @@ def status_payload():
         "warnings": st["warnings"], "email_enabled": st["email_enabled"], "ai": ai.available(),
         "counts": leaddb.tab_counts(c),
         "unread": c.execute("SELECT COUNT(*) FROM leads WHERE unread=1").fetchone()[0],
-        "due_tasks": crm.due_count(c), "rule_min": SETTINGS["LEADS_RULE_MIN"], "today": crm.today(),
+        "due_tasks": crm.due_count(c),
+        "stages": {k: n for k, n in c.execute("SELECT stage, COUNT(*) FROM leads WHERE stage IS NOT NULL GROUP BY stage")}, "rule_min": SETTINGS["LEADS_RULE_MIN"], "today": crm.today(),
         "last_search": leaddb.kv_get(c, "last_search"),
         "run": dict(run, params=json.loads(run["params"])) if run else None,
         "run_eur": money(run_cost["usd"]) if run_cost else 0, "run_tokens": (run_cost["tin"] + run_cost["tout"]) if run_cost else 0,
@@ -107,7 +108,10 @@ def overview():
         tab = "alle"
     sections = [(k, label, hint, leaddb.tab_leads(db(), k, limit=300 if tab == k else 8))
                 for k, label, hint in leaddb.TABS if tab in ("alle", k)]
+    by_key = {k: (k, label, hint, items) for k, label, hint, items in sections}
+    groups = [(title, hint, [by_key[k] for k in keys if k in by_key]) for title, hint, keys in leaddb.TAB_GROUPS]
     return render_template("leads.html", account=g.account, tab=tab, tabs=leaddb.TABS, sections=sections,
+                           groups=[grp for grp in groups if grp[2]], tab_groups=leaddb.TAB_GROUPS,
                            st=status_payload(), rd=run_defaults(), demo=SETTINGS["DEMO_MODE"])
 
 
