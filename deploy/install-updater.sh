@@ -45,6 +45,7 @@ After=network-online.target docker.service
 Type=oneshot
 WorkingDirectory=$DIR
 Environment=YLVA_CONTROL=$CONTROL
+Environment=HOME=/root
 ExecStart=/usr/bin/env bash $DIR/deploy/update.sh
 TimeoutStartSec=30min
 EOF

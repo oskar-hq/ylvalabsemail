@@ -9,6 +9,9 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# Unter systemd (Update-Dienst, cron) ist HOME oft nicht gesetzt: dann das Home-Verzeichnis des Benutzers nehmen
+HOME="${HOME:-$(getent passwd "$(id -u)" | cut -d: -f6)}"
+HOME="${HOME:-/root}"
 DEST="${1:-$HOME/ylva-backups}"
 KEEP_DAYS="${KEEP_DAYS:-14}"
 STAMP="$(date +%Y-%m-%d_%H%M)"
