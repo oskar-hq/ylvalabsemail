@@ -4,45 +4,38 @@
 {% block content %}
 <main class="page full" id="crm">
   <div class="leads-head">
-    <div>
-      <span class="label">04 · CRM</span>
-      <h1 class="title">Pipeline.</h1>
-    </div>
+    <h1 class="title">CRM <span class="muted" style="font-size:.45em;font-weight:500">{{ total_cards }}</span></h1>
     <div class="btn-row head-btns">
-      <button class="btn primary" type="button" id="newLead">Firma anlegen</button>
-      <button class="btn" type="button" id="importBtn">CSV importieren</button>
-      <a class="btn" href="{{ url_for('crm.heatmap') }}">Karte</a>
-      <a class="btn" href="{{ url_for('crm.export_csv') }}">CSV exportieren</a>
-      <a class="btn" href="{{ url_for('leads.overview') }}">Neue Betriebe finden</a>
+      <input type="search" id="boardFilter" placeholder="Name, Ort, Branche …" aria-label="Filtern" class="crm-search">
+      <button class="btn primary" type="button" id="newLead" title="Firma anlegen">+ Firma</button>
+      <details class="more-menu account"><summary class="btn" aria-label="Mehr">···</summary>
+        <div class="account-menu">
+          <button type="button" id="importBtn">CSV importieren</button>
+          <a href="{{ url_for('crm.export_csv') }}">CSV exportieren</a>
+          <a href="{{ url_for('crm.heatmap') }}">Karte</a>
+          <a href="{{ url_for('leads.search') }}">Neue Betriebe finden</a>
+        </div>
+      </details>
     </div>
   </div>
 
-  {% set here = 'CRM' %}
-  {% include "_flow.html" %}
-
+  {% if due %}
   <section class="today">
-    <div class="section-head"><h2>Heute dran <span class="muted">{{ due|length }}</span></h2>
-      <span class="muted small">Wiedervorlagen bis heute{% if st.counts.nachfassen %} · <a href="{{ url_for('leads.overview', tab='nachfassen') }}">{{ st.counts.nachfassen }} zum Nachfassen fällig</a>{% endif %}{% if st.counts.entwurf %} · <a href="{{ url_for('leads.overview', tab='entwurf') }}">{{ st.counts.entwurf }} Entwürfe warten auf Freigabe</a>{% endif %}</span></div>
-    {% if due %}
+    <p class="label">Heute dran · {{ due|length }}</p>
     <ul class="tasks big">
       {% for t in due %}<li class="{{ 'overdue' if t.due < today }}">
         <button class="check-btn" data-task="{{ t.id }}" title="Erledigt">✓</button>
-        <span><b>{{ fmt_day(t.due) }}</b> · <a href="{{ url_for('leads.detail', lead_id=t.lead_id) }}">{{ t.name }}</a> · {{ t.text }}</span></li>{% endfor %}
+        <span><b>{{ fmt_day(t.due) }}</b> · <a href="{{ url_for('leads.detail', lead_id=t.lead_id) }}">{{ t.name }}</a> · <span class="muted">{{ t.text }}</span></span></li>{% endfor %}
     </ul>
-    {% else %}<p class="muted small empty">Nichts fällig.{% if upcoming %} Als Nächstes: {{ fmt_day(upcoming[0].due) }}, {{ upcoming[0].name }}.{% endif %}</p>{% endif %}
   </section>
-
-  <div class="board-tools">
-    <input type="search" id="boardFilter" placeholder="Filtern nach Name, Ort, Branche …" aria-label="Filtern">
-    <span class="muted small">Karten zwischen den Spalten ziehen oder in der Akte die Stufe wählen.</span>
-  </div>
+  {% endif %}
 
   <div class="board" id="board">
     {% for key, label, hint, cards, total in columns %}
     <section class="col col-{{ key }}" data-stage="{{ key }}">
       <header class="col-head">
         <h2>{{ label }} <span class="muted">{{ cards|length }}</span></h2>
-        <span class="muted small">{{ hint }}{% if total %} · {{ euro(total) }}{% endif %}</span>
+        {% if total %}<span class="muted small">{{ euro(total) }}</span>{% endif %}
       </header>
       <ul class="cards" data-stage="{{ key }}">
         {% for c in cards %}
@@ -60,6 +53,7 @@
           </a>
           <select class="card-move" aria-label="Stufe ändern">{% for k, l, _ in stages %}<option value="{{ k }}" {{ 'selected' if k == key }}>{{ l }}</option>{% endfor %}</select>
         </li>
+        {% else %}<li class="empty-col">Noch niemand</li>
         {% endfor %}
       </ul>
     </section>

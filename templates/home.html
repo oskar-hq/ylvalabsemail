@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Heute · Ylva Labs{% endblock %}
+{% block content %}
+<main class="home">
+  <h1>{{ greeting }}, <b>{{ name }}.</b></h1>
+  {% if demo and not st.counts.values()|sum %}
+  <form method="post" action="{{ url_for('leads.demo_seed') }}" class="hero-card">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <span><b>Noch keine Betriebe</b><span>Im Demo-Modus kannst du Beispieldaten laden.</span></span>
+    <button class="btn small primary">Beispieldaten laden</button>
+  </form>
+  {% endif %}
+
+  <p class="hero-n">{{ total }}</p>
+  <p class="hero-label">{{ 'Aufgabe' if total == 1 else 'Aufgaben' }} für heute</p>
+  {% if parts %}
+  <ul class="hero-parts">{% for n, label, href in parts %}<li><a href="{{ href }}"><b>{{ n }}</b>{{ label }}</a></li>{% endfor %}</ul>
+  {% endif %}
+
+  {% if st.warnings %}
+  <a class="hero-card" href="{{ url_for('leads.system') }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+    <span><b>{{ st.warnings|length }} {{ 'Punkt' if st.warnings|length == 1 else 'Punkte' }} zur Einrichtung</b><span>{{ st.warnings[0] }}</span></span>
+  </a>
+  {% elif not total and st.counts.passt %}
+  <a class="hero-card" href="{{ url_for('leads.overview', tab='passt') }}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.9 1.9 0 0 0 3.4 0"/></svg>
+    <span><b>{{ st.counts.passt }} passende Betriebe ohne Nachricht</b><span>Vorlage nehmen oder selbst schreiben →</span></span>
+  </a>
+  {% endif %}
+
+  {% if start %}
+  <a class="btn primary big" href="{{ start }}">Starten <span aria-hidden="true">→</span></a>
+  {% else %}
+  <a class="btn primary big" href="{{ url_for('leads.search') }}">Neue Betriebe finden <span aria-hidden="true">→</span></a>
+  {% endif %}
+
+  <p class="home-foot">{% if st.run %}Ein Lauf läuft gerade · <a href="{{ url_for('leads.search') }}">ansehen</a>{% elif st.counts.kandidaten %}{{ st.counts.kandidaten }} Betriebe warten auf die Bewertung · <a href="{{ url_for('leads.search') }}">Lauf starten</a>{% elif not st.email_enabled %}Erstkontakt per Brief oder Telefon · Mail erst nach Antwort{% else %}KI diesen Monat {{ '%.2f'|format(st.month_eur)|replace('.', ',') }} €{% endif %}</p>
+</main>
+{% endblock %}

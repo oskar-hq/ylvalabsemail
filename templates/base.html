@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="csrf-token" content="{{ csrf_token() }}">
 <title>{% block title %}Ylva Labs Mailer{% endblock %}</title>
 <link rel="icon" href="{{ url_for('static', filename='mark.svg') }}" type="image/svg+xml">
@@ -11,28 +11,51 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ylva Leads">
-<meta name="theme-color" content="#ffffff">
+<meta name="theme-color" content="#0b0b0c">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+<link rel="stylesheet" href="{{ url_for('static', filename='cockpit.css') }}">
 </head>
 <body class="{% block body_class %}{% endblock %}">
 {% if account %}
+{% set ep = request.endpoint or '' %}
+{% set sec = 'heute' if ep == 'leads.home' else ('leads' if ep.startswith('leads.') else ('crm' if ep.startswith('crm.') else ('mailer' if ep in ('compose', 'history') else ('mehr' if ep.startswith('settings.') else '')))) %}
+{% set n_leads = leads_todo() %}{% set n_crm = crm_due() %}
+{% set who_name = (account.address or account.user or 'Team') %}
 <header class="top">
-  <a class="brand" href="{{ url_for('compose') }}">
-    <span class="mark" aria-hidden="true"><i class="d"></i><i class="d"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i class="d"></i><i class="d"></i></span>
-    <span class="mono">Ylva Labs · Mailer</span>
+  <a class="brand" href="{{ url_for('index') }}" aria-label="Ylva Labs, Heute">
+    <span class="brand-tile"><span class="mark" aria-hidden="true"><i class="d"></i><i class="d"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i class="d"></i><i class="d"></i></span></span>
+    {% if account.demo %}<span class="demo-chip">Demo · kein Versand</span>{% endif %}
   </a>
-  <nav class="mono">
-    <a href="{{ url_for('compose') }}" class="{{ 'on' if request.endpoint == 'compose' }}">01 Verfassen</a>
-    <a href="{{ url_for('history') }}" class="{{ 'on' if request.endpoint == 'history' }}">02 Verlauf</a>
-    <a href="{{ url_for('leads.overview') }}" class="{{ 'on' if (request.endpoint or '').startswith('leads.') }}">03 Leads</a>
-    {% set nav_due = crm_due() %}<a href="{{ url_for('crm.board') }}" class="{{ 'on' if (request.endpoint or '').startswith('crm.') }}">04 CRM{% if nav_due %} <span class="pill due" title="Wiedervorlagen heute">{{ nav_due }}</span>{% endif %}</a>
-    <a href="{{ url_for('settings.settings') }}" class="{{ 'on' if (request.endpoint or '').startswith('settings.') }}">Einstellungen</a>
-    {% if account.demo %}<span class="pill demo">Demo · kein Versand</span>{% else %}<span class="who">{{ account.address or account.user }}</span>{% endif %}
-    <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="link mono">Abmelden</button></form>
+  <nav aria-label="Hauptnavigation">
+    <span class="nav-main">
+      <a href="{{ url_for('leads.home') }}" class="{{ 'on' if sec == 'heute' }}">Heute</a>
+      <a href="{{ url_for('leads.overview') }}" class="{{ 'on' if sec == 'leads' }}">Leads{% if n_leads %} <span class="nav-count">{{ n_leads }}</span>{% endif %}</a>
+      <a href="{{ url_for('crm.board') }}" class="{{ 'on' if sec == 'crm' }}">CRM{% if n_crm %} <span class="nav-count" title="Wiedervorlagen heute">{{ n_crm }}</span>{% endif %}</a>
+      <a href="{{ url_for('compose') }}" class="{{ 'on' if sec == 'mailer' }}">Mailer</a>
+    </span>
+    <details class="account">
+      <summary class="avatar" aria-label="Konto und Einstellungen">{{ who_name[:1]|upper }}</summary>
+      <div class="account-menu">
+        <span class="who-full">{{ 'Demo, es wird nichts verschickt' if account.demo else who_name }}</span>
+        <a href="{{ url_for('settings.settings') }}">Einstellungen</a>
+        <a href="{{ url_for('history') }}">Verlauf des Mailers</a>
+        <a href="{{ url_for('leads.costs') }}">Kosten</a>
+        <a href="{{ url_for('leads.system') }}">Systemcheck</a>
+        <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button>Abmelden</button></form>
+      </div>
+    </details>
   </nav>
 </header>
+<nav class="tabbar" aria-label="Bereiche">
+  <a href="{{ url_for('leads.home') }}" class="{{ 'on' if sec == 'heute' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>Heute</a>
+  <a href="{{ url_for('leads.overview') }}" class="{{ 'on' if sec == 'leads' }}">{% if n_leads %}<span class="tab-count">{{ n_leads }}</span>{% endif %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="7" r="4"/><path d="M2 21v-1a6 6 0 0 1 9-5.2"/><circle cx="17" cy="16" r="3"/><path d="m21 20-1.8-1.8"/></svg>Leads</a>
+  <a href="{{ url_for('crm.board') }}" class="{{ 'on' if sec == 'crm' }}">{% if n_crm %}<span class="tab-count">{{ n_crm }}</span>{% endif %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg>CRM</a>
+  <a href="{{ url_for('compose') }}" class="{{ 'on' if sec == 'mailer' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Mailer</a>
+</nav>
 {% endif %}
 {% block content %}{% endblock %}
 {% block scripts %}{% endblock %}
+<script src="{{ url_for('static', filename='nav.js') }}"></script>
 </body>
 </html>

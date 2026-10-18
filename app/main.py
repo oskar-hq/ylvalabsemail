@@ -255,9 +255,9 @@ def login():
         session.clear()
         session["sid"] = sid
         nxt = request.args.get("next", "")
-        return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("compose"))
+        return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("index"))
     if current_account():
-        return redirect(url_for("compose"))
+        return redirect(url_for("index"))
     return render_template("login.html")
 
 
@@ -272,7 +272,7 @@ def demo_login():
                           "address": "demo@ylvalabs.de", "demo": True}
     session.clear()
     session["sid"] = sid
-    return redirect(url_for("compose"))
+    return redirect(url_for("index"))
 
 
 @app.post("/logout")
@@ -335,7 +335,7 @@ def defaults():
 @app.route("/")
 @login_required
 def index():
-    return redirect(url_for("compose"))
+    return redirect(url_for("leads.home"))
 
 
 def lead_fields(lead):

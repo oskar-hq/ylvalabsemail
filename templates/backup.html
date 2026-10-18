@@ -1,10 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Sicherung · Ylva Labs{% endblock %}
 {% block content %}
-<main class="page wide">
-  <span class="label">Einstellungen</span>
-  <h1 class="title">Sicherung.</h1>
-  {% include "_settings_tabs.html" %}
+<main class="page narrow">
+  <a class="back" href="{{ url_for('settings.settings') }}">‹ Einstellungen</a>
+  <h1 class="title">Sicherung</h1>
   {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if m.startswith('Nicht') or m.startswith('Bitte') else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
   {% if not admin %}<p class="note warn small">Sicherungen herunterladen und zurückspielen dürfen nur Admins (<code>ADMIN_USERS</code>).</p>{% endif %}
   {% if pending %}<p class="note warn small">Eine Sicherung ist bereitgelegt und wird beim nächsten Neustart der App eingesetzt.</p>{% endif %}

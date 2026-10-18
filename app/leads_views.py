@@ -1,5 +1,6 @@
 """Oberfläche der Akquise: Übersicht, Firma im Detail (Akte) mit Chat, Regeln, Gehirn, Web-App und Push."""
 import json
+import re
 import time
 from datetime import datetime
 
@@ -61,7 +62,13 @@ def _kurzdatum(value):
 def _leads_globals():
     return {"lead_status_labels": leaddb.STATUS_LABELS, "interest_labels": leaddb.INTEREST_LABELS,
             "tab_of": leaddb.tab_of, "is_due": leaddb.is_due, "followup_days": leaddb.FOLLOWUP_DAYS,
-            "stages": crm.STAGES, "stage_labels": crm.STAGE_LABELS, "fmt_day": crm.fmt_day}
+            "stages": crm.STAGES, "stage_labels": crm.STAGE_LABELS, "fmt_day": crm.fmt_day,
+            "leads_todo": lambda: _todo_count(leaddb.tab_counts(db()))}
+
+
+def _todo_count(counts):
+    """Was in den Leads auf euch wartet: Freigaben, Nachfassen, Interessenten."""
+    return counts["entwurf"] + counts["nachfassen"] + counts["qualified"]
 
 
 def money(usd):
@@ -96,6 +103,42 @@ def run_defaults():
     return {"check": SETTINGS["LEADS_RUN_CHECK"], "top": SETTINGS["LEADS_RUN_TOP"], "drafts": SETTINGS["LEADS_RUN_DRAFTS"],
             "budget": SETTINGS["LEADS_RUN_BUDGET_EUR"], "estimate": est, "models": ai.MODELS}
 
+# ---------------------------------------------------------------- Heute (Startseite)
+
+
+def _first_name(account):
+    if account.get("demo"):
+        return "Team"
+    local = (account.get("address") or account.get("user") or "").split("@")[0]
+    return re.split(r"[._\-]", local)[0].capitalize() or "Team"
+
+
+@bp.get("/heute")
+@login_required
+def home():
+    st = status_payload()
+    c = st["counts"]
+    parts = [(st["due_tasks"], "Wiedervorlagen" if st["due_tasks"] != 1 else "Wiedervorlage", url_for("crm.board")),
+             (c["entwurf"], "Freigaben" if c["entwurf"] != 1 else "Freigabe", url_for("leads.overview", tab="entwurf")),
+             (c["nachfassen"], "Nachfassen", url_for("leads.overview", tab="nachfassen")),
+             (c["qualified"], "Interessenten" if c["qualified"] != 1 else "Interessent",
+              url_for("leads.overview", tab="qualified"))]
+    total = sum(n for n, _, _ in parts)
+    # „Starten“ führt direkt zur ersten Aufgabe: Wiedervorlagen, dann Freigaben, Nachfassen, Interessenten
+    start = None
+    if st["due_tasks"]:
+        start = url_for("crm.board")
+    else:
+        for key in ("entwurf", "nachfassen", "qualified"):
+            if c[key]:
+                first = leaddb.tab_leads(db(), key, limit=1)
+                start = url_for("leads.detail", lead_id=first[0]["id"]) if first else None
+                break
+    hour = datetime.now().hour
+    greeting = "Guten Morgen" if hour < 11 else ("Guten Tag" if hour < 18 else "Guten Abend")
+    return render_template("home.html", account=g.account, st=st, parts=[p for p in parts if p[0]], total=total,
+                           start=start, greeting=greeting, name=_first_name(g.account), demo=SETTINGS["DEMO_MODE"])
+
 # ---------------------------------------------------------------- Übersicht
 
 
@@ -113,6 +156,14 @@ def overview():
     return render_template("leads.html", account=g.account, tab=tab, tabs=leaddb.TABS, sections=sections,
                            groups=[grp for grp in groups if grp[2]], tab_groups=leaddb.TAB_GROUPS,
                            st=status_payload(), rd=run_defaults(), demo=SETTINGS["DEMO_MODE"])
+
+
+@bp.get("/leads/suche")
+@login_required
+def search():
+    """Neue Betriebe finden: Lauf starten (Kartensuche und Bewertung) oder mit Claude recherchieren."""
+    return render_template("search.html", account=g.account, st=status_payload(), rd=run_defaults(),
+                           demo=SETTINGS["DEMO_MODE"])
 
 
 @bp.get("/leads/status.json")

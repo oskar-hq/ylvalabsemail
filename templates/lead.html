@@ -6,7 +6,7 @@
 {% set classified = events|selectattr('kind', 'equalto', 'classify')|list %}
 {% block content %}
 <main class="page wide" data-lead="{{ lead.id }}">
-  <p class="crumbs mono"><a href="{{ url_for('crm.board') }}">← CRM</a> <span class="muted">/</span>
+  <p class="crumbs mono"><a href="{{ url_for('crm.board') }}">‹ CRM</a> <span class="muted">/</span>
     <a href="{{ url_for('leads.overview', tab=tab) }}">{{ (tabs|selectattr(0, 'equalto', tab)|first)[1] }}</a></p>
 
   <header class="lead-head">

@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block title %}{{ grp.title }} · Einstellungen{% endblock %}
+{% block content %}
+<main class="page narrow">
+  <a class="back" href="{{ url_for('settings.settings') }}">‹ Einstellungen</a>
+  <h1 class="title">{{ grp.title }}</h1>
+  {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if ':' in m and 'Gespeichert' not in m else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
+  <ul class="menu">
+    {% for pg in grp.pages %}
+    <li><a href="{{ url_for('settings.page', gid=grp.id, pid=pg.id) }}">
+      <span class="txt"><b>{{ pg.title }}</b><span>{{ pg.summary }}</span></span>
+      {% if pg.missing %}<span class="flag"><i></i>Fehlt</span>{% elif pg.changed %}<span class="flag ok"><i></i>geändert</span>{% endif %}
+      <span class="chev">›</span></a></li>
+    {% endfor %}
+  </ul>
+</main>
+{% endblock %}

@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block title %}Zugang und Sicherheit · Einstellungen{% endblock %}
+{% block content %}
+<main class="page narrow">
+  <a class="back" href="{{ url_for('settings.settings') }}">‹ Einstellungen</a>
+  <h1 class="title">Zugang und Sicherheit</h1>
+  <p class="muted">Nur in der <code>.env</code> auf dem Server änderbar, damit sich niemand aus Versehen aussperrt.</p>
+  <dl class="facts small kv">
+    {% for k, v in read_only.items() %}<dt><code>{{ k }}</code></dt><dd>{{ v or '–' }}</dd>{% endfor %}
+  </dl>
+</main>
+{% endblock %}

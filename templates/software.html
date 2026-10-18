@@ -5,9 +5,8 @@
 {% set s = up.status or {} %}
 {% set labels = {'running': 'Läuft gerade', 'done': 'Erfolgreich', 'failed': 'Fehlgeschlagen', 'rolled_back': 'Zurückgerollt', 'idle': 'Bereit'} %}
 <main class="page wide" id="software" data-running="{{ '1' if s.state == 'running' or (up.pending and up.pending['update']) }}">
-  <span class="label">Einstellungen</span>
-  <h1 class="title">Software und Updates.</h1>
-  {% include "_settings_tabs.html" %}
+  <a class="back" href="{{ url_for('settings.settings') }}">‹ Einstellungen</a>
+  <h1 class="title">Software und Updates</h1>
 
   {% if not up.available %}
   <p class="note warn">Auf diesem Rechner ist der Update-Dienst nicht eingerichtet. Auf dem Server einmalig

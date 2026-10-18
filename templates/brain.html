@@ -2,9 +2,8 @@
 {% block title %}Gehirn · Leads{% endblock %}
 {% block content %}
 <main class="page wide">
-  <p class="crumbs mono"><a href="{{ url_for('leads.overview') }}">← Leads</a></p>
-  <span class="label">03 · Leads · Gehirn</span>
-  <h1 class="title">Was die KI weiß.</h1>
+  <a class="back" href="{{ url_for('leads.overview') }}">‹ Leads</a>
+  <h1 class="title">Was die KI weiß</h1>
   {% if saved == '1' %}<p class="note ok small">Gespeichert. Ab der nächsten Firma arbeitet die KI mit dieser Fassung.</p>
   {% elif saved == '0' %}<p class="note small">Keine Änderung.</p>{% endif %}
 
