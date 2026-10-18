@@ -3,9 +3,9 @@ import json
 import time
 from datetime import datetime
 
-from flask import Blueprint, Response, abort, g, jsonify, redirect, render_template, request, send_from_directory, url_for
+from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from . import agent, ai, crm, emailbuild, leaddb, scoring
+from . import agent, ai, claude_research, crm, emailbuild, leaddb, scoring
 from .main import DB_PATH, ROOT, SETTINGS, login_required
 
 bp = Blueprint("leads", __name__)
@@ -424,6 +424,54 @@ def rules():
     return render_template("rules.html", account=g.account, rules=scoring.rules_table(), ko_rules=scoring.KO_RULES,
                            base=scoring.BASE, top=SETTINGS["LEADS_RUN_TOP"],
                            threshold=SETTINGS["LEADS_RULE_MIN"], st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+
+# ---------------------------------------------------------------- Recherche mit Claude (ohne API-Tokens)
+
+
+@bp.get("/leads/claude")
+@login_required
+def claude():
+    try:
+        count = max(5, min(200, int(request.args.get("anzahl", 40))))
+    except ValueError:
+        count = 40
+    branche = request.args.get("branche", "")
+    if branche not in claude_research.BRANCHEN:
+        branche = ""
+    brain = leaddb.brain(db())
+    template = leaddb.brain_sections(brain, [agent.TEMPLATE_HEADING])
+    prompt = claude_research.build_prompt(brain, SETTINGS, count, branche, claude_research.known_hosts(db()),
+                                          template)
+    waiting = db().execute("SELECT COUNT(*) FROM leads WHERE status='kandidat' AND source_id LIKE 'claude:%'"
+                           ).fetchone()[0]
+    return render_template("claude.html", account=g.account, prompt=prompt, count=count, branche=branche,
+                           branchen=claude_research.BRANCHEN, columns=claude_research.COLUMNS,
+                           used=claude_research.placeholders(template), own=claude_research.OWN_PLACEHOLDERS,
+                           waiting=waiting, filename=claude_research.FILENAME, st=status_payload(),
+                           demo=SETTINGS["DEMO_MODE"])
+
+
+@bp.post("/leads/claude/import")
+@login_required
+def claude_import():
+    file = request.files.get("file")
+    raw = file.read() if file and file.filename else request.form.get("text", "").encode()
+    if not raw.strip():
+        flash("Bitte eine CSV-Datei auswählen oder den Inhalt einfügen.")
+        return redirect(url_for("leads.claude"))
+    try:
+        result = claude_research.import_csv(db(), raw, who(), SETTINGS["LEADS_CENTER"])
+    except claude_research.CsvError as exc:
+        flash(f"Nicht übernommen: {exc}")
+        return redirect(url_for("leads.claude"))
+    msg = f"{result['neu']} Betriebe übernommen."
+    if result["uebersprungen"]:
+        msg += f" {len(result['uebersprungen'])} übersprungen: " + "; ".join(
+            f"Zeile {line}: {reason}" for line, reason in result["uebersprungen"][:8])
+    if result["neu"]:
+        msg += " Sie werden im nächsten Lauf zuerst bewertet (kostenlos, ohne neue Suche)."
+    flash(msg)
+    return redirect(url_for("leads.claude"))
 
 # ---------------------------------------------------------------- Erinnerung (Nachfassen)
 

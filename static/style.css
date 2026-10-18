@@ -465,3 +465,10 @@ dialog ol{padding-left:18px;color:var(--body)}
 .change{padding:8px 0;border-bottom:1px solid var(--line)}
 pre.log{white-space:pre-wrap;overflow-wrap:anywhere;font:400 12px/1.5 var(--mono);background:var(--tint);padding:12px 14px;max-height:420px;overflow:auto}
 @media (max-width:720px){.settings-grid{grid-template-columns:1fr}}
+/* Recherche mit Claude */
+.claude-opts{margin:0 0 12px}
+.claude-opts select{font:400 15px/1.5 var(--sans);border:1px solid var(--line);padding:8px 10px;background:var(--paper);color:var(--ink)}
+textarea.prompt-box,textarea.csv-box{font:400 12.5px/1.55 var(--mono)}
+textarea.prompt-box{min-height:280px;background:var(--tint)}
+.claude-actions{margin:10px 0 6px}
+.lead-section .field{display:block;margin:0 0 12px}

@@ -54,7 +54,7 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
 
 ## Was fertig ist und was nicht
 
-- 49 automatische Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
+- 52 automatische Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.
 - Einrichtungs-Skript, Docker-Container, HTTPS über Caddy, Sicherung und Zurückspielen wurden
   echt in Docker durchgespielt, ebenso Updates aus der App (auch eine kaputte Version, die automatisch
