@@ -2,52 +2,25 @@
 {% block title %}Leads · Ylva Labs{% endblock %}
 {% block content %}
 <main class="page wide">
+  {% set c = st.counts %}
   <div class="leads-head">
-    <div>
-      <span class="label">03 · Leads</span>
-      <h1 class="title">Akquise.</h1>
-    </div>
+    <h1 class="title">Leads <span class="muted" style="font-size:.45em;font-weight:500">{{ c.values()|sum - c.kandidaten - c.grobfilter }}</span></h1>
     <div class="btn-row head-btns">
-      <a class="btn primary" href="{{ url_for('crm.board') }}">Zum CRM</a>
+      <a class="btn primary" href="{{ url_for('leads.search') }}">Neue Betriebe finden</a>
     </div>
   </div>
+  {% if st.run %}<p class="note warn small"><a href="{{ url_for('leads.search') }}">Ein Lauf läuft: {{ st.activity }}</a></p>{% endif %}
 
-  {% set here = 'Leads' %}
-  {% include "_flow.html" %}
+  <div class="kpis">
+    <a class="kpi {{ 'act' if c.entwurf }}" href="{{ url_for('leads.overview', tab='entwurf') }}"><span>Zur Freigabe</span><b>{{ c.entwurf }}</b><em>Nachricht fertig</em></a>
+    <a class="kpi {{ 'act' if c.nachfassen }}" href="{{ url_for('leads.overview', tab='nachfassen') }}"><span>Nachfassen</span><b>{{ c.nachfassen }}</b><em>seit {{ followup_days }} Tagen still</em></a>
+    <a class="kpi {{ 'act' if c.qualified }}" href="{{ url_for('leads.overview', tab='qualified') }}"><span>Interessenten</span><b>{{ c.qualified + c.mittel }}</b><em>{{ c.qualified }} mit Interesse</em></a>
+    <a class="kpi" href="{{ url_for('leads.overview', tab='passt') }}"><span>Passt, ohne Nachricht</span><b>{{ c.passt }}</b><em>{{ c.kandidaten }} warten auf Bewertung</em></a>
+  </div>
 
-  {% set c = st.counts %}
-  {% set todo = [
-    (c.entwurf, 'Nachrichten freigeben', 'fertig geschrieben, warten auf euch', url_for('leads.overview', tab='entwurf')),
-    (c.nachfassen, 'Nachfassen', 'seit einer Woche keine Antwort', url_for('leads.overview', tab='nachfassen')),
-    (c.qualified, 'Interessenten antworten', 'haben Interesse gezeigt', url_for('leads.overview', tab='qualified')),
-    (st.due_tasks, 'Wiedervorlagen', 'heute oder überfällig', url_for('crm.board')),
-  ] | selectattr(0) | list %}
-  <section class="todo" aria-label="Jetzt zu tun">
-    <span class="label">Jetzt zu tun</span>
-    {% if todo %}
-    <div class="todo-items">{% for n, title, sub, href in todo %}<a class="todo-item" href="{{ href }}"><b>{{ n }}</b><span><span class="todo-title">{{ title }}</span><span class="muted small">{{ sub }}</span></span><span class="todo-go mono">→</span></a>{% endfor %}</div>
-    {% else %}
-    <p class="muted small">Gerade nichts. {% if c.passt %}{{ c.passt }} passende Betriebe warten noch auf eine Nachricht.{% elif not c.kandidaten %}Neue Betriebe findet ein Lauf unten oder die <a href="{{ url_for('leads.claude') }}">Recherche mit Claude</a>.{% endif %}</p>
-    {% endif %}
-  </section>
-
-  <nav class="tools" aria-label="Werkzeuge">
-    <a href="{{ url_for('leads.claude') }}"><b>Mit Claude recherchieren</b><span>Betriebe per Prompt finden, CSV hochladen</span></a>
-    <a href="{{ url_for('leads.brain') }}"><b>Gehirn und Vorlage</b><span>Wer wir sind, wen wir suchen, Text der Nachricht</span></a>
-    <a href="{{ url_for('leads.rules') }}"><b>So wird bewertet</b><span>Regeln und Punkte</span></a>
-    <a href="{{ url_for('crm.heatmap') }}"><b>Karte</b><span>Wo die passenden Betriebe sitzen</span></a>
-    <a href="{{ url_for('leads.costs') }}"><b>Kosten</b><span>KI-Verbrauch in Euro</span></a>
-    <a href="{{ url_for('leads.system') }}"><b>Systemcheck</b><span>Ist alles eingerichtet?</span></a>
-  </nav>
-
-  {% include "_leads_bar.html" %}
-
-  <nav class="tabs mono" aria-label="Bereiche">
+  <nav class="segmented" aria-label="Bereiche">
     <a href="{{ url_for('leads.overview') }}" class="{{ 'on' if tab == 'alle' }}">Alle</a>
-    {% for title, _, keys in tab_groups %}<span class="tab-group">{{ title }}</span>
-    {% for key, label, _ in tabs if key in keys %}
-    <a href="{{ url_for('leads.overview', tab=key) }}" class="{{ 'on' if tab == key }} t-{{ key }}">{{ label }} <span class="count">{{ st.counts[key] }}</span></a>
-    {% endfor %}{% endfor %}
+    {% for title, _, keys in tab_groups %}{% for key, label, _ in tabs if key in keys %}<a href="{{ url_for('leads.overview', tab=key) }}" class="{{ 'on' if tab == key }}">{{ label }} <span class="count">{{ c[key] }}</span></a>{% endfor %}{% endfor %}
   </nav>
 
   {% if demo and not st.counts.values()|sum %}
@@ -60,12 +33,12 @@
 
   {% for gtitle, ghint, gsections in groups %}
   <div class="lead-group">
-  {% if tab == 'alle' %}<div class="group-head"><span class="label">{{ gtitle }}</span><span class="muted small">{{ ghint }}</span></div>{% endif %}
-  {% for key, label, hint, items in gsections %}
+  {% if tab == 'alle' and gsections|selectattr(3)|list %}<p class="label group-label">{{ gtitle }}</p>{% endif %}
+  {% for key, label, hint, items in gsections if items or tab != 'alle' %}
   <section class="lead-section s-{{ key }}">
     <div class="section-head">
       <h2>{{ label }} <span class="muted">{{ st.counts[key] }}</span></h2>
-      <span class="muted small">{{ hint }}</span>
+      {% if tab != 'alle' %}<span class="muted small">{{ hint }}</span>{% endif %}
     </div>
     {% if items %}
     <ul class="lead-list">

@@ -53,7 +53,13 @@ def settings():
             return redirect(url_for("settings.settings"))
         stored = config_store.load(data_dir)
         changes, removals, errors = {}, [], []
+        # Eine Unterseite schickt nur ihre eigenen Werte mit (sonst würden fehlende Häkchen als „aus“ gelten)
+        on_page = set(request.form.getlist("keys")) & set(config_store.FIELDS) or set(config_store.FIELDS)
+        back = request.form.get("back", "")
+        back = back if back.startswith("/einstellungen") else url_for("settings.settings")
         for key, field in config_store.FIELDS.items():
+            if key not in on_page:
+                continue
             if request.form.get(f"reset_{key}") == "1":
                 if key in stored:
                     removals.append(key)
@@ -81,21 +87,55 @@ def settings():
         if errors:
             for e in errors:
                 flash(e)
-            return redirect(url_for("settings.settings"))
+            return redirect(back)
         if not changes and not removals:
             flash("Keine Änderung.")
-            return redirect(url_for("settings.settings"))
+            return redirect(back)
         config_store.save(data_dir, changes, removals)
         names = ", ".join(config_store.FIELDS[k]["label"] for k in [*changes, *removals])
         agent.log.info("Einstellungen geändert von %s: %s", who(), ", ".join([*changes, *removals]))
         if restart_soon(request.environ):
             return render_template("restarting.html", account=g.account, what=f"Gespeichert: {names}.")
         flash(f"Gespeichert: {names}. Wirksam nach einem Neustart der App.")
-        return redirect(url_for("settings.settings"))
-    return render_template("settings.html", account=g.account, groups=config_store.view(data_dir),
-                           read_only={k: os.environ.get(k, "") for k in config_store.READ_ONLY},
+        return redirect(back)
+    return render_template("settings.html", account=g.account, menu=config_store.menu(data_dir),
                            admin=is_admin(g.account), admins_set=bool(SETTINGS["ADMIN_USERS"]),
+                           up=updater.state(SETTINGS["CONTROL_DIR"]), demo=SETTINGS["DEMO_MODE"])
+
+
+def _group(gid):
+    group = next((grp for grp in config_store.menu(SETTINGS["DATA_DIR"]) if grp["id"] == gid), None)
+    if not group:
+        abort(404)
+    return group
+
+
+@bp.get("/einstellungen/zugang")
+@login_required
+def access():
+    return render_template("settings_access.html", account=g.account,
+                           read_only={k: os.environ.get(k, "") for k in config_store.READ_ONLY},
                            demo=SETTINGS["DEMO_MODE"])
+
+
+@bp.get("/einstellungen/<gid>")
+@login_required
+def group(gid):
+    grp = _group(gid)
+    if len(grp["pages"]) == 1:
+        return redirect(url_for("settings.page", gid=gid, pid=grp["pages"][0]["id"]))
+    return render_template("settings_group.html", account=g.account, grp=grp, demo=SETTINGS["DEMO_MODE"])
+
+
+@bp.get("/einstellungen/<gid>/<pid>")
+@login_required
+def page(gid, pid):
+    grp = _group(gid)
+    pg = next((pg for pg in grp["pages"] if pg["id"] == pid), None)
+    if not pg:
+        abort(404)
+    return render_template("settings_page.html", account=g.account, grp=grp, pg=pg, admin=is_admin(g.account),
+                           single=len(grp["pages"]) == 1, demo=SETTINGS["DEMO_MODE"])
 
 
 @bp.get("/einstellungen/software")

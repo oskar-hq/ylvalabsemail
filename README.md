@@ -30,7 +30,7 @@ Damit gehen aufwendige HTML-Designs, die normale Mailprogramme nicht bauen könn
 Die App findet Betriebe, die zu Ylva Labs passen, bewertet sie **nach festen Regeln ohne KI**, und ihr verwaltet
 alles in einem CRM. Die KI ist nur noch ein optionales Werkzeug zum Schreiben.
 
-**03 Leads: finden und bewerten.** Ein Lauf startet **nie von selbst**. Er macht:
+**Leads: finden und bewerten.** Ein Lauf startet **nie von selbst**. Er macht:
 
 | Schritt | Was passiert | Kosten |
 |---|---|---|
@@ -51,12 +51,12 @@ Branchen mit Interesse, Gesprächen und Kunden bekommen bis zu 10 Punkte Zuschla
 - **Von der KI schreiben lassen** (ca. 5 Cent): persönlicher Entwurf aus Bewertung und Startseite. Im Chat
   könnt ihr ihn überarbeiten lassen.
 
-Dann: **Im Mailer gestalten** öffnet „01 Verfassen“ mit Empfänger und Text. Dort wählt ihr Vorlage, Pixel-Band
+Dann: **Im Mailer gestalten** öffnet „Mailer“ mit Empfänger und Text. Dort wählt ihr Vorlage, Pixel-Band
 oder Bild und sendet über euer Postfach (Antwort-Adresse ist das Akquise-Postfach, damit Antworten erkannt werden).
 Oder schlicht **Per Mail senden**, **Als Brief drucken** oder **Als versendet markieren** (Telefon). Gesendete
 Mails stehen in der Akte, der Betrieb rückt auf „Kontaktiert“.
 
-**04 CRM: der Überblick.**
+**CRM: der Überblick.**
 
 - **Pipeline-Board** mit den Stufen Neu → Kontaktiert → Antwort → Gespräch → Angebot → Kunde / Verloren.
   Karten zwischen den Spalten ziehen (am Handy: Auswahl auf der Karte). Ereignisse schieben automatisch weiter
@@ -119,8 +119,8 @@ kein Apple-Entwicklerkonto.
 3. Ein eigenes Postfach für die Akquise anlegen (z. B. `kontakt@ylvalabs.de`) und als `OUTREACH_USER` /
    `OUTREACH_PASSWORD` eintragen. `IMAP_HOST` muss gesetzt sein, damit Antworten gelesen werden.
 4. `NOTIFY_EMAILS` und `BASE_URL` setzen, Dienst neu starten.
-5. Unter **03 Leads → Gehirn und Vorlage** die Texte und die Vorlage prüfen und anpassen, dann den ersten **Lauf starten**,
-   am besten klein (z. B. 20 Betriebe bewerten, 0 Entwürfe). Danach unter **04 CRM** die passenden Betriebe ansehen.
+5. Unter **Leads → Gehirn und Vorlage** die Texte und die Vorlage prüfen und anpassen, dann den ersten **Lauf starten**,
+   am besten klein (z. B. 20 Betriebe bewerten, 0 Entwürfe). Danach unter **CRM** die passenden Betriebe ansehen.
 
 Alle Einstellungen stehen kommentiert in `.env.example`. Mit `DEMO_MODE=true` lassen sich unter
 „Leads“ Beispieldaten laden, um die Oberfläche ohne Schlüssel auszuprobieren.
@@ -136,11 +136,25 @@ sudo bash deploy/setup.sh
 Das Skript fragt alles Nötige ab, startet die App mit Docker und macht einen Systemcheck. Es kennt drei Varianten:
 gemieteter Server mit automatischem HTTPS ([docs/SERVER-MIETEN.md](docs/SERVER-MIETEN.md)), Heimserver/Proxmox
 und eigener Rechner zum Ausprobieren ([docs/LOKAL-TESTEN.md](docs/LOKAL-TESTEN.md)). Den Systemcheck gibt es auch
-in der App unter „03 Leads → Systemcheck“. Sicherung: `bash deploy/backup.sh`, zurückspielen: `bash deploy/restore.sh <Datei>`.
+in der App unter „Konto-Menü (Kreis oben rechts) → Systemcheck“. Sicherung: `bash deploy/backup.sh`, zurückspielen: `bash deploy/restore.sh <Datei>`.
+
+## Aufbau der Oberfläche
+
+Gestaltet wie das Outreach Cockpit (dunkel, ruhig, eine Sache pro Bildschirm). Oben bzw. am Handy unten vier Bereiche:
+
+- **Heute**: eine Zahl, was heute ansteht (Wiedervorlagen, Freigaben, Nachfassen, Interessenten), und „Starten“
+  führt direkt zur ersten Aufgabe.
+- **Leads**: Kennzahlen, die Liste nach „Zu tun“, „Läuft“ und „Abgeschlossen“. „Neue Betriebe finden“ startet einen
+  Lauf oder die Recherche mit Claude.
+- **CRM**: die Pipeline als Board, Wiedervorlagen von heute.
+- **Mailer**: gestaltete Mails verfassen und versenden.
+
+Einstellungen, Verlauf, Kosten und Systemcheck liegen im Konto-Menü (Kreis oben rechts). Die Einstellungen sind wie
+in einer App aufgebaut: Bereich → Unterseite mit wenigen Werten.
 
 ## Recherche mit Claude (ohne API-Schlüssel)
 
-Unter **03 Leads → Mit Claude recherchieren** baut die App einen Prompt aus dem Gehirn („Über uns“, „Wen wir suchen“),
+Unter **Leads → Mit Claude recherchieren** baut die App einen Prompt aus dem Gehirn („Über uns“, „Wen wir suchen“),
 dem Suchgebiet und den Platzhaltern der Vorlage. Den Prompt in Claude Code oder auf claude.ai mit Websuche eingeben:
 Claude sucht passende Betriebe, liest ihre Webseiten und liefert `ylva-recherche.csv` mit festen Spalten (Firma,
 Webseite, E-Mail, Ansprechperson, Anrede, Ort, Branche, Kategorie, Mitarbeitende, Zeitfresser, Aufhänger …).

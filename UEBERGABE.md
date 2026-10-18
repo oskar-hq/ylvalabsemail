@@ -27,7 +27,7 @@ damit du es sehen und klonen kannst.
 Der **Ylva Labs Mailer** ist eine kleine Web-App (Python/Flask), die gestaltete HTML-Mails
 über das eigene Postfach verschickt. Dazu kommen zwei Bereiche:
 
-**03 Leads: passende Betriebe finden**
+**Leads: passende Betriebe finden**
 
 1. Die App sucht Betriebe in ganz Schleswig-Holstein (OpenStreetMap), nur in passenden Branchen und nur mit E-Mail-Adresse.
 2. Sie liest die Webseiten und bewertet jeden Betrieb **nach festen Regeln, ohne KI und kostenlos**
@@ -38,7 +38,7 @@ Der **Ylva Labs Mailer** ist eine kleine Web-App (Python/Flask), die gestaltete 
 5. Nach 7 Tagen ohne Antwort schlägt die App einmalig eine Erinnerung vor.
 6. Die Bewertung lernt aus euren Ergebnissen mit (bis zu ±10 Punkte je Branche).
 
-**04 CRM: Kontakte im Blick**
+**CRM: Kontakte im Blick**
 
 - Pipeline von Neu bis Kunde mit Ziehen und Ablegen, Akte je Betrieb, Auftragswert, Wiedervorlagen.
 - Karte mit Heatmap der passenden Betriebe und Wachstum je Kreis (Gewerbeanmeldungen, Baugenehmigungen).
@@ -152,7 +152,7 @@ Repository vorher den Lesezugang einrichten, siehe [docs/SERVER-MIETEN.md](docs/
 
 **Danach:**
 
-1. Die App öffnen, mit einem `@ylvalabs.de`-Postfach anmelden, „03 Leads“ → **Systemcheck**. Dort steht für
+1. Die App öffnen, mit einem `@ylvalabs.de`-Postfach anmelden, „Leads“ → **Systemcheck**. Dort steht für
    jeden Punkt, ob er passt und was sonst zu tun ist. Im Terminal geht dasselbe mit
    `docker compose exec mailer python -m app.systemcheck`.
 2. **Handy:** In Safari `https://mail.ylvalabs.de/leads` öffnen → *Teilen* → *Zum Home-Bildschirm*,

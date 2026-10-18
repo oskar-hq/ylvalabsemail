@@ -6,8 +6,7 @@
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
 
   <div class="editor-head">
-    <span class="label">01 · Verfassen</span>
-    <h1 class="title">Neue Mail.</h1>
+    <h1 class="title">Neue Mail</h1>
     {% if lead %}
     <input type="hidden" name="lead_id" value="{{ lead.id }}">
     <p class="note small lead-link">Für <a href="{{ url_for('leads.detail', lead_id=lead.id) }}">{{ lead.name }}</a> aus dem CRM.

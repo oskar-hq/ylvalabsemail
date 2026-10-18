@@ -3,11 +3,10 @@
 {% block content %}
 <link rel="stylesheet" href="{{ url_for('static', filename='vendor/leaflet/leaflet.css') }}">
 <main class="page full">
-  <p class="crumbs mono"><a href="{{ url_for('crm.board') }}">← CRM</a></p>
+  <a class="back" href="{{ url_for('crm.board') }}">‹ CRM</a>
   <div class="leads-head">
     <div>
-      <span class="label">04 · CRM · Karte</span>
-      <h1 class="title">Wo eure Kunden sitzen.</h1>
+      <h1 class="title">Wo eure Kunden sitzen</h1>
     </div>
   </div>
   <div class="map-grid">

@@ -4,9 +4,8 @@
 {% macro num(v) %}{{ '{:,}'.format(v or 0).replace(',', '.') }}{% endmacro %}
 {% block content %}
 <main class="page wide">
-  <p class="crumbs mono"><a href="{{ url_for('leads.overview') }}">← Leads</a></p>
-  <span class="label">03 · Leads · Kosten</span>
-  <h1 class="title">Was die KI kostet.</h1>
+  <a class="back" href="{{ url_for('leads.overview') }}">‹ Leads</a>
+  <h1 class="title">Was die KI kostet</h1>
   <p class="muted measure">Suche, Bewertung nach Regeln, Einordnen der Antworten und das CRM kosten nichts. Geld kostet nur, was die KI schreibt: Entwürfe, Überarbeitungen im Chat, Erinnerungen und das Lernen des Stils.</p>
 
   <div class="costs big">

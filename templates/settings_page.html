@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ pg.title }} · Einstellungen{% endblock %}
+{% block content %}
+<main class="page narrow">
+  {% if single %}<a class="back" href="{{ url_for('settings.settings') }}">‹ Einstellungen</a>
+  {% else %}<a class="back" href="{{ url_for('settings.group', gid=grp.id) }}">‹ {{ grp.title }}</a>{% endif %}
+  <h1 class="title">{{ pg.title }}</h1>
+  {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if ':' in m and 'Gespeichert' not in m else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
+  {% if account.demo %}<p class="note warn small">Demo-Modus: Hier wird nichts gespeichert.</p>
+  {% elif not admin %}<p class="note warn small">Ändern dürfen nur Admins.</p>{% endif %}
+
+  <form method="post" action="{{ url_for('settings.settings') }}" class="settings-form" autocomplete="off">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="back" value="{{ request.path }}">
+    {% for f in pg.fields %}
+    <input type="hidden" name="keys" value="{{ f.key }}">
+    <div class="setting">
+      <label class="field" for="f-{{ f.key }}">
+        <span class="sub">{{ f.label }}{% if f.source == 'app' %} <em class="src app">· geändert</em>{% endif %}</span>
+        {% if f.type == 'bool' %}
+          <span class="check"><input type="checkbox" id="f-{{ f.key }}" name="{{ f.key }}" value="1" {{ 'checked' if f.value in ('true', '1', 'yes') }} {{ 'disabled' if not admin }}> eingeschaltet</span>
+        {% elif f.options %}
+          <select id="f-{{ f.key }}" name="{{ f.key }}" {{ 'disabled' if not admin }}>
+            {% for o in f.options %}<option value="{{ o }}" {{ 'selected' if o == f.value }}>{{ o or 'Umkreis' }}</option>{% endfor %}
+          </select>
+        {% elif f.type == 'secret' %}
+          <input type="password" id="f-{{ f.key }}" name="{{ f.key }}" placeholder="{{ 'gesetzt · leer lassen = unverändert' if f.is_set else 'nicht gesetzt' }}" autocomplete="new-password" {{ 'disabled' if not admin }}>
+        {% else %}
+          <input type="text" id="f-{{ f.key }}" name="{{ f.key }}" value="{{ f.value }}" {{ 'inputmode=numeric' if f.type == 'int' else ('inputmode=decimal' if f.type == 'float' else '') }} {{ 'disabled' if not admin }}>
+        {% endif %}
+      </label>
+      {% if f.hint %}<span class="hint">{{ f.hint }}</span>{% endif %}
+      {% if f.source == 'app' and admin %}<label class="check small reset"><input type="checkbox" name="reset_{{ f.key }}" value="1"> wieder den Wert aus der .env nehmen</label>{% endif %}
+    </div>
+    {% endfor %}
+    {% if admin %}
+    <div class="actions"><button class="btn primary">Sichern</button></div>
+    <p class="hint">Danach startet die App kurz neu. Passwörter werden verschlüsselt gespeichert und nie wieder angezeigt.</p>
+    {% endif %}
+  </form>
+</main>
+{% endblock %}

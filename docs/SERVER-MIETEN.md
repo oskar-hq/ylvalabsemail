@@ -64,7 +64,7 @@ GitHub-Namen und als Passwort den Token eingeben; er wird in `/root/.git-credent
 ## 4. Fertig
 
 - `https://mail.ylvalabs.de` öffnen und mit einem `@ylvalabs.de`-Postfach anmelden.
-- „03 Leads“ → „Systemcheck →“: Alles sollte grün sein. Gelb heißt Hinweis, Rot heißt, dass etwas fehlt;
+- „Leads“ → „Systemcheck →“: Alles sollte grün sein. Gelb heißt Hinweis, Rot heißt, dass etwas fehlt;
   dabei steht jeweils, was zu tun ist.
 - Auf dem iPhone: In Safari `https://mail.ylvalabs.de/leads` öffnen → *Teilen* → *Zum Home-Bildschirm*,
   App öffnen, **Benachrichtigungen an** tippen.

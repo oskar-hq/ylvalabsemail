@@ -2,9 +2,8 @@
 {% block title %}Mit Claude recherchieren · Leads{% endblock %}
 {% block content %}
 <main class="page wide">
-  <p class="crumbs mono"><a href="{{ url_for('leads.overview') }}">← Leads</a></p>
-  <span class="label">03 · Leads · Recherche</span>
-  <h1 class="title">Mit Claude recherchieren.</h1>
+  <a class="back" href="{{ url_for('leads.overview') }}">‹ Leads</a>
+  <h1 class="title">Mit Claude recherchieren</h1>
   {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if m.startswith('Nicht') or m.startswith('Bitte') else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
 
   <div class="brain-grid">

@@ -155,7 +155,17 @@ class SettingsViewsTest(unittest.TestCase):
     def test_page_and_save(self):
         html = self.client.get("/einstellungen").get_data(as_text=True)
         self.assertIn("Postfach und Versand", html)
-        self.assertIn("Speichern und neu starten", html)
+        self.assertIn("Akquise-Postfach", self.client.get("/einstellungen/postfach").get_data(as_text=True))
+        page = self.client.get("/einstellungen/postfach/versand").get_data(as_text=True)
+        self.assertIn("Erstkontakt per Mail erlauben", page)
+        self.assertIn("Sichern", page)
+        self.assertEqual(self.client.get("/einstellungen/hinweise").status_code, 302)  # nur eine Unterseite
+        self.assertEqual(self.client.get("/einstellungen/gibtsnicht").status_code, 404)
+        # Eine Unterseite schickt nur ihre Werte: andere Häkchen bleiben, wie sie sind
+        config_store.save(main.SETTINGS["DATA_DIR"], {"OUTREACH_EMAIL": "true"})
+        self.post("/einstellungen", {"keys": ["ORG_NAME"], "ORG_NAME": "Ylva Labs", "back": "/einstellungen/absender/name"})
+        self.assertEqual(config_store.load(main.SETTINGS["DATA_DIR"])["OUTREACH_EMAIL"], "true")
+        config_store.save(main.SETTINGS["DATA_DIR"], {}, ["OUTREACH_EMAIL"])
         form = {"ORG_NAME": "Ylva Labs GmbH", "OUTREACH_PASSWORD": "neu-geheim", "SMTP_PORT": "465"}
         r = self.post("/einstellungen", form)
         self.assertEqual(r.status_code, 302)  # kein Gunicorn im Test: kein Neustart, nur Hinweis
@@ -202,7 +212,7 @@ class SettingsViewsTest(unittest.TestCase):
         with mock.patch.dict(main.SETTINGS, {"ADMIN_USERS": ["chef@ylvalabs.de"]}):
             self.assertEqual(self.post("/einstellungen", {"ORG_NAME": "X"}).status_code, 403)
             self.assertEqual(self.post("/einstellungen/software/update").status_code, 403)
-            self.assertIn("Nur Admins", self.client.get("/einstellungen").get_data(as_text=True))
+            self.assertIn("nur Admins", self.client.get("/einstellungen").get_data(as_text=True))
 
     def test_software_requests(self):
         self.assertIn("nicht eingerichtet", self.client.get("/einstellungen/software").get_data(as_text=True))
