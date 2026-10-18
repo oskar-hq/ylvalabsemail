@@ -17,6 +17,9 @@ rm -f "$YLVA_UPDATE_COPY"  # die Kopie
 DIR="$YLVA_UPDATE_DIR"
 cd "$DIR"
 # Austauschordner mit der App: bei Docker control/ im Projekt, ohne Docker /opt/ylva-mailer/control
+# systemd setzt für Dienste kein HOME; git und die Sicherung brauchen es
+export HOME="${HOME:-$(getent passwd "$(id -u)" | cut -d: -f6)}"
+export HOME="${HOME:-/root}"
 CONTROL="${YLVA_CONTROL:-$DIR/control}"
 mkdir -p "$CONTROL"
 exec 9>"$CONTROL/.lock"
