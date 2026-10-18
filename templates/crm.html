@@ -17,6 +17,9 @@
     </div>
   </div>
 
+  {% set here = 'CRM' %}
+  {% include "_flow.html" %}
+
   <section class="today">
     <div class="section-head"><h2>Heute dran <span class="muted">{{ due|length }}</span></h2>
       <span class="muted small">Wiedervorlagen bis heute{% if st.counts.nachfassen %} · <a href="{{ url_for('leads.overview', tab='nachfassen') }}">{{ st.counts.nachfassen }} zum Nachfassen fällig</a>{% endif %}{% if st.counts.entwurf %} · <a href="{{ url_for('leads.overview', tab='entwurf') }}">{{ st.counts.entwurf }} Entwürfe warten auf Freigabe</a>{% endif %}</span></div>

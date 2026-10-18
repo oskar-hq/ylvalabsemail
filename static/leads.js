@@ -455,4 +455,9 @@
     const input = $('input', ev.target);
     try { await post(`${base}/note`, { text: input.value }); reload(); } catch (e) { toast(e.message, true); }
   });
+
+  // „Finden“ im Ablauf: Lauf-Formular aufklappen
+  const openRun = () => { if (location.hash === '#lauf' && $('#lauf')) { $('#lauf').open = true; $('#lauf').scrollIntoView({ block: 'start' }); } };
+  window.addEventListener('hashchange', openRun);
+  openRun();
 })();

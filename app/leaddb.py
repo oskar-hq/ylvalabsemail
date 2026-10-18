@@ -21,6 +21,13 @@ TABS = [
     ("aussortiert", "Aussortiert", "Passt nicht, nach den Regeln oder von euch aussortiert."),
 ]
 
+# Für die Übersicht: was zu tun ist, was läuft, was erledigt ist
+TAB_GROUPS = [
+    ("Zu tun", "Hier wartet etwas auf euch.", ["entwurf", "nachfassen", "qualified", "mittel"]),
+    ("Läuft", "Bewertet oder unterwegs, gerade nichts zu tun.", ["passt", "versendet", "arbeit"]),
+    ("Abgeschlossen", "Passt nicht oder möchte nicht.", ["kein_interesse", "aussortiert"]),
+]
+
 STATUS_LABELS = {
     "kandidat": "Gefunden", "recherche": "Wird bewertet", "passt": "Passt",
     "vorgeprueft": "Vorgeprüft", "analysiert": "Analysiert", "entwurf": "Zur Prüfung",
