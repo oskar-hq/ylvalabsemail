@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Einstellungen · Ylva Labs{% endblock %}
+{% block content %}
+<main class="page wide">
+  <span class="label">Einstellungen</span>
+  <h1 class="title">Einstellungen.</h1>
+  {% include "_settings_tabs.html" %}
+  {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if ':' in m and 'Gespeichert' not in m else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
+
+  {% if account.demo %}<p class="note warn small">Demo-Modus: Hier wird nichts gespeichert.</p>
+  {% elif not admin %}<p class="note warn small">Nur Admins können Einstellungen ändern. Admins stehen in der .env unter <code>ADMIN_USERS</code>.</p>
+  {% elif not admins_set %}<p class="note warn small">Noch ist jede Person, die sich anmelden darf, Admin. Sicherer: in der .env <code>ADMIN_USERS=oskar@ylvalabs.de</code> setzen.</p>{% endif %}
+
+  <p class="muted small measure">Was ihr hier speichert, gilt vor der <code>.env</code> auf dem Server. Nach dem Speichern startet die App kurz neu, danach müsst ihr euch einmal neu anmelden.
+    Passwörter und Schlüssel werden verschlüsselt gespeichert und hier nie wieder angezeigt. Ein leeres Passwortfeld lässt das Passwort unverändert.</p>
+
+  <form method="post" class="settings-form" autocomplete="off">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    {% for grp in groups %}
+    <section class="lead-section settings-group" id="g-{{ grp.id }}">
+      <div class="section-head"><h2>{{ grp.title }}</h2></div>
+      <div class="settings-grid">
+        {% for f in grp.fields %}
+        <div class="setting">
+          <label class="field" for="f-{{ f.key }}">
+            <span class="sub">{{ f.label }}
+              {% if f.source == 'app' %}<em class="src app">· in der App geändert</em>{% elif f.source == 'env' %}<em class="src">· aus der .env</em>{% endif %}</span>
+            {% if f.type == 'bool' %}
+              <span class="check"><input type="checkbox" id="f-{{ f.key }}" name="{{ f.key }}" value="1" {{ 'checked' if f.value in ('true', '1', 'yes') }} {{ 'disabled' if not admin }}> eingeschaltet</span>
+            {% elif f.options %}
+              <select id="f-{{ f.key }}" name="{{ f.key }}" {{ 'disabled' if not admin }}>
+                {% for o in f.options %}<option value="{{ o }}" {{ 'selected' if o == f.value }}>{{ o or 'Umkreis' }}</option>{% endfor %}
+              </select>
+            {% elif f.type == 'secret' %}
+              <input type="password" id="f-{{ f.key }}" name="{{ f.key }}" placeholder="{{ 'gesetzt · leer lassen = unverändert' if f.is_set else 'nicht gesetzt' }}" autocomplete="new-password" {{ 'disabled' if not admin }}>
+            {% else %}
+              <input type="text" id="f-{{ f.key }}" name="{{ f.key }}" value="{{ f.value }}" {{ 'inputmode=numeric' if f.type == 'int' else ('inputmode=decimal' if f.type == 'float' else '') }} {{ 'disabled' if not admin }}>
+            {% endif %}
+          </label>
+          {% if f.hint %}<span class="hint">{{ f.hint }}</span>{% endif %}
+          {% if f.source == 'app' and admin %}<label class="check small reset"><input type="checkbox" name="reset_{{ f.key }}" value="1"> wieder den Wert aus der .env nehmen</label>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+
+    <section class="lead-section">
+      <div class="section-head"><h2>Zugang und Sicherheit</h2><span class="muted small">Nur in der .env änderbar, damit sich niemand aus Versehen aussperrt.</span></div>
+      <dl class="facts small">
+        {% for k, v in read_only.items() %}<dt><code>{{ k }}</code></dt><dd>{{ v or '–' }}</dd>{% endfor %}
+      </dl>
+    </section>
+
+    {% if admin %}
+    <div class="actions"><button class="btn primary">Speichern und neu starten</button></div>
+    {% endif %}
+  </form>
+</main>
+{% endblock %}

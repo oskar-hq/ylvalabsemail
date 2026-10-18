@@ -138,6 +138,22 @@ gemieteter Server mit automatischem HTTPS ([docs/SERVER-MIETEN.md](docs/SERVER-M
 und eigener Rechner zum Ausprobieren ([docs/LOKAL-TESTEN.md](docs/LOKAL-TESTEN.md)). Den Systemcheck gibt es auch
 in der App unter „03 Leads → Systemcheck“. Sicherung: `bash deploy/backup.sh`, zurückspielen: `bash deploy/restore.sh <Datei>`.
 
+## Einstellungen und Updates in der App
+
+Nach der Einrichtung muss niemand mehr auf den Server:
+
+- **Einstellungen** (Menü oben rechts): Postfach, Versand, Absender und Texte, Suchgebiet und Bewertung, KI und Budget,
+  Benachrichtigungen. Was dort gespeichert wird, gilt vor der `.env`; die App startet danach kurz neu. Passwörter und
+  der KI-Schlüssel werden verschlüsselt im Datenordner abgelegt und nie wieder angezeigt. Nur in der `.env` bleiben
+  Zugang und Sicherheit (`ALLOWED_DOMAINS`, `ALLOWED_USERS`, `ADMIN_USERS`, `COOKIE_SECURE`, `TRUST_PROXY`, `DEMO_MODE`),
+  damit sich niemand aus Versehen aussperrt.
+- **Software und Updates**: zeigt die installierte Version und was auf GitHub neu ist. „Update einspielen“ sichert,
+  holt den neuen Stand, baut neu und startet. Startet die neue Version nicht, wird automatisch die alte wieder
+  eingespielt; das Protokoll steht auf der Seite. Dafür richtet `deploy/setup.sh` einmalig den Update-Dienst ein
+  (oder von Hand: `sudo bash deploy/install-updater.sh`). Die App legt dabei nur einen Auftrag in den Ordner `control/`;
+  ausgeführt wird er von systemd auf dem Server. Die App bekommt keinen Zugriff auf Docker oder den Server.
+- Ändern und einspielen dürfen nur Admins (`ADMIN_USERS` in der `.env`, ohne Angabe alle, die sich anmelden dürfen).
+
 Die folgenden Abschnitte beschreiben die Einrichtung von Hand.
 
 ## Installation auf Proxmox

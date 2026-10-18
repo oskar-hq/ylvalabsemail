@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Software · Ylva Labs{% endblock %}
+{% block content %}
+{% set v = up.version or {} %}
+{% set s = up.status or {} %}
+{% set labels = {'running': 'Läuft gerade', 'done': 'Erfolgreich', 'failed': 'Fehlgeschlagen', 'rolled_back': 'Zurückgerollt', 'idle': 'Bereit'} %}
+<main class="page wide" id="software" data-running="{{ '1' if s.state == 'running' or (up.pending and up.pending['update']) }}">
+  <span class="label">Einstellungen</span>
+  <h1 class="title">Software und Updates.</h1>
+  {% include "_settings_tabs.html" %}
+
+  {% if not up.available %}
+  <p class="note warn">Auf diesem Rechner ist der Update-Dienst nicht eingerichtet. Auf dem Server einmalig
+    <code>sudo bash deploy/install-updater.sh</code> ausführen (macht <code>deploy/setup.sh</code> automatisch). Danach spielt ihr Updates hier per Knopf ein.</p>
+  <p class="muted small">Bis dahin von Hand: <code>git pull && docker compose up -d --build</code></p>
+  {% else %}
+
+  {% if not up.service_ok %}<p class="note warn small">Der Update-Dienst hat sich {% if up.checked_hours_ago is not none %}seit {{ up.checked_hours_ago|round|int }} Stunden{% else %}noch nie{% endif %} nicht gemeldet. Läuft er auf dem Server? (<code>systemctl status ylva-update.path</code>)</p>{% endif %}
+
+  <div class="costs big">
+    <div class="cost"><span class="label">Installiert</span><b>{{ (v.current or {}).sha or '–' }}</b><span class="muted small">{{ (v.current or {}).date or '' }} · {{ (v.current or {}).subject or '' }}</span></div>
+    <div class="cost"><span class="label">Verfügbar</span><b>{% if v.behind %}{{ v.behind }} neue Änderung{{ 'en' if v.behind != 1 }}{% elif v %}aktuell{% else %}–{% endif %}</b>
+      <span class="muted small">Zweig {{ v.branch or '–' }}{% if v.checked_at %} · geprüft {{ v.checked_at[8:10] }}.{{ v.checked_at[5:7] }}. {{ v.checked_at[11:16] }} Uhr{% endif %}</span></div>
+    <div class="cost"><span class="label">Letztes Update</span><b id="upState">{{ labels.get(s.state, '–') }}</b><span class="muted small">{{ s.finished or s.started or '' }}</span></div>
+  </div>
+
+  {% if v.commits %}
+  <section class="lead-section">
+    <div class="section-head"><h2>Was neu ist</h2></div>
+    <ul class="lead-list">{% for c in v.commits %}<li class="change"><span class="mono muted">{{ c.date }}</span> {{ c.subject }}</li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  {% if admin %}
+  <div class="btn-row">
+    <button class="btn" data-sw="check" {{ 'disabled' if up.pending['check'] }}>{{ 'Prüfung läuft …' if up.pending['check'] else 'Nach Updates suchen' }}</button>
+    <button class="btn primary" data-sw="update" {{ 'disabled' if up.pending['update'] or s.state == 'running' }}>{{ 'Update läuft …' if up.pending['update'] or s.state == 'running' else ('Update einspielen' if v.behind else 'Neu bauen und starten') }}</button>
+  </div>
+  <p class="muted small measure">Vor jedem Update wird automatisch gesichert. Startet die neue Version nicht, wird die alte wieder eingespielt.
+    Die App ist während des Updates etwa ein bis zwei Minuten nicht erreichbar, danach bitte neu anmelden.</p>
+  {% else %}<p class="note small">Updates einspielen dürfen nur Admins (<code>ADMIN_USERS</code>).</p>{% endif %}
+
+  {% if s.log %}
+  <section class="lead-section">
+    <div class="section-head"><h2>Protokoll des letzten Updates</h2>{% if s.message %}<span class="muted small">{{ s.message }}</span>{% endif %}</div>
+    <pre class="log" id="upLog">{{ s.log|join('\n') }}</pre>
+  </section>
+  {% endif %}
+  {% endif %}
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='settings.js') }}"></script>{% endblock %}

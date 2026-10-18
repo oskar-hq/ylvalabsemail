@@ -166,6 +166,25 @@ def run(settings, smtp_connect, sent_folder, data_dir):
             return WARN, f"Kein Monatsbudget. {mail}", "LEADS_MONTHLY_BUDGET_EUR setzen, z. B. 20."
         return OK, f"Monatsbudget {cap:.0f} €. {mail}", None
 
+    def updater_check():
+        from . import updater
+        control = S.get("CONTROL_DIR")
+        if not control:
+            return WARN, "Updates aus der App sind nicht eingerichtet", \
+                "Auf dem Server einmalig „sudo bash deploy/install-updater.sh“ ausführen."
+        st = updater.state(control)
+        if not st["available"]:
+            return FAIL, f"Austauschordner {control} fehlt", "„sudo bash deploy/install-updater.sh“ erneut ausführen."
+        if not st["service_ok"]:
+            return WARN, "Der Update-Dienst hat sich länger nicht gemeldet", \
+                "Auf dem Server prüfen: systemctl status ylva-update.path ylva-update-check.timer"
+        v = st["version"]
+        if v.get("error"):
+            return WARN, v["error"], "Bei privatem Repository einen Lesezugang auf dem Server hinterlegen (docs/SERVER-MIETEN.md)."
+        behind = v.get("behind") or 0
+        return OK, f"Version {(v.get('current') or {}).get('sha', '?')}, " + \
+            (f"{behind} Update(s) verfügbar" if behind else "aktuell"), None
+
     def worker_check():
         if not S["LEADS_WORKER"]:
             return WARN, "LEADS_WORKER=false", "Ohne Arbeiter laufen keine Läufe und das Postfach wird nicht gelesen."
@@ -177,7 +196,7 @@ def run(settings, smtp_connect, sent_folder, data_dir):
         ("Grundeinstellungen", config), ("HTTPS-Adresse", https), ("Datenordner", storage),
         ("Postausgang (SMTP)", smtp_check), ("Posteingang (IMAP)", imap_check), ("KI-Schlüssel und Modelle", ai_check),
         ("Kartensuche (OpenStreetMap)", overpass_check), ("Kreise und Wachstumszahlen", regions_check), ("Webseiten lesen", web_check), ("Push-Benachrichtigungen", push_check),
-        ("Benachrichtigung per Mail", notify_check), ("Budget und Versand", budget_check), ("Hintergrund-Arbeiter", worker_check),
+        ("Benachrichtigung per Mail", notify_check), ("Budget und Versand", budget_check), ("Updates aus der App", updater_check), ("Hintergrund-Arbeiter", worker_check),
     ]
     return [_check(name, func) for name, func in checks]
 

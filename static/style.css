@@ -451,3 +451,17 @@ dialog ol{padding-left:18px;color:var(--body)}
   .hist summary{grid-template-columns:1fr}
   .who{display:none}
 }
+
+/* Einstellungen und Updates */
+.settings-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 28px;padding-top:14px}
+.setting .field{margin-bottom:4px}
+.setting .hint{margin:0 0 10px}
+.setting select{width:100%;font:400 15px/1.5 var(--sans);padding:9px 10px;border:1px solid var(--line);background:var(--paper);color:var(--ink)}
+.setting .check{padding:8px 0}
+.setting .reset{margin:0 0 10px;color:var(--muted)}
+.src{font-style:normal;color:var(--muted)}
+.src.app{color:var(--blue)}
+.settings-form .actions{justify-content:flex-start}
+.change{padding:8px 0;border-bottom:1px solid var(--line)}
+pre.log{white-space:pre-wrap;overflow-wrap:anywhere;font:400 12px/1.5 var(--mono);background:var(--tint);padding:12px 14px;max-height:420px;overflow:auto}
+@media (max-width:720px){.settings-grid{grid-template-columns:1fr}}

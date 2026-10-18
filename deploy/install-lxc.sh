@@ -11,7 +11,7 @@ apt-get install -y python3 python3-venv rsync
 
 id mailer >/dev/null 2>&1 || useradd --system --home "$DEST" --shell /usr/sbin/nologin mailer
 mkdir -p "$DEST/data"
-rsync -a --delete --exclude .git --exclude data --exclude .env --exclude .venv "$SRC/" "$DEST/"
+rsync -a --delete --exclude .git --exclude data --exclude .env --exclude .venv --exclude control "$SRC/" "$DEST/"
 
 python3 -m venv "$DEST/.venv"
 "$DEST/.venv/bin/pip" install --quiet -r "$DEST/requirements.txt"

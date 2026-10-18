@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+{% block title %}Neustart · Ylva Labs{% endblock %}
+{% block content %}
+<main class="page">
+  <span class="label">Einstellungen</span>
+  <h1 class="title">Startet neu …</h1>
+  <p>{{ what }}</p>
+  <p class="muted" id="restartMsg">Die App übernimmt die neuen Werte. Das dauert ein paar Sekunden. Danach bitte neu anmelden.</p>
+  <a class="btn" href="{{ url_for('login') }}" id="restartLink" hidden>Zur Anmeldung</a>
+</main>
+{% endblock %}
+{% block scripts %}
+<script>
+(() => {
+  const start = Date.now();
+  const tick = async () => {
+    try {
+      const r = await fetch('/healthz', { cache: 'no-store' });
+      if (r.ok && Date.now() - start > 3000) {
+        document.getElementById('restartMsg').textContent = 'Fertig. Die neuen Einstellungen gelten jetzt.';
+        document.getElementById('restartLink').hidden = false;
+        return;
+      }
+    } catch (e) {}
+    setTimeout(tick, 1500);
+  };
+  setTimeout(tick, 2500);
+})();
+</script>
+{% endblock %}

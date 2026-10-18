@@ -5,7 +5,7 @@ Sie fasst zusammen, was gebaut wurde, was noch offen ist und welche Fragen vor d
 Installation geklärt werden müssen. Antworten könnt ihr direkt in diese Datei schreiben
 (auf GitHub: Datei öffnen → Stift-Symbol → „Commit changes“) oder als Kommentar im Pull Request.
 
-**Stand:** 15.10.2026
+**Stand:** 18.10.2026
 
 ## Links
 
@@ -54,10 +54,11 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
 
 ## Was fertig ist und was nicht
 
-- 38 automatische Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
+- 46 automatische Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.
 - Einrichtungs-Skript, Docker-Container, HTTPS über Caddy, Sicherung und Zurückspielen wurden
-  echt in Docker durchgespielt.
+  echt in Docker durchgespielt, ebenso Updates aus der App (auch eine kaputte Version, die automatisch
+  zurückgerollt wurde) und das Speichern von Einstellungen mit Neustart.
 - **Noch nie getestet:** die echte Kartensuche über ganz Schleswig-Holstein, echte Firmen-Webseiten, das
   echte Postfach und ein echter KI-Schlüssel. In der Entwicklungsumgebung waren diese Dienste gesperrt.
   Deshalb sollte der erste echte Lauf klein sein, danach die Gewichte unter „So wird bewertet“ nachjustieren.
@@ -141,6 +142,12 @@ Das Skript fragt zuerst, wo die App läuft:
 
 Die Zugangsdaten tippt am besten Oskar selbst ein, wenn das Skript danach fragt (Passwort des
 Akquise-Postfachs, optional KI-Schlüssel). Sie werden beim Tippen nicht angezeigt und landen nur in der `.env`.
+Man kann sie auch leer lassen und später in der App unter **Einstellungen** eintragen.
+
+Bei „Updates per Knopf in der App einrichten?“ mit **j** antworten. Danach muss **niemand mehr auf den Server**:
+Einstellungen ändert ihr in der App, und neue Versionen spielt ihr unter **Einstellungen → Software und Updates** ein
+(mit Sicherung vorher und automatischem Zurückrollen, falls die neue Version nicht startet). Bei einem privaten
+Repository vorher den Lesezugang einrichten, siehe [docs/SERVER-MIETEN.md](docs/SERVER-MIETEN.md), Schritt 3.
 
 **Danach:**
 
@@ -155,7 +162,7 @@ Akquise-Postfachs, optional KI-Schlüssel). Sie werden beim Tippen nicht angezei
 **Wichtige Befehle:**
 
 ```bash
-git pull && docker compose up -d --build                 # Update einspielen
+sudo bash deploy/update.sh update                        # Update einspielen (sonst per Knopf in der App)
 docker compose logs -f mailer                            # Protokoll ansehen
 bash deploy/backup.sh                                    # Sicherung nach ~/ylva-backups
 bash deploy/restore.sh ~/ylva-backups/<Datei>.tar.gz     # Sicherung zurückspielen (z. B. beim Umzug)
