@@ -12,7 +12,11 @@ if "DATA_DIR" not in os.environ:  # allein gestartet; sonst setzt test_leads die
                       DEMO_MODE="true")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from app import config_store, main, updater  # noqa: E402
+import io  # noqa: E402
+import sqlite3  # noqa: E402
+import tarfile  # noqa: E402
+
+from app import backups, config_store, main, updater  # noqa: E402
 
 
 class ConfigStoreTest(unittest.TestCase):
@@ -70,6 +74,68 @@ class UpdaterTest(unittest.TestCase):
             updater.request(control, "rm -rf", "x")
 
 
+class BackupsTest(unittest.TestCase):
+    def make_data(self, name):
+        d = Path(tempfile.mkdtemp())
+        c = sqlite3.connect(d / "mailer.db")
+        c.execute("CREATE TABLE leads (id INTEGER PRIMARY KEY, name TEXT)")
+        c.execute("INSERT INTO leads (name) VALUES (?)", (name,))
+        c.commit()
+        c.close()
+        (d / ".secret_key").write_text("geheim-" + name)
+        (d / "uploads").mkdir()
+        (d / "uploads" / "bild.png").write_bytes(b"\x89PNG")
+        config_store.save(d, {"ORG_NAME": name, "OUTREACH_PASSWORD": "pw-" + name})
+        return d
+
+    def names(self, d):
+        c = sqlite3.connect(d / "mailer.db")
+        try:
+            return [r[0] for r in c.execute("SELECT name FROM leads")]
+        finally:
+            c.close()
+
+    def test_roundtrip_and_undo(self):
+        alt, neu = self.make_data("Alt"), self.make_data("Neu")
+        archive = backups.create(alt)
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            self.assertIn("data/settings.json", tar.getnames())
+        info = backups.stage(neu, io.BytesIO(archive))
+        self.assertEqual((info["leads"], info["settings"]), (1, True))
+        self.assertTrue(backups.pending(neu))
+        self.assertEqual(self.names(neu), ["Neu"])  # erst beim Start eingesetzt
+        backups.mark(neu, "oskar@ylvalabs.de", "sicherung.tar.gz")
+        self.assertTrue(backups.apply_pending(neu))
+        self.assertEqual(self.names(neu), ["Alt"])
+        self.assertEqual(config_store.load(neu)["OUTREACH_PASSWORD"], "pw-Alt")  # Schlüssel kam mit
+        self.assertEqual(backups.history(neu)[0]["by"], "oskar@ylvalabs.de")
+        self.assertFalse(backups.pending(neu))
+        backups.stage_undo(neu)
+        backups.apply_pending(neu)
+        self.assertEqual(self.names(neu), ["Neu"])
+        self.assertEqual(config_store.load(neu)["ORG_NAME"], "Neu")
+
+    def test_rejects_bad_archives(self):
+        d = self.make_data("X")
+        for content, msg in [(b"kein tar", "keine gültige"), (self.tar({"data/../../etc/passwd": b"x"}), "Unerwartet"),
+                             (self.tar({"data/notes.txt": b"x"}), "Unerwartet"),
+                             (self.tar({"data/vapid_private.pem": b"x"}), "fehlt die Datenbank"),
+                             (self.tar({"data/mailer.db": b"kaputt"}), "nicht lesbar")]:
+            with self.assertRaisesRegex(backups.BackupError, msg):
+                backups.stage(d, io.BytesIO(content))
+            self.assertFalse(backups.pending(d))
+        self.assertEqual(self.names(d), ["X"])
+
+    def tar(self, files):
+        buf = io.BytesIO()
+        with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+            for name, data in files.items():
+                ti = tarfile.TarInfo(name)
+                ti.size = len(data)
+                tar.addfile(ti, io.BytesIO(data))
+        return buf.getvalue()
+
+
 class SettingsViewsTest(unittest.TestCase):
     def setUp(self):
         self.client = main.app.test_client()
@@ -101,6 +167,26 @@ class SettingsViewsTest(unittest.TestCase):
         self.assertIn("ganze Zahl", self.client.get("/einstellungen").get_data(as_text=True))
         r = self.post("/einstellungen", {"reset_ORG_NAME": "1"})
         self.assertNotIn("ORG_NAME", config_store.load(main.SETTINGS["DATA_DIR"]))
+
+    def test_backup_pages(self):
+        self.assertIn("Sicherung herunterladen", self.client.get("/einstellungen/sicherung").get_data(as_text=True))
+        r = self.client.get("/einstellungen/sicherung/herunterladen")
+        self.assertEqual(r.mimetype, "application/gzip")
+        self.assertIn("attachment", r.headers["Content-Disposition"])
+        archive = r.get_data()
+        r = self.client.post("/einstellungen/sicherung/zurueckspielen", content_type="multipart/form-data",
+                             data={"_csrf": "tok", "file": (io.BytesIO(archive), "s.tar.gz")})
+        self.assertIn("bestätigen", self.client.get("/einstellungen/sicherung").get_data(as_text=True))
+        self.assertFalse(backups.pending(main.SETTINGS["DATA_DIR"]))
+        r = self.client.post("/einstellungen/sicherung/zurueckspielen", content_type="multipart/form-data",
+                             data={"_csrf": "tok", "confirm": "1", "file": (io.BytesIO(archive), "s.tar.gz")})
+        self.assertEqual(r.status_code, 302)
+        self.assertTrue(backups.pending(main.SETTINGS["DATA_DIR"]))
+        self.assertIn("bereitgelegt", self.client.get("/einstellungen/sicherung").get_data(as_text=True))
+        import shutil
+        shutil.rmtree(Path(main.SETTINGS["DATA_DIR"]) / backups.PENDING)
+        with mock.patch.dict(main.SETTINGS, {"ADMIN_USERS": ["chef@ylvalabs.de"]}):
+            self.assertEqual(self.client.get("/einstellungen/sicherung/herunterladen").status_code, 403)
 
     def test_restart_only_under_gunicorn(self):
         from app import settings_views

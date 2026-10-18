@@ -4,9 +4,11 @@ import signal
 import threading
 import time
 
-from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
+from datetime import datetime
 
-from . import agent, config_store, updater
+from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, url_for
+
+from . import agent, backups, config_store, updater
 from .main import SETTINGS, login_required
 
 bp = Blueprint("settings", __name__)
@@ -128,3 +130,72 @@ def software_request(kind):
     agent.log.info("Software-Auftrag „%s“ von %s", kind, who())
     return jsonify(ok=True, message="Wird nach Updates gesucht …" if kind == "check" else
                    "Update startet. Die App ist gleich kurz weg und kommt von selbst wieder.")
+
+
+# ---------------------------------------------------------------- Sicherung
+
+
+@bp.get("/einstellungen/sicherung")
+@login_required
+def backup_page():
+    data_dir = SETTINGS["DATA_DIR"]
+    return render_template("backup.html", account=g.account, admin=is_admin(g.account), demo=SETTINGS["DEMO_MODE"],
+                           history=backups.history(data_dir), can_undo=backups.can_undo(data_dir),
+                           pending=backups.pending(data_dir), host_backups=bool(SETTINGS["CONTROL_DIR"]))
+
+
+@bp.get("/einstellungen/sicherung/herunterladen")
+@login_required
+def backup_download():
+    require_admin()
+    data = backups.create(SETTINGS["DATA_DIR"])
+    name = f"ylva-mailer_{datetime.now():%Y-%m-%d_%H%M}.tar.gz"
+    agent.log.info("Sicherung heruntergeladen von %s", who())
+    return Response(data, mimetype="application/gzip",
+                    headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
+
+
+def _restart_or_flash(what):
+    if restart_soon(request.environ):
+        return render_template("restarting.html", account=g.account, what=what)
+    flash(f"{what} Wird beim nächsten Neustart der App eingesetzt.")
+    return redirect(url_for("settings.backup_page"))
+
+
+@bp.post("/einstellungen/sicherung/zurueckspielen")
+@login_required
+def backup_restore():
+    require_admin()
+    request.max_content_length = backups.MAX_BYTES
+    if agent.RUN.get("id"):
+        flash("Gerade läuft ein Lauf. Bitte warten, bis er fertig ist, oder ihn stoppen.")
+        return redirect(url_for("settings.backup_page"))
+    file = request.files.get("file")
+    if not file or not file.filename:
+        flash("Bitte eine Sicherungsdatei auswählen.")
+        return redirect(url_for("settings.backup_page"))
+    if request.form.get("confirm") != "1":
+        flash("Bitte bestätigen, dass die aktuellen Daten ersetzt werden.")
+        return redirect(url_for("settings.backup_page"))
+    try:
+        info = backups.stage(SETTINGS["DATA_DIR"], file.stream)
+    except backups.BackupError as exc:
+        flash(f"Nicht zurückgespielt: {exc}")
+        return redirect(url_for("settings.backup_page"))
+    backups.mark(SETTINGS["DATA_DIR"], who(), file.filename[:120])
+    agent.log.info("Sicherung %s wird zurückgespielt (von %s)", file.filename, who())
+    return _restart_or_flash(f"Sicherung „{file.filename}“ geprüft ({info['leads']} Betriebe)."
+                             + (" Enthält auch die Einstellungen aus der App." if info["settings"] else ""))
+
+
+@bp.post("/einstellungen/sicherung/rueckgaengig")
+@login_required
+def backup_undo():
+    require_admin()
+    try:
+        backups.stage_undo(SETTINGS["DATA_DIR"])
+    except backups.BackupError as exc:
+        flash(str(exc))
+        return redirect(url_for("settings.backup_page"))
+    backups.mark(SETTINGS["DATA_DIR"], who(), "Stand vor dem letzten Zurückspielen", kind="undo")
+    return _restart_or_flash("Der Stand vor dem letzten Zurückspielen wird wiederhergestellt.")

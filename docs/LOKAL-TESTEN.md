@@ -56,9 +56,11 @@ Die Daten (Leads, CRM, Gehirn, Kosten) bleiben dabei erhalten. Sie liegen in ein
 
 ## Später auf den Server umziehen
 
-1. Auf dem PC eine Sicherung machen: `bash deploy/backup.sh` (landet in `~/ylva-backups`).
+1. Auf dem PC in der App unter **Einstellungen → Sicherung** auf „Sicherung herunterladen“ klicken
+   (oder im Terminal `bash deploy/backup.sh`, landet in `~/ylva-backups`).
 2. Auf dem Server einrichten, siehe [SERVER-MIETEN.md](SERVER-MIETEN.md) oder [UEBERGABE.md](../UEBERGABE.md).
-3. Die Sicherung zurückspielen, siehe „Sicherung zurückspielen“ in [SERVER-MIETEN.md](SERVER-MIETEN.md).
+3. In der App auf dem Server unter **Einstellungen → Sicherung** die Datei hochladen. Ohne App: siehe
+   „Sicherung zurückspielen“ in [SERVER-MIETEN.md](SERVER-MIETEN.md).
 
 ## Wenn etwas nicht klappt
 

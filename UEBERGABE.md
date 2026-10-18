@@ -54,7 +54,7 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
 
 ## Was fertig ist und was nicht
 
-- 46 automatische Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
+- 49 automatische Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.
 - Einrichtungs-Skript, Docker-Container, HTTPS über Caddy, Sicherung und Zurückspielen wurden
   echt in Docker durchgespielt, ebenso Updates aus der App (auch eine kaputte Version, die automatisch
@@ -146,7 +146,8 @@ Man kann sie auch leer lassen und später in der App unter **Einstellungen** ein
 
 Bei „Updates per Knopf in der App einrichten?“ mit **j** antworten. Danach muss **niemand mehr auf den Server**:
 Einstellungen ändert ihr in der App, und neue Versionen spielt ihr unter **Einstellungen → Software und Updates** ein
-(mit Sicherung vorher und automatischem Zurückrollen, falls die neue Version nicht startet). Bei einem privaten
+(mit Sicherung vorher und automatischem Zurückrollen, falls die neue Version nicht startet). Unter
+**Einstellungen → Sicherung** lassen sich alle Daten herunterladen und wieder hochladen, auch für einen Umzug. Bei einem privaten
 Repository vorher den Lesezugang einrichten, siehe [docs/SERVER-MIETEN.md](docs/SERVER-MIETEN.md), Schritt 3.
 
 **Danach:**

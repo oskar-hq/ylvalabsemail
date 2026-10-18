@@ -152,7 +152,12 @@ Nach der Einrichtung muss niemand mehr auf den Server:
   eingespielt; das Protokoll steht auf der Seite. Dafür richtet `deploy/setup.sh` einmalig den Update-Dienst ein
   (oder von Hand: `sudo bash deploy/install-updater.sh`). Die App legt dabei nur einen Auftrag in den Ordner `control/`;
   ausgeführt wird er von systemd auf dem Server. Die App bekommt keinen Zugriff auf Docker oder den Server.
-- Ändern und einspielen dürfen nur Admins (`ADMIN_USERS` in der `.env`, ohne Angabe alle, die sich anmelden dürfen).
+- **Sicherung**: alles, was nicht im Code steckt (Leads, CRM, Gehirn, Kosten, Einstellungen aus der App,
+  Push-Schlüssel, Bilder), als eine `.tar.gz` herunterladen und auf demselben oder einem neuen Server wieder
+  hochladen. Die Datei wird vor dem Einsetzen geprüft. Der vorherige Stand bleibt erhalten und lässt sich mit
+  „Rückgängig“ zurückholen. Die Datei enthält Zugangsdaten, also so sicher ablegen wie ein Passwort.
+  Dateien von `deploy/backup.sh` lassen sich dort ebenfalls zurückspielen.
+- Ändern, einspielen und sichern dürfen nur Admins (`ADMIN_USERS` in der `.env`, ohne Angabe alle, die sich anmelden dürfen).
 
 Die folgenden Abschnitte beschreiben die Einrichtung von Hand.
 

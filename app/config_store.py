@@ -31,6 +31,9 @@ GROUPS = [
         ("OUTREACH_EMAIL", "Erstkontakt per Mail erlauben", "bool", "false",
          "Erst einschalten, wenn § 7 UWG geklärt ist. Sonst nur Brief und Telefon"),
         ("SEND_DELAY", "Pause zwischen zwei Mails (Sekunden)", "float", "1", ""),
+        ("MAX_RECIPIENTS", "Höchstens Empfänger pro Versand", "int", "200", ""),
+        ("FROM_ADDRESS", "Absenderadresse", "emails", "", "Nur nötig, wenn der Login-Name keine E-Mail-Adresse ist"),
+        ("IMAP_SENT_FOLDER", "Ordner „Gesendet“", "text", "", "Leer = automatisch erkennen"),
     ]),
     ("absender", "Absender und Texte", [
         ("ORG_NAME", "Firmenname", "text", "Ylva Labs", ""),

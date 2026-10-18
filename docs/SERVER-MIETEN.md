@@ -88,7 +88,12 @@ kopieren, z. B. mit `scp root@<IP>:ylva-backups/*.tar.gz .`
 
 ## Sicherung zurückspielen
 
-Zum Beispiel beim Umzug vom eigenen PC oder vom Heimserver auf den gemieteten Server:
+Am einfachsten in der App: **Einstellungen → Sicherung**. Dort lässt sich der aktuelle Stand herunterladen und eine
+Sicherung hochladen (aus der App oder von `deploy/backup.sh`). Die App prüft die Datei, startet kurz neu und setzt
+sie ein; der vorherige Stand lässt sich mit „Rückgängig“ zurückholen. So geht auch ein Umzug ohne Terminal:
+auf dem alten Server herunterladen, auf dem neuen hochladen.
+
+Ohne App, zum Beispiel beim Umzug vom eigenen PC oder vom Heimserver auf den gemieteten Server:
 
 ```bash
 cd ~/ylvalabsemail

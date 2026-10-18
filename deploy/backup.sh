@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Sichert alles, was nicht im Code steckt: Datenbank (Leads, CRM, Gehirn, Kosten), Push-Schlüssel,
-# Sitzungsschlüssel und hochgeladene Bilder. Die .env (Passwörter) wird NICHT mitgesichert.
+# Sitzungsschlüssel, in der App geänderte Einstellungen (Passwörter darin verschlüsselt, mit Schlüssel) und hochgeladene
+# Bilder. Die .env wird NICHT mitgesichert. Die Sicherung enthält trotzdem Zugangsdaten: sicher aufbewahren.
 #
 # Aufruf aus dem Projektordner:  bash deploy/backup.sh [Zielordner]
 # Standard-Ziel: ~/ylva-backups, Sicherungen älter als 14 Tage werden gelöscht (KEEP_DAYS).
@@ -24,13 +25,13 @@ if command -v docker >/dev/null 2>&1 && docker compose ps --status running --ser
   docker compose exec -T mailer python -c "$SNAPSHOT" /data/mailer.db /data/.backup.db
   docker compose cp mailer:/data/.backup.db "$WORK/data/mailer.db" >/dev/null
   docker compose exec -T mailer rm -f /data/.backup.db
-  for f in vapid_private.pem .secret_key uploads; do
+  for f in vapid_private.pem .secret_key settings.json .settings_key uploads; do
     docker compose cp "mailer:/data/$f" "$WORK/data/$f" >/dev/null 2>&1 || true
   done
 elif [ -d /opt/ylva-mailer/data ]; then
   # Ohne Docker (deploy/install-lxc.sh)
   python3 -c "$SNAPSHOT" /opt/ylva-mailer/data/mailer.db "$WORK/data/mailer.db"
-  for f in vapid_private.pem .secret_key uploads; do
+  for f in vapid_private.pem .secret_key settings.json .settings_key uploads; do
     cp -a "/opt/ylva-mailer/data/$f" "$WORK/data/$f" 2>/dev/null || true
   done
 else

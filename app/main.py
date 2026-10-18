@@ -31,6 +31,10 @@ from . import config_store  # noqa: E402
 
 _DATA_DIR = Path(env("DATA_DIR", str(ROOT / "data")))
 _DATA_DIR.mkdir(parents=True, exist_ok=True)
+# Eine in der App hochgeladene Sicherung wird hier eingesetzt, bevor irgendetwas die Datenbank öffnet
+from . import backups  # noqa: E402
+
+backups.apply_pending(_DATA_DIR)
 config_store.apply_overrides(_DATA_DIR)
 
 
