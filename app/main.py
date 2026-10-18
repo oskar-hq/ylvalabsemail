@@ -26,6 +26,18 @@ def env(key, default=""):
     return os.environ.get(key, default).strip()
 
 
+# Einstellungen, die in der App geändert wurden, gelten vor der .env (siehe app/config_store.py)
+from . import config_store  # noqa: E402
+
+_DATA_DIR = Path(env("DATA_DIR", str(ROOT / "data")))
+_DATA_DIR.mkdir(parents=True, exist_ok=True)
+# Eine in der App hochgeladene Sicherung wird hier eingesetzt, bevor irgendetwas die Datenbank öffnet
+from . import backups  # noqa: E402
+
+backups.apply_pending(_DATA_DIR)
+config_store.apply_overrides(_DATA_DIR)
+
+
 SETTINGS = {
     "SMTP_HOST": env("SMTP_HOST"),
     "SMTP_PORT": int(env("SMTP_PORT", "587")),
@@ -45,7 +57,11 @@ SETTINGS = {
     "MAX_RECIPIENTS": int(env("MAX_RECIPIENTS", "200")),
     "SESSION_HOURS": float(env("SESSION_HOURS", "12")),
     "DEMO_MODE": env("DEMO_MODE", "false").lower() in ("1", "true", "yes"),
-    "DATA_DIR": Path(env("DATA_DIR", str(ROOT / "data"))),
+    "DATA_DIR": _DATA_DIR,
+    # Wer Einstellungen ändern und Updates einspielen darf (leer = alle, die sich anmelden dürfen)
+    "ADMIN_USERS": [u.lower() for u in re.split(r"[,\s]+", env("ADMIN_USERS")) if u],
+    # Austauschordner mit dem Update-Dienst auf dem Server (deploy/install-updater.sh), leer = keine Updates aus der App
+    "CONTROL_DIR": Path(env("CONTROL_DIR")) if env("CONTROL_DIR") else None,
     # Akquise (Bereich „Leads“) und CRM
     "LEADS_WORKER": env("LEADS_WORKER", "true").lower() in ("1", "true", "yes"),
     # Suchgebiet: Bundesland als ISO-Code (DE-SH = Schleswig-Holstein). Leer = Umkreis um LEADS_CENTER.
@@ -577,7 +593,9 @@ def healthz():
 from . import agent, crm, leaddb  # noqa: E402
 from .crm_views import bp as crm_bp  # noqa: E402
 from .leads_views import bp as leads_bp  # noqa: E402
+from .settings_views import bp as settings_bp  # noqa: E402
 
 app.register_blueprint(leads_bp)
+app.register_blueprint(settings_bp)
 app.register_blueprint(crm_bp)
 agent.init(SETTINGS, smtp_connect, imap_sent_folder, DB_PATH, SETTINGS["DATA_DIR"])

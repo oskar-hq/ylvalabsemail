@@ -26,6 +26,7 @@
     <a href="{{ url_for('history') }}" class="{{ 'on' if request.endpoint == 'history' }}">02 Verlauf</a>
     <a href="{{ url_for('leads.overview') }}" class="{{ 'on' if (request.endpoint or '').startswith('leads.') }}">03 Leads</a>
     {% set nav_due = crm_due() %}<a href="{{ url_for('crm.board') }}" class="{{ 'on' if (request.endpoint or '').startswith('crm.') }}">04 CRM{% if nav_due %} <span class="pill due" title="Wiedervorlagen heute">{{ nav_due }}</span>{% endif %}</a>
+    <a href="{{ url_for('settings.settings') }}" class="{{ 'on' if (request.endpoint or '').startswith('settings.') }}">Einstellungen</a>
     {% if account.demo %}<span class="pill demo">Demo · kein Versand</span>{% else %}<span class="who">{{ account.address or account.user }}</span>{% endif %}
     <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="link mono">Abmelden</button></form>
   </nav>

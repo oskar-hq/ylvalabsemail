@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Sicherung · Ylva Labs{% endblock %}
+{% block content %}
+<main class="page wide">
+  <span class="label">Einstellungen</span>
+  <h1 class="title">Sicherung.</h1>
+  {% include "_settings_tabs.html" %}
+  {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if m.startswith('Nicht') or m.startswith('Bitte') else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
+  {% if not admin %}<p class="note warn small">Sicherungen herunterladen und zurückspielen dürfen nur Admins (<code>ADMIN_USERS</code>).</p>{% endif %}
+  {% if pending %}<p class="note warn small">Eine Sicherung ist bereitgelegt und wird beim nächsten Neustart der App eingesetzt.</p>{% endif %}
+
+  <section class="lead-section">
+    <div class="section-head"><h2>Herunterladen</h2><span class="muted small">Alles, was nicht im Code steckt.</span></div>
+    <p class="measure">Leads, CRM, Gehirn, Kosten, in der App geänderte Einstellungen, Push-Schlüssel und hochgeladene Bilder,
+      als eine Datei. Gut vor größeren Änderungen und für den Umzug auf einen anderen Server.</p>
+    <p class="note warn small measure">Die Datei enthält Zugangsdaten (die Passwörter aus den Einstellungen samt Schlüssel). Wie ein Passwort behandeln: nicht per Mail verschicken, sicher ablegen.</p>
+    {% if admin %}<a class="btn primary" href="{{ url_for('settings.backup_download') }}">Sicherung herunterladen</a>{% endif %}
+    {% if host_backups %}<p class="muted small">Zusätzlich sichert der Server jede Nacht nach <code>~/ylva-backups</code> und vor jedem Update.</p>{% endif %}
+  </section>
+
+  {% if admin %}
+  <section class="lead-section">
+    <div class="section-head"><h2>Zurückspielen</h2><span class="muted small">Ersetzt die aktuellen Daten.</span></div>
+    <form method="post" action="{{ url_for('settings.backup_restore') }}" enctype="multipart/form-data" class="restore-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <label class="field"><span class="sub">Sicherungsdatei (.tar.gz, aus der App oder von <code>deploy/backup.sh</code>)</span>
+        <input type="file" name="file" accept=".gz,.tgz,application/gzip" required></label>
+      <label class="check small"><input type="checkbox" name="confirm" value="1" required> Mir ist klar, dass die aktuellen Daten ersetzt werden. Der bisherige Stand lässt sich danach mit „Rückgängig“ zurückholen.</label>
+      <div class="actions"><button class="btn primary">Prüfen und zurückspielen</button></div>
+    </form>
+    <p class="muted small measure">Die Datei wird zuerst geprüft. Danach startet die App kurz neu und setzt sie ein; anschließend bitte neu anmelden.</p>
+  </section>
+
+  {% if can_undo %}
+  <section class="lead-section">
+    <div class="section-head"><h2>Rückgängig</h2></div>
+    <form method="post" action="{{ url_for('settings.backup_undo') }}">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <p class="small">Den Stand von vor dem letzten Zurückspielen wiederherstellen.</p>
+      <button class="btn">Letztes Zurückspielen rückgängig machen</button>
+    </form>
+  </section>
+  {% endif %}
+  {% endif %}
+
+  {% if history %}
+  <section class="lead-section">
+    <div class="section-head"><h2>Verlauf</h2></div>
+    <ol class="timeline small">{% for h in history %}<li><span class="mono muted">{{ h.at }} · {{ h.by }}</span><p>{{ 'Rückgängig gemacht' if h.kind == 'undo' else 'Zurückgespielt' }}{% if h.file and h.kind != 'undo' %}: {{ h.file }}{% endif %}</p></li>{% endfor %}</ol>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

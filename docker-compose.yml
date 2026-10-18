@@ -8,6 +8,7 @@ services:
       - "8080:8080"
     volumes:
       - mailer-data:/data
+      - ./control:/control   # Austausch mit dem Update-Dienst (deploy/install-updater.sh)
 
 volumes:
   mailer-data:

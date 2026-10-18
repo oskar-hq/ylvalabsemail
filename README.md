@@ -138,6 +138,27 @@ gemieteter Server mit automatischem HTTPS ([docs/SERVER-MIETEN.md](docs/SERVER-M
 und eigener Rechner zum Ausprobieren ([docs/LOKAL-TESTEN.md](docs/LOKAL-TESTEN.md)). Den Systemcheck gibt es auch
 in der App unter „03 Leads → Systemcheck“. Sicherung: `bash deploy/backup.sh`, zurückspielen: `bash deploy/restore.sh <Datei>`.
 
+## Einstellungen und Updates in der App
+
+Nach der Einrichtung muss niemand mehr auf den Server:
+
+- **Einstellungen** (Menü oben rechts): Postfach, Versand, Absender und Texte, Suchgebiet und Bewertung, KI und Budget,
+  Benachrichtigungen. Was dort gespeichert wird, gilt vor der `.env`; die App startet danach kurz neu. Passwörter und
+  der KI-Schlüssel werden verschlüsselt im Datenordner abgelegt und nie wieder angezeigt. Nur in der `.env` bleiben
+  Zugang und Sicherheit (`ALLOWED_DOMAINS`, `ALLOWED_USERS`, `ADMIN_USERS`, `COOKIE_SECURE`, `TRUST_PROXY`, `DEMO_MODE`),
+  damit sich niemand aus Versehen aussperrt.
+- **Software und Updates**: zeigt die installierte Version und was auf GitHub neu ist. „Update einspielen“ sichert,
+  holt den neuen Stand, baut neu und startet. Startet die neue Version nicht, wird automatisch die alte wieder
+  eingespielt; das Protokoll steht auf der Seite. Dafür richtet `deploy/setup.sh` einmalig den Update-Dienst ein
+  (oder von Hand: `sudo bash deploy/install-updater.sh`). Die App legt dabei nur einen Auftrag in den Ordner `control/`;
+  ausgeführt wird er von systemd auf dem Server. Die App bekommt keinen Zugriff auf Docker oder den Server.
+- **Sicherung**: alles, was nicht im Code steckt (Leads, CRM, Gehirn, Kosten, Einstellungen aus der App,
+  Push-Schlüssel, Bilder), als eine `.tar.gz` herunterladen und auf demselben oder einem neuen Server wieder
+  hochladen. Die Datei wird vor dem Einsetzen geprüft. Der vorherige Stand bleibt erhalten und lässt sich mit
+  „Rückgängig“ zurückholen. Die Datei enthält Zugangsdaten, also so sicher ablegen wie ein Passwort.
+  Dateien von `deploy/backup.sh` lassen sich dort ebenfalls zurückspielen.
+- Ändern, einspielen und sichern dürfen nur Admins (`ADMIN_USERS` in der `.env`, ohne Angabe alle, die sich anmelden dürfen).
+
 Die folgenden Abschnitte beschreiben die Einrichtung von Hand.
 
 ## Installation auf Proxmox

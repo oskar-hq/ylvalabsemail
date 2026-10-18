@@ -91,6 +91,7 @@ if [ -z "${SKIP_ENV:-}" ]; then
   ask OUTREACH_USER "E-Mail-Adresse" "kontakt@ylvalabs.de"
   ask_secret OUTREACH_PASSWORD "Passwort (wird nicht angezeigt)"
   ask NOTIFY_EMAILS "Wer bekommt Benachrichtigungen per Mail? (mehrere mit Komma)" "oskar@ylvalabs.de"
+  ask ADMIN_USERS "Wer darf Einstellungen ändern und Updates einspielen? (Admin-Adressen, mit Komma)" "${NOTIFY_EMAILS%%,*}"
   ask SENDER "Name unter den Akquise-Nachrichten" "Oskar Jacobsen"
   ask FOOTER "Fußzeile der Mails (Firmenname und Anschrift wie im Impressum)" "Ylva Labs · Schleswig-Holstein"
 
@@ -142,6 +143,7 @@ if [ -z "${SKIP_ENV:-}" ]; then
     echo "LEADS_SENDER_NAME='$SENDER'"
     echo "LEADS_MONTHLY_BUDGET_EUR=$BUDGET"
     echo "LEADS_REGION=$REGION"
+    echo "ADMIN_USERS=$ADMIN_USERS"
   } > .env
   chmod 600 .env
   echo
@@ -170,6 +172,15 @@ echo
 bold "Systemcheck"
 docker compose exec -T -e LEADS_WORKER=true mailer python -m app.systemcheck || true
 
+# ---------------------------------------------------------------- Updates aus der Web-App
+UPDATER=""
+if [ "$MODE" != 3 ] && [ "$(uname)" = "Linux" ] && command -v systemctl >/dev/null 2>&1; then
+  echo
+  if confirm "Updates künftig per Knopf in der App einspielen (Einstellungen → Software), ohne sich auf den Server einzuloggen?"; then
+    bash deploy/install-updater.sh && UPDATER=1
+  fi
+fi
+
 # ---------------------------------------------------------------- Sicherung
 if [ "$MODE" != 3 ] && command -v crontab >/dev/null 2>&1; then
   echo
@@ -189,4 +200,8 @@ case "$MODE" in
   3) echo "Öffnen: http://localhost:8080" ;;
 esac
 echo "Anmelden mit einem @${ALLOWED_DOMAINS:-ylvalabs.de}-Postfach, dann „03 Leads“ → „Systemcheck“."
-echo "Updates später:  git pull && docker compose up -d --build"
+if [ -n "$UPDATER" ]; then
+  echo "Updates und Einstellungen ab jetzt in der App: Einstellungen → Software und Updates."
+else
+  echo "Einstellungen ab jetzt in der App unter „Einstellungen“. Updates von Hand:  git pull && docker compose up -d --build"
+fi

@@ -52,11 +52,14 @@ bash deploy/setup.sh
 - Domain: `mail.ylvalabs.de`.
 - Das Skript bietet an, Docker zu installieren: mit **j** bestätigen.
 - Zugangsdaten eintippen: Akquise-Postfach, Suchgebiet (Standard: ganz Schleswig-Holstein), optional KI-Schlüssel und Monatsbudget.
-- Am Ende läuft der **Systemcheck**, und das Skript bietet die **tägliche Sicherung** an: mit **j** bestätigen.
+- Das Skript fragt, wer **Admin** ist (darf Einstellungen ändern und Updates einspielen).
+- Am Ende bietet es an, **Updates per Knopf in der App** einzurichten und die **tägliche Sicherung**: beides mit **j** bestätigen.
+  Danach muss niemand mehr auf den Server; Einstellungen und Updates gehen in der App.
 
-Ist das Repository privat, braucht der Server einen Lesezugang. Am einfachsten ist ein
-„Fine-grained personal access token“ auf GitHub (nur Lesen, nur dieses Repository), das beim
-`git clone` als Passwort eingegeben wird.
+**Privates Repository:** Der Server braucht dauerhaft einen Lesezugang, sonst schlagen Updates aus der App fehl.
+Auf GitHub einen „Fine-grained personal access token“ anlegen (nur dieses Repository, nur „Contents: Read“) und
+**vor** dem `git clone` einmal `git config --global credential.helper store` ausführen. Beim `git clone` dann den
+GitHub-Namen und als Passwort den Token eingeben; er wird in `/root/.git-credentials` gespeichert (nur für root lesbar).
 
 ## 4. Fertig
 
@@ -68,9 +71,13 @@ Ist das Repository privat, braucht der Server einen Lesezugang. Am einfachsten i
 
 ## Alltag
 
+Im Alltag läuft alles über die App: **Einstellungen** und **Einstellungen → Software und Updates**.
+Für den Notfall die Befehle auf dem Server:
+
 ```bash
 cd ~/ylvalabsemail                         # bzw. /root/ylvalabsemail
-git pull && docker compose up -d --build   # Update einspielen
+sudo bash deploy/update.sh update          # Update einspielen (wie der Knopf in der App)
+git pull && docker compose up -d --build   # Update von Hand, ohne Sicherung und Zurückrollen
 docker compose logs -f mailer              # Protokoll ansehen (Strg+C beendet)
 docker compose exec mailer python -m app.systemcheck   # Systemcheck im Terminal
 bash deploy/backup.sh                      # Sicherung von Hand
@@ -81,7 +88,12 @@ kopieren, z. B. mit `scp root@<IP>:ylva-backups/*.tar.gz .`
 
 ## Sicherung zurückspielen
 
-Zum Beispiel beim Umzug vom eigenen PC oder vom Heimserver auf den gemieteten Server:
+Am einfachsten in der App: **Einstellungen → Sicherung**. Dort lässt sich der aktuelle Stand herunterladen und eine
+Sicherung hochladen (aus der App oder von `deploy/backup.sh`). Die App prüft die Datei, startet kurz neu und setzt
+sie ein; der vorherige Stand lässt sich mit „Rückgängig“ zurückholen. So geht auch ein Umzug ohne Terminal:
+auf dem alten Server herunterladen, auf dem neuen hochladen.
+
+Ohne App, zum Beispiel beim Umzug vom eigenen PC oder vom Heimserver auf den gemieteten Server:
 
 ```bash
 cd ~/ylvalabsemail

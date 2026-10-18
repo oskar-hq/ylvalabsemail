@@ -1,0 +1,6 @@
+<nav class="tabs mono" aria-label="Einstellungen">
+  <a href="{{ url_for('settings.settings') }}" class="{{ 'on' if request.endpoint == 'settings.settings' }}">Einstellungen</a>
+  <a href="{{ url_for('settings.software') }}" class="{{ 'on' if request.endpoint == 'settings.software' }}">Software und Updates</a>
+  <a href="{{ url_for('settings.backup_page') }}" class="{{ 'on' if request.endpoint == 'settings.backup_page' }}">Sicherung</a>
+  <a href="{{ url_for('leads.system') }}">Systemcheck</a>
+</nav>
