@@ -35,6 +35,8 @@
   <a class="btn primary big" href="{{ url_for('leads.search') }}">Neue Betriebe finden <span aria-hidden="true">→</span></a>
   {% endif %}
 
+  {% set auto_on = sched.frei.cfg.enabled or sched.ki.cfg.enabled %}
+  <p class="home-foot"><a href="{{ url_for('leads.automatic') }}">{% if auto_on %}<i class="dot-on"></i>Automatisch an{% set nx = [sched.frei.next if sched.frei.cfg.enabled else none, sched.ki.next if sched.ki.cfg.enabled else none]|select|sort|first %}{% if nx %} · nächster Lauf {{ nx[11:16] }} Uhr{% endif %}{% else %}Automatisch suchen: aus{% endif %}</a></p>
   <p class="home-foot">{% if st.run %}Ein Lauf läuft gerade · <a href="{{ url_for('leads.search') }}">ansehen</a>{% elif st.counts.kandidaten %}{{ st.counts.kandidaten }} Betriebe warten auf die Bewertung · <a href="{{ url_for('leads.search') }}">Lauf starten</a>{% elif not st.email_enabled %}Erstkontakt per Brief oder Telefon · Mail erst nach Antwort{% else %}KI diesen Monat {{ '%.2f'|format(st.month_eur)|replace('.', ',') }} €{% endif %}</p>
 </main>
 {% endblock %}

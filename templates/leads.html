@@ -10,6 +10,13 @@
     </div>
   </div>
   {% if st.run %}<p class="note warn small"><a href="{{ url_for('leads.search') }}">Ein Lauf läuft: {{ st.activity }}</a></p>{% endif %}
+  {% set auto_on = sched.frei.cfg.enabled or sched.ki.cfg.enabled %}
+  <a class="auto-line" href="{{ url_for('leads.automatic') }}">
+    <i class="{{ 'dot-on' if auto_on else 'dot-off' }}"></i>
+    {% if auto_on %}<span><b>Automatisch an</b>{% for k in ['frei', 'ki'] if sched[k].cfg.enabled %} · {{ 'Kostenlos' if k == 'frei' else 'KI' }}: {{ sched[k].summary }}{% if sched[k].next %}, nächster Lauf {{ sched[k].next[8:10] }}.{{ sched[k].next[5:7] }}. {{ sched[k].next[11:16] }}{% endif %}{% endfor %}</span>
+    {% else %}<span><b>Automatisch suchen: aus</b> · einschalten</span>{% endif %}
+    <span class="chev">›</span></a>
+  {% if st.last_run and not st.run %}<p class="last-run small"><a href="{{ url_for('leads.costs') }}">Letzter Lauf {{ st.last_run.started_at|kurzdatum }}{% if st.last_run.started_by and st.last_run.started_by.startswith('Automatik') %} (automatisch){% endif %}:</a> {{ st.last_run.message }}</p>{% endif %}
 
   <div class="kpis">
     <a class="kpi {{ 'act' if c.entwurf }}" href="{{ url_for('leads.overview', tab='entwurf') }}"><span>Zur Freigabe</span><b>{{ c.entwurf }}</b><em>Nachricht fertig</em></a>
