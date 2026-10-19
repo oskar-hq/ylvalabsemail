@@ -110,6 +110,8 @@ MIGRATIONS = [
     "ALTER TABLE leads ADD COLUMN deal_eur REAL",
     # Kreisschlüssel (z. B. 01058), aus den Kreisgrenzen bestimmt
     "ALTER TABLE leads ADD COLUMN kreis TEXT",
+    # Design der Mail (Vorlage des Mailers, Grafik), als JSON
+    "ALTER TABLE leads ADD COLUMN mail_design TEXT",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.

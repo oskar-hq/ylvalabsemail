@@ -320,12 +320,62 @@ def stage_write(c, lead_id, brain):
 
 
 TEMPLATE_HEADING = "Vorlage (ohne KI)"
+# Für die Vorlage: ein Satz, der zeigt, dass wir den Alltag der Branche verstehen, und ein konkretes Beispiel.
+VERSTAENDNIS = {
+    "handwerk": "Ich kann mir gut vorstellen, wie es bei Ihnen läuft: Tagsüber sind Sie und Ihr Team bei den Kunden, "
+                "und Angebote, Aufmaß und Rechnungen warten danach noch im Büro. Gerade wenn die Auftragsbücher voll "
+                "sind, kostet genau das die Zeit, die eigentlich für das Handwerk da sein sollte.",
+    "pflege": "Ich weiß, wie viel Ihr Team jeden Tag leistet, und dass nach jedem Einsatz noch die Dokumentation wartet. "
+              "Das ist Zeit, die am Ende bei den Menschen fehlt, um die es eigentlich geht.",
+    "landwirtschaft": "Zwischen Stall, Feld und Hofladen bleibt wenig Luft, und trotzdem wollen Düngung, Pflanzenschutz "
+                      "und Förderanträge sauber dokumentiert sein. Das ist viel Schreibarbeit für einen Betrieb, der "
+                      "eigentlich draußen gebraucht wird.",
+    "dienstleistung": "In einem Büro wie Ihrem landet vieles auf demselben Tisch: Anfragen, Termine und Unterlagen, die "
+                      "erst zusammengesucht werden müssen. Vieles davon wiederholt sich jeden Tag und kostet trotzdem "
+                      "jedes Mal wieder Zeit.",
+    "industrie": "Auf einer Werft hängt viel an Absprachen, Prüfprotokollen und Unterlagen, die zur richtigen Zeit am "
+                 "richtigen Ort sein müssen. Wenn das von Hand läuft, kostet es gute Leute jeden Tag Zeit.",
+}
+VERSTAENDNIS_SONST = ("Ich kann mir gut vorstellen, dass bei Ihnen vieles an wenigen Köpfen hängt und Routinearbeit im "
+                      "Büro Zeit kostet, die an anderer Stelle fehlt.")
+BEISPIEL = {
+    "handwerk": "Genau da setzen wir an, zum Beispiel mit Angeboten, die Sie per Sprachnotiz direkt beim Kunden "
+                "diktieren und die im Büro fertig formatiert ankommen.",
+    "pflege": "Genau da setzen wir an, zum Beispiel mit Einsatzberichten, die Ihr Team direkt nach dem Besuch "
+              "einspricht und die sauber im richtigen Format landen, ohne Abtippen am Abend.",
+    "landwirtschaft": "Genau da setzen wir an, zum Beispiel mit Nachweisen, die sich aus den Daten Ihrer Maschinen und "
+                      "Apps fast von selbst schreiben.",
+    "dienstleistung": "Genau da setzen wir an, zum Beispiel mit Anfragen, die vorsortiert und mit einem "
+                      "Antwortvorschlag in Ihrem Postfach liegen.",
+    "industrie": "Genau da setzen wir an, zum Beispiel mit Prüfprotokollen und Berichten, die aus Fotos und kurzen "
+                 "Notizen von selbst entstehen.",
+}
+BEISPIEL_SONST = "Genau da setzen wir an, zum Beispiel mit einem kleinen Werkzeug, das wiederkehrende Schreibarbeit übernimmt."
+# Alte Vorlage (bis Oktober 2026), wird beim Start einmal durch die neue ersetzt, wenn ihr sie nicht geändert habt
+OLD_TEMPLATE_MARK = "Bei Betrieben wie {firma} kostet oft das hier viel Zeit"
+
+
+def upgrade_template(c):
+    """Einmalig: die alte, eher allgemeine Vorlage („Bei Betrieben wie …“) durch die persönlichere ersetzen.
+    Nur, wenn ihr sie nicht selbst geändert habt; der Rest des Gehirns bleibt, wie er ist."""
+    if leaddb.kv_get(c, "template_v2"):
+        return False
+    leaddb.kv_set(c, "template_v2", True)
+    current = leaddb.brain(c)
+    if OLD_TEMPLATE_MARK not in current:
+        return False
+    seed = leaddb.BRAIN_SEED.read_text(encoding="utf-8")
+    new_section = leaddb.brain_sections(seed, [TEMPLATE_HEADING]).strip()
+    parts = re.split(r"(?m)^(?=## )", current)
+    replaced = "".join(new_section + "\n\n" if p.startswith(f"## {TEMPLATE_HEADING}") else p for p in parts)
+    return leaddb.save_brain(c, replaced, "Update", "Neue, persönlichere Vorlage (ohne KI)")
 
 
 def template_draft(c, lead_id):
     """Entwurf aus der Vorlage im Gehirn (Abschnitt „Vorlage (ohne KI)“), kostenlos. Platzhalter:
-    {firma}, {anrede}, {zeitfresser}, {kategorie}, {ort}, {absender}, {aufhaenger}.
+    {firma}, {anrede}, {zeitfresser}, {kategorie}, {ort}, {absender}, {aufhaenger}, {verstaendnis}, {beispiel}.
     Ein Absatz, dessen Platzhalter leer bleibt (z. B. {aufhaenger} ohne Recherche), fällt weg."""
+    upgrade_template(c)
     lead = leaddb.get_lead(c, lead_id)
     section = leaddb.brain_sections(leaddb.brain(c), [TEMPLATE_HEADING]).strip() \
         or leaddb.brain_sections(leaddb.BRAIN_SEED.read_text(encoding="utf-8"), [TEMPLATE_HEADING]).strip()
@@ -338,12 +388,17 @@ def template_draft(c, lead_id):
         elif m:
             greeting = m.group(2)
     imported = lead["research"].get("import") or {}
-    fresser = (lead["research"].get("zeitfresser") or ["Papierkram und wiederkehrende Anfragen"])[:2]
+    fresser = (lead["research"].get("zeitfresser") or ["Papierkram und wiederkehrende Anfragen"])[:3]
+    if lead["branche"] in VERSTAENDNIS:  # was der Branchen-Satz schon sagt, nicht noch einmal aufzählen
+        fresser = [f for f in fresser if f != scoring.BRANCHE_ZEITFRESSER.get(lead["branche"])]
+    fresser = fresser[:2]
     values = {"firma": lead["name"], "kategorie": lead["category_label"] or "Betrieb",
               "anrede": imported.get("anrede") or (f"Guten Tag {lead['contact_name']},"
                                                    if lead["contact_name"] else "Guten Tag,"),
-              "zeitfresser": " sowie ".join(fresser), "ort": lead["city"] or "Ihrer Region",
-              "absender": S("LEADS_SENDER_NAME"), "aufhaenger": imported.get("aufhaenger", "")}
+              "zeitfresser": " und ".join(fresser), "ort": lead["city"] or "Ihrer Region",
+              "absender": S("LEADS_SENDER_NAME"), "aufhaenger": imported.get("aufhaenger", ""),
+              "verstaendnis": VERSTAENDNIS.get(lead["branche"], VERSTAENDNIS_SONST),
+              "beispiel": BEISPIEL.get(lead["branche"], BEISPIEL_SONST)}
 
     def fill(text):
         return re.sub(r"\{(\w+)\}", lambda m: values.get(m.group(1), m.group(0)), text).strip()
@@ -545,10 +600,25 @@ def execute_run(c, run_id):
 # ---------------------------------------------------------------- Versand
 
 
+DESIGN_DEFAULT = {"template": "brief", "graphic": "none", "icon": "werkstatt", "band_seed": 3}
+GRAPHICS = {"none": "Keine Grafik", "band_original": "Pixel-Band Ylva", "band": "Pixel-Band, Variante", "icon": "Symbol"}
+
+
+def design_of(lead):
+    """Gewähltes Design der Mail (im Mail-Fenster änderbar), sonst ruhige Kurz-Mail ohne Grafik."""
+    try:
+        stored = json.loads(lead.get("mail_design") or "{}")
+    except ValueError:
+        stored = {}
+    return {**DESIGN_DEFAULT, **{k: v for k, v in stored.items() if k in DESIGN_DEFAULT}}
+
+
 def lead_form(lead):
-    """Die Felder für den Mail-Baukasten des Mailers (Vorlage „Kurz-Mail“)."""
+    """Die Felder für den Mail-Baukasten des Mailers, im gewählten Design."""
+    d = design_of(lead)
     return {
-        "template": "brief", "graphic": "none", "subject": lead["subject"] or "", "preheader": "", "headline": "",
+        "template": d["template"], "graphic": d["graphic"], "icon": d["icon"], "band_seed": str(d["band_seed"]),
+        "subject": lead["subject"] or "", "preheader": "", "headline": "",
         "greeting": lead["greeting"] or "", "body": lead["body"] or "", "body2": "",
         "closing": "Viele Grüße", "sender_name": S("LEADS_SENDER_NAME"),
         "footer": S("DEFAULT_FOOTER"), "info_label": [], "info_value": [], "cta_text": "", "cta_url": "",
@@ -896,6 +966,7 @@ def notify_tasks(c):
 def _loop():
     time.sleep(3)
     c = conn()
+    upgrade_template(c)
     c.execute("UPDATE leads SET status='kandidat' WHERE status='recherche'")  # nach Neustart
     c.execute("UPDATE runs SET status='abgebrochen', ended_at=?, message='Server wurde neu gestartet.' "
               "WHERE status='laeuft'", (leaddb.now(),))

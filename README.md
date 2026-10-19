@@ -151,8 +151,9 @@ Gestaltet wie das Outreach Cockpit (ruhig, eine Sache pro Bildschirm). Hell, Dun
   die kostenlose Suche nicht gefunden.
 - **Neue Betriebe prüfen** (auf „Heute“): passende Betriebe als Karte, nach rechts wischen = gut (ins CRM), nach links
   = nicht gut. Auch per Knopf oder Pfeiltasten, „Rückgängig“ holt die letzte Entscheidung zurück.
-- **✉ auf jeder Karte** (Heute und CRM): öffnet die fertige Mail aus der Vorlage mit Firmenname, Anrede und
-  Zeitfressern. Kurz ändern oder direkt senden. Ist der Erstkontakt per Mail aus, gibt es dort „Als Brief drucken“,
+- **✉ auf jeder Karte** (Heute und CRM): öffnet die fertige Mail aus der Vorlage (persönlich, mit einem Satz zum
+  Alltag der Branche und einem konkreten Beispiel). Design wählbar (Kurz-Mail oder Newsletter, Grafik, Symbol) mit
+  Live-Vorschau. Kurz ändern oder direkt senden. Ist der Erstkontakt per Mail aus, gibt es dort „Als Brief drucken“,
   „Brief ist raus“ und „Angerufen“.
 - **Mailer**: gestaltete Mails verfassen und versenden.
 
