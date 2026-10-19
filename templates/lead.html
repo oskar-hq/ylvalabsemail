@@ -34,7 +34,8 @@
         {% endif %}
         <details class="more"><summary class="small">Originaltext</summary><div class="quote">{{ last.text }}</div></details>
         <div class="btn-row">
-          {% if can_mail %}<a class="btn small primary" href="{{ url_for('compose', lead=lead.id) }}">Gestaltet antworten</a>{% endif %}
+          <a class="btn small primary" href="{{ url_for('crm.conversation', lead_id=lead.id) }}">Im Postfach antworten</a>
+          {% if can_mail %}<a class="btn small" href="{{ url_for('compose', lead=lead.id) }}">Gestaltet antworten</a>{% endif %}
           {% if lead.email %}<a class="btn small" href="mailto:{{ lead.email }}?subject={{ ('Re: ' ~ (lead.subject or ''))|urlencode }}">Im Mailprogramm antworten</a>{% endif %}
         </div>
       </div>

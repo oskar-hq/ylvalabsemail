@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Postfach · CRM{% endblock %}
+{% macro when(iso) %}{% if iso %}{{ fmt_day(iso) }}{% if iso[11:16] %} · {{ iso[11:16] }}{% endif %}{% endif %}{% endmacro %}
+{% macro row(cv) %}
+  <li><a class="conv" href="{{ url_for('crm.conversation', lead_id=cv.id) }}">
+    <i class="mood mood-{{ cv.mood }}" title="{{ moods[cv.mood] }} ({{ cv.mood_why }})"></i>
+    <span class="conv-main">
+      <span class="conv-top"><b>{{ cv.name }}</b>{% if cv.unread_msgs %}<span class="nav-count new-count">{{ cv.unread_msgs }} neu</span>{% endif %}
+        <span class="conv-when">{{ when(cv.last_at) }}</span></span>
+      <span class="conv-meta">{{ cv.contact_name or cv.category_label }}{% if cv.city %} · {{ cv.city }}{% endif %}{% if cv.stage %} · {{ stage_labels.get(cv.stage, '') }}{% endif %}</span>
+      <span class="conv-snip">{% if cv.last_dir == 'out' %}<em>Ihr:</em> {% endif %}{{ (cv.last_text or '')|replace('\n', ' ')|truncate(140) }}</span>
+    </span>
+    <span class="chev">›</span></a></li>
+{% endmacro %}
+{% block content %}
+<main class="page narrow">
+  <a class="back" href="{{ url_for('crm.board') }}">‹ CRM</a>
+  <h1 class="title">Postfach</h1>
+  <p class="muted small">Antworten der Betriebe aus dem Akquise-Postfach. Antworten Sie hier direkt, der Verlauf bleibt zusammen.
+    Der Punkt zeigt, wie es läuft: <i class="mood mood-gut"></i> gut <i class="mood mood-mittel"></i> mittel <i class="mood mood-schlecht"></i> eher schlecht <i class="mood mood-neutral"></i> neutral.</p>
+  {% if not groups.offen and not groups.gesendet %}
+  <p class="note small">Noch keine Antworten. Sobald ein Betrieb auf eine Mail antwortet, steht er hier.{% if st.warnings %} Prüfen Sie dafür das Akquise-Postfach unter Einstellungen.{% endif %}</p>
+  {% endif %}
+
+  <section class="inbox-group">
+    <p class="label">Offen zum Antworten · {{ groups.offen|length }}</p>
+    {% if groups.offen %}<ul class="conv-list">{% for cv in groups.offen %}{{ row(cv) }}{% endfor %}</ul>
+    {% else %}<p class="muted small empty">Alles beantwortet.</p>{% endif %}
+  </section>
+  <section class="inbox-group">
+    <p class="label">Gesendet, wartet auf Antwort · {{ groups.gesendet|length }}</p>
+    {% if groups.gesendet %}<ul class="conv-list">{% for cv in groups.gesendet %}{{ row(cv) }}{% endfor %}</ul>
+    {% else %}<p class="muted small empty">Noch nichts.</p>{% endif %}
+  </section>
+</main>
+{% endblock %}

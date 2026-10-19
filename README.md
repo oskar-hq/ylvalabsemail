@@ -155,6 +155,10 @@ Gestaltet wie das Outreach Cockpit (ruhig, eine Sache pro Bildschirm). Hell, Dun
   Alltag der Branche und einem konkreten Beispiel). Design wählbar (Kurz-Mail oder Newsletter, Grafik, Symbol) mit
   Live-Vorschau. Kurz ändern oder direkt senden. Ist der Erstkontakt per Mail aus, gibt es dort „Als Brief drucken“,
   „Brief ist raus“ und „Angerufen“.
+- **Postfach** (im CRM): alle Betriebe, die geantwortet haben, nach Kunden. „Offen zum Antworten“ (die letzte
+  Nachricht kam vom Betrieb) und „Gesendet, wartet auf Antwort“. Gespräch öffnen, direkt antworten (im selben
+  Mailverlauf, mit Zitat), danach rutscht es nach „Gesendet“. Ein Punkt zeigt, wie es läuft (grün gut, gelb mittel,
+  rot eher schlecht, weiß neutral): kostenlos nach Stichworten in der letzten Antwort, von euch jederzeit änderbar.
 - **Mailer**: gestaltete Mails verfassen und versenden.
 
 Einstellungen, Verlauf, Kosten und Systemcheck liegen im Konto-Menü (Kreis oben rechts). Die Einstellungen sind wie

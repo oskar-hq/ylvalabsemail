@@ -91,6 +91,14 @@ CREATE TABLE IF NOT EXISTS tasks (
     created_at TEXT NOT NULL, created_by TEXT, done_at TEXT, done_by TEXT
 );
 CREATE INDEX IF NOT EXISTS tasks_open ON tasks(done_at, due);
+CREATE TABLE IF NOT EXISTS messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    lead_id INTEGER NOT NULL, at TEXT NOT NULL, direction TEXT NOT NULL,
+    from_addr TEXT, from_name TEXT, to_addr TEXT, subject TEXT, text TEXT,
+    message_id TEXT, in_reply_to TEXT, sent_by TEXT, read INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS messages_lead ON messages(lead_id, at);
+CREATE INDEX IF NOT EXISTS messages_unread ON messages(read, direction);
 """
 
 # Spalten, die nach der ersten Version dazugekommen sind
@@ -112,6 +120,8 @@ MIGRATIONS = [
     "ALTER TABLE leads ADD COLUMN kreis TEXT",
     # Design der Mail (Vorlage des Mailers, Grafik), als JSON
     "ALTER TABLE leads ADD COLUMN mail_design TEXT",
+    # Stimmung im Gespräch, von euch gesetzt: gut, mittel, schlecht, neutral (leer = automatisch nach Stichworten)
+    "ALTER TABLE leads ADD COLUMN mood TEXT",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.
@@ -126,6 +136,11 @@ DATA_MIGRATIONS = [
            ELSE 'neu' END
        WHERE stage IS NULL AND IFNULL(rejected_by,'') != 'filter'
          AND status IN ('passt','entwurf','versendet','beantwortet','gesperrt')""",
+    # Postfach im CRM: bisherige Antworten (Einträge in der Akte) als Nachrichten übernehmen
+    """INSERT INTO messages (lead_id, at, direction, from_addr, from_name, subject, text, read)
+       SELECT e.lead_id, e.at, 'in', json_extract(e.meta, '$.from'), e.author, json_extract(e.meta, '$.subject'),
+              e.text, CASE WHEN l.unread = 1 THEN 0 ELSE 1 END
+       FROM lead_events e JOIN leads l ON l.id = e.lead_id WHERE e.kind = 'reply'""",
 ]
 
 FOLLOWUP_DAYS = 7  # wird beim Start aus LEADS_FOLLOWUP_DAYS gesetzt, 0 = aus

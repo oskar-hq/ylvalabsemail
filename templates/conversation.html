@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}{{ lead.name }} · Postfach{% endblock %}
+{% macro when(iso) %}{% if iso %}{{ fmt_day(iso) }}{% if iso[11:16] %} · {{ iso[11:16] }}{% endif %}{% endif %}{% endmacro %}
+{% block content %}
+<main class="page narrow conv-page" id="conv" data-id="{{ lead.id }}">
+  <a class="back" href="{{ url_for('crm.inbox') }}">‹ Postfach</a>
+  <div class="conv-head">
+    <div>
+      <h1 class="title">{{ lead.name }}</h1>
+      <p class="muted">{{ lead.contact_name or '' }}{% if lead.contact_name and lead.email %} · {% endif %}{{ lead.email or '' }}{% if lead.stage %} · {{ stage_labels.get(lead.stage, '') }}{% endif %}</p>
+    </div>
+    <a class="btn small" href="{{ url_for('leads.detail', lead_id=lead.id) }}">Akte</a>
+  </div>
+
+  <div class="mood-pick" role="group" aria-label="Wie läuft das Gespräch?">
+    <span class="small muted">Wie läuft es?</span>
+    {% for key, label in moods.items() %}<button type="button" data-mood="{{ key }}" class="{{ 'on' if mood == key }}" title="{{ label }}"><i class="mood mood-{{ key }}"></i>{{ label }}</button>{% endfor %}
+    <span class="small muted" id="moodWhy">{{ mood_why }}</span>
+    {% if lead.mood %}<button type="button" class="link small" data-mood="">automatisch</button>{% endif %}
+  </div>
+
+  <ol class="thread">
+    {% for m in items %}
+    <li class="msg-{{ m.direction }}">
+      <div class="bubble">
+        <span class="b-meta">{{ m.who }} · {{ when(m.at) }}{% if m.direction == 'out' and m.channel != 'email' %} · {{ {'brief': 'Brief', 'telefon': 'Telefon'}.get(m.channel, m.channel) }}{% endif %}</span>
+        {% if m.subject %}<b class="b-subj">{{ m.subject }}</b>{% endif %}
+        <p>{{ m.text }}</p>
+      </div>
+    </li>
+    {% else %}<li class="muted small">Noch keine Nachrichten.</li>{% endfor %}
+  </ol>
+
+  {% if lead.status == 'gesperrt' %}
+  <p class="note warn small">Dieser Betrieb möchte keine Nachrichten mehr bekommen. Antworten ist gesperrt.</p>
+  {% elif not can_send %}
+  <p class="note warn small">Zum Antworten das Akquise-Postfach eintragen (Einstellungen → Postfach und Versand → Akquise-Postfach).</p>
+  {% else %}
+  <form class="reply-form" id="replyForm">
+    <label class="field"><span class="sub">Betreff</span><input type="text" name="subject" value="{{ subject }}"></label>
+    <textarea name="text" rows="5" placeholder="Ihre Antwort an {{ lead.contact_name or lead.name }} …" required></textarea>
+    <div class="reply-actions">
+      <span class="muted small">Gruß, Unterschrift und die zitierte Nachricht kommen automatisch dazu.{% if account.demo %} Demo: wird nicht verschickt.{% endif %}</span>
+      <button class="btn primary">Antworten</button>
+    </div>
+  </form>
+  {% endif %}
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='inbox.js') }}"></script>{% endblock %}

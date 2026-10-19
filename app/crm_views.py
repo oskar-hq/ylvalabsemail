@@ -4,7 +4,7 @@ from datetime import date
 
 from flask import Blueprint, Response, abort, g, jsonify, render_template, request
 
-from . import agent, crm, leaddb, regions
+from . import agent, crm, leaddb, mailbox, regions
 from .leads_views import db, lead_or_404, status_payload, who
 from .main import SETTINGS, login_required
 
@@ -13,7 +13,8 @@ bp = Blueprint("crm", __name__)
 
 @bp.app_context_processor
 def _crm_globals():
-    return {"crm_due": lambda: crm.due_count(db())}
+    return {"crm_due": lambda: crm.due_count(db()) + mailbox.unread_count(db()),
+            "inbox_unread": lambda: mailbox.unread_count(db())}
 
 
 @bp.get("/crm")
@@ -172,3 +173,63 @@ def load_borders():
     leaddb.kv_set(db(), "request:kreise", True)
     agent.wake()
     return jsonify(ok=True, message="Die Kreisgrenzen werden geladen. Das dauert etwa eine Minute.")
+
+
+# ---------------------------------------------------------------- Postfach: Antworten lesen und direkt antworten
+
+
+@bp.get("/crm/postfach")
+@login_required
+def inbox():
+    return render_template("inbox.html", account=g.account, groups=mailbox.grouped(db()), moods=mailbox.MOODS,
+                           st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+
+
+@bp.get("/crm/postfach/<int:lead_id>")
+@login_required
+def conversation(lead_id):
+    lead = lead_or_404(lead_id)
+    items = mailbox.thread(db(), lead)
+    mailbox.mark_read(db(), lead_id)
+    if lead["unread"]:
+        leaddb.update_lead(db(), lead_id, unread=0)
+    last_in = mailbox.last_incoming(db(), lead_id)
+    mood, why = mailbox.mood(lead, last_in)
+    can_send = agent.outreach_configured() or g.account.get("demo")
+    return render_template("conversation.html", account=g.account, lead=lead, items=items, mood=mood, mood_why=why,
+                           moods=mailbox.MOODS, last_in=last_in, can_send=can_send,
+                           subject=mailbox.reply_subject((last_in or {}).get("subject") or lead["subject"] or lead["name"]),
+                           st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+
+
+@bp.post("/crm/postfach/<int:lead_id>/antwort")
+@login_required
+def reply(lead_id):
+    lead = lead_or_404(lead_id)
+    text = request.form.get("text", "").strip()
+    if not text:
+        return jsonify(error="Bitte eine Antwort schreiben."), 400
+    if lead["status"] == "gesperrt":
+        return jsonify(error="Dieser Betrieb möchte keine Nachrichten mehr bekommen."), 400
+    subject = request.form.get("subject", "").strip() or None
+    if g.account.get("demo"):
+        last = mailbox.last_incoming(db(), lead_id)
+        agent.record_reply(db(), lead, text, who(), subject or "Re: …", (last or {}).get("from_addr") or lead["email"] or "",
+                           note=" Demo: nicht verschickt.")
+        return jsonify(ok=True)
+    try:
+        agent.send_reply(db(), lead, text, who(), subject)
+    except Exception as exc:
+        return jsonify(error=str(exc)), 502
+    return jsonify(ok=True)
+
+
+@bp.post("/crm/postfach/<int:lead_id>/stimmung")
+@login_required
+def set_mood(lead_id):
+    lead_or_404(lead_id)
+    value = request.form.get("mood", "")
+    if value and value not in mailbox.MOODS:
+        abort(400)
+    leaddb.update_lead(db(), lead_id, mood=value or None)
+    return jsonify(ok=True)
