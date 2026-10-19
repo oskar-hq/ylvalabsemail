@@ -140,7 +140,7 @@ in der App unter „Konto-Menü (Kreis oben rechts) → Systemcheck“. Sicherun
 
 ## Aufbau der Oberfläche
 
-Gestaltet wie das Outreach Cockpit (dunkel, ruhig, eine Sache pro Bildschirm). Oben bzw. am Handy unten vier Bereiche:
+Gestaltet wie das Outreach Cockpit (ruhig, eine Sache pro Bildschirm). Hell, Dunkel oder automatisch wie das Gerät: im Konto-Menü unter „Darstellung“. Oben bzw. am Handy unten vier Bereiche:
 
 - **Heute**: eine Zahl, was heute ansteht (Wiedervorlagen, Freigaben, Nachfassen, Interessenten), und „Starten“
   führt direkt zur ersten Aufgabe.
