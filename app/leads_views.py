@@ -6,7 +6,7 @@ from datetime import datetime
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from . import agent, ai, claude_research, crm, emailbuild, leaddb, schedule, scoring
+from . import agent, ai, claude_research, crm, emailbuild, leaddb, pixel, schedule, scoring
 from .main import DB_PATH, ROOT, SETTINGS, login_required
 
 bp = Blueprint("leads", __name__)
@@ -298,10 +298,15 @@ def detail(lead_id):
                            tab=leaddb.tab_of(lead), tabs=leaddb.TABS, demo=SETTINGS["DEMO_MODE"])
 
 
-@bp.get("/leads/<int:lead_id>/preview")
+@bp.route("/leads/<int:lead_id>/preview", methods=["GET", "POST"])
 @login_required
 def preview(lead_id):
     lead = lead_or_404(lead_id)
+    if request.method == "POST":  # Live-Vorschau aus dem Mail-Fenster, ohne zu speichern
+        lead = {**lead, **_draft_from_form()}
+        design = _design_from_form(lead)
+        if design:
+            lead["mail_design"] = json.dumps(design)
     rcpt = {"name": lead["contact_name"] or "", "first": "", "email": lead["email"] or ""}
     html, _, _ = emailbuild.render(agent.lead_form(lead), rcpt, SETTINGS)
     resp = Response(html, mimetype="text/html")
@@ -323,7 +328,12 @@ def mail_json(lead_id):
     if g.account.get("demo") and lead["email"]:
         ok, why = True, "Demo: Es wird nichts verschickt, nur als versendet markiert."
     sent = lead["status"] in ("versendet", "beantwortet")
+    if not lead.get("mail_design") and leaddb.kv_get(db(), "mail_design_last"):
+        lead = {**lead, "mail_design": json.dumps(leaddb.kv_get(db(), "mail_design_last"))}
     return jsonify(id=lead_id, name=lead["name"], email=lead["email"] or "", contact=lead["contact_name"] or "",
+                   design=agent.design_of(lead),
+                   templates={k: v["name"] for k, v in emailbuild.TEMPLATES.items()}, graphics=agent.GRAPHICS,
+                   icons={k: v[0] for k, v in pixel.ICONS.items()},
                    subject=lead["subject"] or "", greeting=lead["greeting"] or "", body=lead["body"] or "",
                    can_email=ok and not sent, why="Diese Nachricht ist schon raus." if sent else why,
                    sent=sent, editable=open_status, letter=url_for("leads.letter", lead_id=lead_id),
@@ -340,6 +350,24 @@ def letter(lead_id):
                            org=SETTINGS["ORG_NAME"], today=datetime.now().strftime("%d.%m.%Y"))
 
 
+def _design_from_form(lead):
+    """Design aus dem Mail-Fenster (Vorlage, Grafik, Symbol, Band-Variante), geprüft. None, wenn nichts mitkam."""
+    if "template" not in request.form:
+        return None
+    d = agent.design_of(lead)
+    if request.form.get("template") in emailbuild.TEMPLATES:
+        d["template"] = request.form["template"]
+    if request.form.get("graphic") in agent.GRAPHICS:
+        d["graphic"] = request.form["graphic"]
+    if request.form.get("icon") in pixel.ICONS:
+        d["icon"] = request.form["icon"]
+    try:
+        d["band_seed"] = max(1, min(50, int(request.form.get("band_seed") or d["band_seed"])))
+    except ValueError:
+        pass
+    return d
+
+
 def _draft_from_form():
     return {k: request.form.get(k, "").replace("\r\n", "\n").strip() for k in ("subject", "greeting", "body")}
 
@@ -352,6 +380,10 @@ def save(lead_id):
 
 def _save_draft(lead):
     """Übernimmt den mitgeschickten Entwurf. Gibt True zurück, wenn sich etwas geändert hat."""
+    design = _design_from_form(lead)
+    if design and design != agent.design_of(lead):
+        leaddb.update_lead(db(), lead["id"], mail_design=json.dumps(design))
+        leaddb.kv_set(db(), "mail_design_last", design)  # das nächste Mail-Fenster startet mit diesem Design
     if "body" not in request.form:
         return False
     lead_id = lead["id"]

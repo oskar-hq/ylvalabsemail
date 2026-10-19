@@ -48,26 +48,33 @@ Feedback und aus den Antworten der Firmen fort.
 
 ## Stil der Nachrichten
 
-- Deutsch, per „Sie“, außer der Betrieb duzt auf seiner Webseite selbst.
-- Kurz: höchstens 120 Wörter im Text. Keine Floskeln, kein Tech-Englisch, keine Hype-Wörter.
+- Deutsch, per „Sie“, außer der Betrieb duzt auf seiner Webseite selbst. Formell, aber warm: so, wie Oskar einem
+  Betrieb schreiben würde, den er aus der Region kennt und schätzt, auch wenn es die erste Nachricht ist.
+- Persönlich statt Serienbrief: nie „Bei Betrieben wie …“ oder „Unternehmen Ihrer Branche“. Den Betrieb direkt
+  ansprechen und zeigen, dass wir seinen Alltag verstehen (was dort konkret Zeit kostet und warum das nervt).
 - Erster Satz: etwas Konkretes über genau diesen Betrieb (was wir auf der Webseite gesehen haben).
-- Dann ein bis zwei konkrete Zeitfresser, die bei so einem Betrieb typisch sind, und was wir dagegen bauen könnten.
+- Dann Verständnis für das Problem, dann ein konkretes Beispiel, wie wir es lösen könnten. Kein Verkaufston.
+- Kurz: höchstens 140 Wörter im Text. Keine Floskeln, kein Tech-Englisch, keine Hype-Wörter.
 - Genau eine Bitte am Ende: ein kostenloses Gespräch von 30 Minuten, am Telefon oder vor Ort.
 - Ehrlich: keine erfundenen Zahlen, keine Versprechen, keine Referenzkunden, die es nicht gibt.
-- Absender ist Oskar Jacobsen von Ylva Labs.
+- Absender ist Oskar Jacobsen von Ylva Labs aus Kappeln.
 
 ## Vorlage (ohne KI)
 
-Betreff: Weniger Papierkram bei {firma}?
+Betreff: Eine Idee für {firma}
 Anrede: {anrede}
-
-ich bin Oskar Jacobsen von Ylva Labs, einem kleinen KI-Lab aus Schleswig-Holstein. Wir bauen mit Betrieben aus der Region Werkzeuge, die Papierkram und Routine abnehmen.
 
 {aufhaenger}
 
-Bei Betrieben wie {firma} kostet oft das hier viel Zeit: {zeitfresser}. Genau an solchen Stellen setzen wir an. Sie bringen das Problem aus dem Alltag mit, wir bauen die Lösung und tragen das Entwicklungsrisiko.
+{verstaendnis}
 
-Hätten Sie Lust auf ein kostenloses Gespräch von 30 Minuten, am Telefon oder bei Ihnen vor Ort?
+Dazu kommt bei Ihnen vermutlich noch: {zeitfresser}.
+
+{beispiel}
+
+Ich bin Oskar Jacobsen von Ylva Labs aus Kappeln. Wir bauen solche Werkzeuge gemeinsam mit Betrieben aus der Region, passend zu Ihren Abläufen und mit dem Entwicklungsrisiko bei uns. Lohnt es sich für Sie nicht, sagen wir das ehrlich.
+
+Hätten Sie Lust auf ein Gespräch von 30 Minuten? Gern bei Ihnen vor Ort oder am Telefon, ganz wie es Ihnen passt.
 
 ## Gelernt
 

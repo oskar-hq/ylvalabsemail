@@ -15,14 +15,49 @@
     if (!resp.ok) throw new Error(json.error || 'Hat nicht geklappt.');
     return json;
   }
-  const fields = () => ({ subject: $('mailSubject').value, greeting: $('mailGreeting').value, body: $('mailBody').value });
+  const fields = () => ({ subject: $('mailSubject').value, greeting: $('mailGreeting').value, body: $('mailBody').value,
+    template: $('mailTemplateInput').value, graphic: $('mailGraphic').value, icon: $('mailIcon').value,
+    band_seed: $('mailSeedInput').value });
+
+  // Design: Vorlage (Kurz-Mail / Newsletter), Grafik, Symbol, Variante des Pixel-Bands. Vorschau live.
+  function setDesign(d, opts) {
+    if (opts) {
+      $('mailTpl').innerHTML = Object.entries(opts.templates).map(([k, v]) => `<button type="button" data-tpl="${k}">${v}</button>`).join('');
+      $('mailGraphic').innerHTML = Object.entries(opts.graphics).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+      $('mailIcon').innerHTML = Object.entries(opts.icons).map(([k, v]) => `<option value="${k}">${v}</option>`).join('');
+    }
+    $('mailTemplateInput').value = d.template;
+    $('mailTpl').querySelectorAll('button').forEach((b) => b.classList.toggle('on', b.dataset.tpl === d.template));
+    $('mailGraphic').value = d.graphic; $('mailIcon').value = d.icon; $('mailSeedInput').value = d.band_seed;
+    $('mailIcon').hidden = d.graphic !== 'icon'; $('mailSeed').hidden = d.graphic !== 'band';
+    refreshPreview();
+  }
+  const currentDesign = () => ({ template: $('mailTemplateInput').value, graphic: $('mailGraphic').value,
+    icon: $('mailIcon').value, band_seed: $('mailSeedInput').value });
+  let previewTimer = null;
+  function refreshPreview() {
+    if (!lead || !$('mailPreviewBox').open) return;
+    clearTimeout(previewTimer);
+    previewTimer = setTimeout(async () => {
+      const body = new FormData(); Object.entries(fields()).forEach(([k, v]) => body.append(k, v));
+      const resp = await fetch(`/leads/${lead.id}/preview`, { method: 'POST', body, headers: { 'X-CSRF-Token': csrf } });
+      if (resp.ok) $('mailFrame').srcdoc = await resp.text();
+    }, 250);
+  }
+  $('mailTpl').addEventListener('click', (e) => { const b = e.target.closest('[data-tpl]'); if (b) setDesign({ ...currentDesign(), template: b.dataset.tpl }); });
+  $('mailGraphic').addEventListener('change', () => setDesign(currentDesign()));
+  $('mailIcon').addEventListener('change', () => setDesign(currentDesign()));
+  $('mailSeed').addEventListener('click', () => setDesign({ ...currentDesign(), band_seed: String(1 + Math.floor(Math.random() * 50)) }));
+  $('mailPreviewBox').addEventListener('toggle', refreshPreview);
+  ['mailSubject', 'mailGreeting', 'mailBody'].forEach((id) => $(id).addEventListener('input', refreshPreview));
   function fill(d) {
     lead = d;
     $('mailTitle').textContent = d.name;
     $('mailTo').textContent = d.email ? `an ${d.contact ? d.contact + ' · ' : ''}${d.email}` : 'Keine E-Mail-Adresse bekannt';
     $('mailSubject').value = d.subject; $('mailGreeting').value = d.greeting; $('mailBody').value = d.body;
     ['mailSubject', 'mailGreeting', 'mailBody'].forEach((id) => { $(id).readOnly = !d.editable; });
-    $('mailPreview').href = d.preview; $('mailDetail').href = d.detail;
+    $('mailDetail').href = d.detail;
+    setDesign(d.design, d);
     $('mailSend').disabled = !d.can_email;
     $('mailSend').textContent = d.sent ? 'Schon versendet' : 'Senden';
     $('mailLetter').hidden = d.can_email || d.sent;
