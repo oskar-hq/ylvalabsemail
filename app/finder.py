@@ -182,6 +182,7 @@ class _TextExtractor(HTMLParser):
     def __init__(self):
         super().__init__(convert_charrefs=True)
         self.parts, self.links, self.title, self._skip, self._in_title = [], [], "", 0, False
+        self.description = ""
 
     def handle_starttag(self, tag, attrs):
         if tag in self.SKIP:
@@ -190,6 +191,10 @@ class _TextExtractor(HTMLParser):
             self._in_title = True
         if tag in self.BLOCK:
             self.parts.append("\n")
+        if tag == "meta" and not self.description:  # Kurzbeschreibung der Seite (kostenlos, steht oft im Kopf)
+            a = dict(attrs)
+            if (a.get("name") or a.get("property") or "").lower() in ("description", "og:description"):
+                self.description = re.sub(r"\s+", " ", a.get("content") or "").strip()[:400]
         if tag == "a":
             href = dict(attrs).get("href")
             if href:
@@ -299,7 +304,8 @@ def research_website(url, max_pages=4, chars_per_page=6000):
             parser.feed(html)
         except Exception:
             pass
-        pages.append({"url": page_url, "title": parser.title.strip()[:200], "text": parser.text()[:chars_per_page]})
+        pages.append({"url": page_url, "title": parser.title.strip()[:200], "text": parser.text()[:chars_per_page],
+                      "description": parser.description})
         emails.update(extract_emails(html))
         links.extend(urllib.parse.urljoin(page_url, h) for h in parser.links[:300])
         if len(pages) == 1:  # Unterseiten nur von der Startseite aus

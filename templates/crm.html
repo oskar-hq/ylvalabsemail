@@ -30,6 +30,19 @@
   </section>
   {% endif %}
 
+  <nav class="segmented view-pick" aria-label="Ansicht">
+    <a href="{{ url_for('crm.board') }}" class="{{ 'on' if view == 'board' }}">Board</a>
+    <a href="{{ url_for('crm.board', ansicht='tabelle') }}" class="{{ 'on' if view == 'tabelle' }}">Tabelle</a>
+  </nav>
+  {% if view == 'board' %}<p class="muted small board-hint">Karten zum Verschieben gedrückt halten und ziehen, am Handy etwas länger drücken.</p>{% endif %}
+
+  {% macro facts(c) %}{% set p = c.p %}
+    {% if p.beschreibung %}<span class="card-desc">{{ p.beschreibung }}</span>{% endif %}
+    <span class="card-facts">{{ [p.kategorie, (p.ort ~ (' · ' ~ (p.km|round|int) ~ ' km' if p.km is not none else '')) if p.ort else ''] | select | join(' · ') }}</span>
+    {% if p.groesse or p.kontakt %}<span class="card-facts">{{ [p.groesse, p.kontakt] | select | join(' · ') }}</span>{% endif %}
+  {% endmacro %}
+
+  {% if view == 'board' %}
   <div class="board" id="board">
     {% for key, label, hint, cards, total in columns %}
     <section class="col col-{{ key }}" data-stage="{{ key }}">
@@ -39,16 +52,17 @@
       </header>
       <ul class="cards" data-stage="{{ key }}">
         {% for c in cards %}
-        <li class="card" draggable="true" data-id="{{ c.id }}" data-search="{{ (c.name ~ ' ' ~ (c.city or '') ~ ' ' ~ (c.category_label or '') ~ ' ' ~ (c.contact_name or ''))|lower }}">
-          <a href="{{ url_for('leads.detail', lead_id=c.id) }}" class="card-link">
+        <li class="card" data-id="{{ c.id }}" data-search="{{ (c.name ~ ' ' ~ (c.city or '') ~ ' ' ~ (c.category_label or '') ~ ' ' ~ (c.contact_name or '') ~ ' ' ~ c.p.beschreibung)|lower }}">
+          <a href="{{ url_for('leads.detail', lead_id=c.id) }}" class="card-link" draggable="false">
             <span class="card-name">{% if c.unread %}<i class="new" title="Neu"></i>{% endif %}{{ c.name }}</span>
-            <span class="card-meta muted">{{ c.category_label }}{% if c.city %} · {{ c.city }}{% endif %}</span>
-            <span class="card-foot mono">
-              {% if c.fit_score is not none %}<span title="Punkte nach Regeln">{{ c.fit_score }} P</span>{% endif %}
+            {{ facts(c) }}
+            <span class="card-foot">
+              {% if c.fit_score is not none %}<span class="score" title="Punkte nach Regeln">{{ c.fit_score }} P</span>{% endif %}
               {% if c.status == 'entwurf' %}<span class="pill st-entwurf">Entwurf</span>{% elif c.status == 'passt' and not c.body %}<span class="pill">ohne Nachricht</span>{% endif %}
               {% if c.interest %}<span class="pill st-{{ c.interest }}">{{ interest_labels[c.interest] }}</span>{% endif %}
               {% if c.next_due %}<span class="{{ 'late' if c.next_due <= today }}" title="Nächste Wiedervorlage">⏰ {{ fmt_day(c.next_due) }}</span>{% endif %}
               {% if c.deal_eur %}<span>{{ euro(c.deal_eur) }}</span>{% endif %}
+              {% if c.p.fehlt %}<span class="needs-ai" title="Fehlt: {{ c.p.fehlt|join(', ') }}. Findet die KI- oder Claude-Recherche.">KI nötig</span>{% endif %}
             </span>
           </a>
           <select class="card-move" aria-label="Stufe ändern">{% for k, l, _ in stages %}<option value="{{ k }}" {{ 'selected' if k == key }}>{{ l }}</option>{% endfor %}</select>
@@ -59,6 +73,38 @@
     </section>
     {% endfor %}
   </div>
+  {% else %}
+  <div class="table-wrap crm-table-wrap">
+    <table class="crm-table" id="crmTable">
+      <thead><tr>
+        <th data-sort="text">Betrieb</th><th data-sort="num">Stufe</th><th data-sort="text">Branche</th>
+        <th data-sort="text">Größe</th><th data-sort="text">Ort</th><th data-sort="num">km</th><th data-sort="num">Punkte</th>
+        <th data-sort="text">Ansprechperson</th><th>Kontakt</th><th data-sort="text">Wiedervorlage</th><th data-sort="num">Wert</th><th>Fehlt</th>
+      </tr></thead>
+      <tbody>
+      {% for key, label, hint, cards, total in columns %}{% for c in cards %}{% set p = c.p %}
+        <tr class="card-row" data-id="{{ c.id }}" data-search="{{ (c.name ~ ' ' ~ (c.city or '') ~ ' ' ~ (c.category_label or '') ~ ' ' ~ (c.contact_name or '') ~ ' ' ~ p.beschreibung)|lower }}">
+          <td class="t-name"><a href="{{ url_for('leads.detail', lead_id=c.id) }}">{% if c.unread %}<i class="new"></i>{% endif %}{{ c.name }}</a>
+            {% if p.beschreibung %}<span class="t-desc">{{ p.beschreibung }}</span>{% endif %}</td>
+          <td data-v="{{ (stages|map(attribute=0)|list).index(key) }}">
+            <select class="row-move" aria-label="Stufe ändern">{% for k, l, _ in stages %}<option value="{{ k }}" {{ 'selected' if k == key }}>{{ l }}</option>{% endfor %}</select></td>
+          <td>{{ p.kategorie }}</td>
+          <td>{{ p.groesse or '–' }}</td>
+          <td>{{ p.ort or '–' }}{% if p.kreis %}<span class="t-sub">{{ p.kreis }}</span>{% endif %}</td>
+          <td class="num" data-v="{{ p.km if p.km is not none else 9999 }}">{{ p.km|round|int if p.km is not none else '–' }}</td>
+          <td class="num" data-v="{{ p.punkte if p.punkte is not none else -1 }}">{{ p.punkte if p.punkte is not none else '–' }}</td>
+          <td>{{ p.kontakt or '–' }}</td>
+          <td class="t-contact">{% if p.email %}<a href="mailto:{{ p.email }}">{{ p.email }}</a>{% endif %}{% if p.telefon %}<a href="tel:{{ p.telefon|replace(' ', '') }}">{{ p.telefon }}</a>{% endif %}{% if p.web %}<a href="{{ p.website }}" target="_blank" rel="noopener">{{ p.web }}</a>{% endif %}</td>
+          <td data-v="{{ c.next_due or '9999' }}" class="{{ 'late' if c.next_due and c.next_due <= today }}">{{ fmt_day(c.next_due) if c.next_due else '–' }}</td>
+          <td class="num" data-v="{{ c.deal_eur or 0 }}">{{ euro(c.deal_eur) if c.deal_eur else '–' }}</td>
+          <td>{% if p.fehlt %}<span class="needs-ai" title="Findet die KI- oder Claude-Recherche">{{ p.fehlt|join(', ') }}</span>{% else %}<span class="muted">–</span>{% endif %}</td>
+        </tr>
+      {% endfor %}{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <p class="muted small">Auf eine Spaltenüberschrift tippen zum Sortieren. „Fehlt“: Das findet die kostenlose Suche nicht, dafür <a href="{{ url_for('leads.claude') }}">mit Claude recherchieren</a> oder einen Entwurf von der KI schreiben lassen.</p>
+  {% endif %}
   {% if demo and not total_cards %}
   <form method="post" action="{{ url_for('leads.demo_seed') }}" class="note">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">

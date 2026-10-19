@@ -36,6 +36,8 @@ COLUMNS = [
     ("Branche", "branche", True, "Genau eines von: " + ", ".join(BRANCHEN), ""),
     ("Kategorie", "category_label", True, "Kurz und deutsch, z. B. „Tischlerei“, „Ambulante Pflege“, "
      "„Hausverwaltung“", "{kategorie}"),
+    ("Tätigkeit", "taetigkeit", False, "Ein Satz, was der Betrieb macht und für wen (z. B. „Bäder und Heizungen für "
+     "Privatkunden im Raum Schleswig“)", ""),
     ("Mitarbeitende", "groesse", False, "Nur eine Zahl, wenn sie irgendwo genannt wird (Webseite, Stellenanzeige, "
      "Presse). Sonst leer lassen, nicht schätzen", ""),
     ("Zeitfresser", "zeitfresser", False, "Ein bis zwei konkrete Abläufe, die bei genau diesem Betrieb vermutlich "
@@ -193,6 +195,7 @@ def import_csv(conn, raw, author, center):
             "aufhaenger": d.get("aufhaenger", ""),
             "groesse": int(size) if size and 0 < size < 100000 else None,
             "begruendung": d.get("begruendung", ""),
+            "taetigkeit": d.get("taetigkeit", ""),
             "url": d.get("quelle", ""),
         }}
         now = leaddb.now()

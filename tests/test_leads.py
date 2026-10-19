@@ -649,6 +649,24 @@ class ClaudeResearchTest(unittest.TestCase):
             claude_research.import_csv(self.c, "a;b\n1;2\n", "t", (54.66, 9.93))
 
 
+class ProfileTest(unittest.TestCase):
+    def test_profile_and_missing(self):
+        lead = {"name": "A", "city": "Kappeln", "distance_km": 3.2, "kreis": "01059", "category_label": "Tischlerei",
+                "website": "https://www.a.example/", "email": "chef@a.example", "contact_name": "",
+                "research": json.dumps({"beschreibung": "Küchen nach Maß aus Angeln.", "groesse": "ca. 14 Mitarbeitende"})}
+        p = crm.profile(lead)
+        self.assertEqual((p["beschreibung"], p["quelle"], p["groesse"], p["kreis"], p["web"]),
+                         ("Küchen nach Maß aus Angeln.", "Webseite", "ca. 14 Mitarbeitende", "Schleswig-Flensburg", "a.example"))
+        self.assertEqual(p["fehlt"], ["Ansprechperson"])
+        p = crm.profile({"name": "B", "research": json.dumps({"groesse": "unklar"})})
+        self.assertEqual(p["fehlt"], ["Was sie machen", "Größe", "Ansprechperson", "E-Mail"])
+
+    def test_meta_description_is_read(self):
+        parser = finder._TextExtractor()
+        parser.feed('<html><head><meta name="description" content="Wir  bauen Dächer."></head><body>x</body></html>')
+        self.assertEqual(parser.description, "Wir bauen Dächer.")
+
+
 class ScheduleTest(unittest.TestCase):
     def setUp(self):
         self.db_path = os.path.join(tempfile.mkdtemp(), "t.db")
@@ -765,6 +783,22 @@ class ViewsTest(unittest.TestCase):
         self.assertIn("Pipeline.", html)
         self.assertIn("Anrufen, vormittags", html)  # Wiedervorlage von heute aus den Beispieldaten
         self.assertEqual(self.client.get("/leads/regeln").status_code, 200)
+        # Heute mit Prüf-Stapel, Prüfen per Urteil (gut / nicht gut / rückgängig)
+        heute = self.client.get("/heute").get_data(as_text=True)
+        self.assertIn("Neue Betriebe prüfen", heute)
+        cand = c.execute("SELECT id FROM leads WHERE status='passt' AND stage IS NULL ORDER BY fit_score DESC LIMIT 2").fetchall()
+        r = self.client.post(f"/leads/{cand[0][0]}/urteil", data={"gut": "1"}, headers={"X-CSRF-Token": self.csrf})
+        self.assertTrue(r.get_json()["ok"])
+        self.assertEqual(leaddb.get_lead(c, cand[0][0])["stage"], "neu")
+        self.client.post(f"/leads/{cand[1][0]}/urteil", data={"gut": "0"}, headers={"X-CSRF-Token": self.csrf})
+        bad = leaddb.get_lead(c, cand[1][0])
+        self.assertEqual((bad["status"], bad["rejected_by"], bad["stage"]), ("aussortiert", "team", None))
+        self.client.post(f"/leads/{cand[1][0]}/urteil/zurueck", headers={"X-CSRF-Token": self.csrf})
+        self.assertEqual(leaddb.get_lead(c, cand[1][0])["status"], "passt")
+        self.assertIn("Neue Betriebe prüfen", self.client.get("/leads/pruefen").get_data(as_text=True))
+        table = self.client.get("/crm?ansicht=tabelle").get_data(as_text=True)
+        self.assertIn('id="crmTable"', table)
+        self.assertIn("Ansprechperson", table)
         self.assertIn("Automatisch suchen", self.client.get("/leads/automatik").get_data(as_text=True))
         self.assertEqual(self.client.post("/leads/automatik/frei", data={"_csrf": self.csrf}).status_code, 403)  # Demo
         self.assertIn("Prompt kopieren", self.client.get("/leads/claude?anzahl=20&branche=pflege").get_data(as_text=True))

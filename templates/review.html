@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Betriebe prüfen · Leads{% endblock %}
+{% block content %}
+<main class="page narrow">
+  <a class="back" href="{{ url_for('leads.home') }}">‹ Heute</a>
+  {% include "_review.html" %}
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='review.js') }}"></script>{% endblock %}

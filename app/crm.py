@@ -7,11 +7,12 @@ aber nie zurück. Von Hand dürft ihr jede Stufe setzen.
 import csv
 import hashlib
 import io
+import json
 import re
 from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
 
-from . import finder, leaddb
+from . import finder, leaddb, regions
 
 STAGES = [
     ("neu", "Neu", "Passt, noch nicht kontaktiert."),
@@ -54,6 +55,49 @@ def advance(conn, lead_id, stage, author="Ablauf"):
     return set_stage(conn, lead_id, stage, author)
 
 
+def _first_sentences(text, limit=180):
+    text = re.sub(r"\s+", " ", text or "").strip()
+    if len(text) <= limit:
+        return text
+    cut = text[:limit]
+    end = max(cut.rfind(". "), cut.rfind("! "))
+    return cut[:end + 1] if end > 60 else cut.rsplit(" ", 1)[0] + " …"
+
+
+def profile(lead):
+    """Alles, was wir über einen Betrieb wissen, für Karte, Tabelle und Bewerten. Was die kostenlose Suche nicht
+    herausfinden konnte, steht in `fehlt` (dafür braucht es die KI- oder Claude-Recherche)."""
+    research = lead.get("research") or {}
+    if isinstance(research, str):
+        try:
+            research = json.loads(research)
+        except ValueError:
+            research = {}
+    imp = research.get("import") or {}
+    desc, desc_src = imp.get("taetigkeit") or "", "Claude-Recherche"
+    if not desc and research.get("beschreibung"):
+        desc, desc_src = research["beschreibung"], "Webseite"
+    if not desc and research.get("auszug"):
+        desc, desc_src = _first_sentences(research["auszug"]), "Startseite"
+    size = research.get("groesse") if research.get("groesse") not in (None, "", "unklar") else ""
+    if not size and imp.get("groesse"):
+        size = f"ca. {imp['groesse']} Mitarbeitende"
+    kreis = regions.KREISE.get(lead.get("kreis") or "", ("",))[0]
+    ort = lead.get("city") or (lead.get("address") or "").split(",")[-1].strip()
+    host = urlparse(lead.get("website") or "").netloc.removeprefix("www.")
+    fehlt = [label for label, value in (("Was sie machen", desc), ("Größe", size),
+                                         ("Ansprechperson", lead.get("contact_name")), ("E-Mail", lead.get("email")))
+             if not value]
+    return {"beschreibung": _first_sentences(desc, 220), "quelle": desc_src if desc else "", "groesse": size,
+            "ort": ort, "adresse": lead.get("address") or "", "kreis": kreis, "km": lead.get("distance_km"),
+            "kontakt": lead.get("contact_name") or "", "email": lead.get("email") or "", "telefon": lead.get("phone") or "",
+            "web": host, "website": lead.get("website") or "",
+            "zeitfresser": (research.get("zeitfresser") or imp.get("zeitfresser") or [])[:2],
+            "aufhaenger": imp.get("aufhaenger") or "", "punkte": lead.get("fit_score"),
+            "grund": lead.get("fit_reason") or "", "kategorie": lead.get("category_label") or "Betrieb",
+            "branche": lead.get("branche") or "", "fehlt": fehlt}
+
+
 def board(conn):
     """Alle Betriebe in der Pipeline, gruppiert nach Stufe, mit nächster Wiedervorlage."""
     rows = conn.execute("""
@@ -63,7 +107,9 @@ def board(conn):
         ORDER BY l.unread DESC, IFNULL(l.stage_at, l.updated_at) DESC""").fetchall()
     columns = {k: [] for k in STAGE_KEYS}
     for r in rows:
-        columns.setdefault(r["stage"], []).append(dict(r))
+        d = dict(r)
+        d["p"] = profile(d)
+        columns.setdefault(r["stage"], []).append(d)
     return [(k, label, hint, columns[k], sum(c["deal_eur"] or 0 for c in columns[k])) for k, label, hint in STAGES]
 
 # ---------------------------------------------------------------- Wiedervorlagen

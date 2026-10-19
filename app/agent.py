@@ -260,7 +260,9 @@ def stage_score(c, lead_id, learned, promote=True):
     passes = result["score"] >= threshold and not result["ko"]
     info = {"signale": result["signals"], "ko": result["ko"], "groesse": result["groesse"], "zeitfresser": result["zeitfresser"],
             "auszug": result["auszug"], "pages": [p["url"] for p in research["pages"]], "emails": research["emails"],
-            "errors": research["errors"]}
+            "errors": research["errors"],
+            "beschreibung": next((pg.get("description") for pg in research["pages"] if pg.get("description")), ""),
+            "titel": research["pages"][0]["title"] if research["pages"] else ""}
     if imported:
         info["import"] = imported
     common = dict(fit_score=result["score"], fit_reason=scoring.summary(result, threshold), research=_json(info),
