@@ -136,7 +136,7 @@ def home():
                 break
     hour = datetime.now().hour
     greeting = "Guten Morgen" if hour < 11 else ("Guten Tag" if hour < 18 else "Guten Abend")
-    return render_template("home.html", account=g.account, st=st, parts=[p for p in parts if p[0]], total=total,
+    return render_template("home.html", account=g.account, sched=schedule_view(), st=st, parts=[p for p in parts if p[0]], total=total,
                            start=start, greeting=greeting, name=_first_name(g.account), demo=SETTINGS["DEMO_MODE"])
 
 # ---------------------------------------------------------------- Übersicht
@@ -154,6 +154,7 @@ def overview():
     by_key = {k: (k, label, hint, items) for k, label, hint, items in sections}
     groups = [(title, hint, [by_key[k] for k in keys if k in by_key]) for title, hint, keys in leaddb.TAB_GROUPS]
     return render_template("leads.html", account=g.account, tab=tab, tabs=leaddb.TABS, sections=sections,
+                           sched=schedule_view(),
                            groups=[grp for grp in groups if grp[2]], tab_groups=leaddb.TAB_GROUPS,
                            st=status_payload(), rd=run_defaults(), demo=SETTINGS["DEMO_MODE"])
 

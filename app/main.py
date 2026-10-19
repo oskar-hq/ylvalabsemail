@@ -207,6 +207,17 @@ def check_csrf():
             abort(400, "Ungültiges Formular-Token. Bitte Seite neu laden.")
 
 
+@app.url_defaults
+def _static_version(endpoint, values):
+    """Hängt an CSS/JS-Adressen den Stand der Datei an (?v=…). So holt der Browser nach einem Update sofort die neue
+    Fassung, statt die alte aus dem Zwischenspeicher zu nehmen."""
+    if endpoint == "static" and "filename" in values and "v" not in values:
+        try:
+            values["v"] = int((ROOT / "static" / values["filename"]).stat().st_mtime)
+        except OSError:
+            pass
+
+
 @app.context_processor
 def _ui_theme():
     """Darstellung (Hell, Dunkel, Automatisch) aus dem Cookie, damit die Seite gleich richtig gezeichnet wird."""
