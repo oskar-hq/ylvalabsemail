@@ -97,5 +97,14 @@
     else if (e.key === 'ArrowLeft') decide(false);
     else if (e.key.toLowerCase() === 'z') undo();
   });
+  // Direkt aus der Karte gemailt oder Brief verschickt: Karte ist erledigt (steht jetzt als „Kontaktiert“ im CRM)
+  window.addEventListener('ylva:contacted', (e) => {
+    const card = stack.querySelector(`.swipe-card[data-id="${e.detail.id}"]`);
+    if (!card || card.classList.contains('gone')) return;
+    card.classList.add('gone', 'to-right');
+    setTimeout(() => { card.hidden = true; }, 320);
+    leftEl.textContent = Math.max(0, parseInt(leftEl.textContent, 10) - 1);
+    layout();
+  });
   layout();
 })();

@@ -20,7 +20,10 @@
         {% if p.zeitfresser %}<dt>Zeitfresser</dt><dd>{{ p.zeitfresser|join(' · ') }}</dd>{% endif %}
         {% if l.signale %}<dt>Warum es passt</dt><dd><ul class="signals small">{% for points, reason in l.signale %}<li><span class="{{ 'neg' if points < 0 }}">{{ '%+d'|format(points) }}</span> {{ reason }}</li>{% endfor %}</ul></dd>{% endif %}
       </dl>
-      <a class="small muted open-file" href="{{ url_for('leads.detail', lead_id=l.id) }}">Akte öffnen →</a>
+      <div class="card-actions">
+        <button type="button" class="btn primary small" data-mail="{{ l.id }}">✉ Mail schreiben</button>
+        <a class="small muted open-file" href="{{ url_for('leads.detail', lead_id=l.id) }}">Akte öffnen →</a>
+      </div>
     </article>
     {% endfor %}
     <div class="stack-empty" {{ 'hidden' if queue }}>

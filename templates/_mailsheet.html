@@ -1,0 +1,23 @@
+{# Mail-Fenster: von jeder Karte mit data-mail="<id>" aus. Text kommt fertig aus der Vorlage. #}
+<dialog id="mailSheet" class="sheet"><form class="dlg mail-dlg" id="mailForm" autocomplete="off">
+  <div class="mail-head">
+    <div><h2 id="mailTitle">Mail</h2><p class="muted small" id="mailTo"></p></div>
+    <button type="button" class="btn small" data-close aria-label="Schließen">✕</button>
+  </div>
+  <p class="note small" id="mailNote" hidden></p>
+  <label class="field"><span class="sub">Betreff</span><input type="text" name="subject" id="mailSubject"></label>
+  <label class="field"><span class="sub">Anrede</span><input type="text" name="greeting" id="mailGreeting"></label>
+  <label class="field"><span class="sub">Text <em>Gruß und Unterschrift kommen automatisch dazu</em></span><textarea name="body" id="mailBody" rows="9"></textarea></label>
+  <div class="mail-tools small">
+    <button type="button" class="link" id="mailTemplate">Vorlage neu einsetzen</button>
+    <a id="mailPreview" target="_blank" rel="noopener">Vorschau</a>
+    <a id="mailDetail">Akte öffnen</a>
+  </div>
+  <div class="mail-actions">
+    <button type="button" class="btn" id="mailSave">Speichern</button>
+    <button type="button" class="btn" id="mailLetter" hidden>Als Brief drucken</button>
+    <button type="button" class="btn" data-mark="brief" hidden>Brief ist raus</button>
+    <button type="button" class="btn" data-mark="telefon" hidden>Angerufen</button>
+    <button type="submit" class="btn primary" id="mailSend">Senden</button>
+  </div>
+</form></dialog>

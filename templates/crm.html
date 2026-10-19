@@ -12,6 +12,7 @@
         <div class="account-menu">
           <button type="button" id="importBtn">CSV importieren</button>
           <a href="{{ url_for('crm.export_csv') }}">CSV exportieren</a>
+          <a href="{{ url_for('crm.board', ansicht='tabelle') if view == 'board' else url_for('crm.board') }}">{{ 'Als Tabelle anzeigen' if view == 'board' else 'Als Board anzeigen' }}</a>
           <a href="{{ url_for('crm.heatmap') }}">Karte</a>
           <a href="{{ url_for('leads.search') }}">Neue Betriebe finden</a>
         </div>
@@ -30,10 +31,7 @@
   </section>
   {% endif %}
 
-  <nav class="segmented view-pick" aria-label="Ansicht">
-    <a href="{{ url_for('crm.board') }}" class="{{ 'on' if view == 'board' }}">Board</a>
-    <a href="{{ url_for('crm.board', ansicht='tabelle') }}" class="{{ 'on' if view == 'tabelle' }}">Tabelle</a>
-  </nav>
+  {% if view == 'tabelle' %}<a class="back" href="{{ url_for('crm.board') }}">‹ Zurück zum Board</a>{% endif %}
   {% if view == 'board' %}<p class="muted small board-hint">Karten zum Verschieben gedrückt halten und ziehen, am Handy etwas länger drücken.</p>{% endif %}
 
   {% macro facts(c) %}{% set p = c.p %}
@@ -65,6 +63,7 @@
               {% if c.p.fehlt %}<span class="needs-ai" title="Fehlt: {{ c.p.fehlt|join(', ') }}. Findet die KI- oder Claude-Recherche.">KI nötig</span>{% endif %}
             </span>
           </a>
+          <button type="button" class="card-mail" data-mail="{{ c.id }}" title="Mail schreiben" aria-label="Mail an {{ c.name }} schreiben">✉</button>
           <select class="card-move" aria-label="Stufe ändern">{% for k, l, _ in stages %}<option value="{{ k }}" {{ 'selected' if k == key }}>{{ l }}</option>{% endfor %}</select>
         </li>
         {% else %}<li class="empty-col">Noch niemand</li>

@@ -219,7 +219,7 @@
     }
     board.addEventListener('pointerdown', e => {
       const card = e.target.closest('.card');
-      if (!card || e.target.closest('select') || e.button > 0) return;
+      if (!card || e.target.closest('select,button') || e.button > 0) return;
       drag = { card, x: e.clientX, y: e.clientY, touch: e.pointerType !== 'mouse', active: false };
       if (drag.touch) drag.press = setTimeout(() => { if (drag) { startDrag(drag); moveDrag(drag, drag.x, drag.y); } }, 280);
     });
@@ -283,6 +283,8 @@
       $$('tbody tr', table).forEach(r => { r.hidden = q && !r.dataset.search.includes(q); });
     });
   }
+  // Nach Mail oder Brief aus dem Mail-Fenster: Board neu laden, damit die Karte in „Kontaktiert“ steht
+  if (board || table) window.addEventListener('ylva:contacted', () => setTimeout(() => location.reload(), 900));
   $('#newLead')?.addEventListener('click', () => $('#newDlg').showModal());
   $('#importBtn')?.addEventListener('click', () => $('#importDlg').showModal());
   $('#newForm')?.addEventListener('submit', async (ev) => {

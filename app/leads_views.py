@@ -309,6 +309,27 @@ def preview(lead_id):
     return resp
 
 
+@bp.route("/leads/<int:lead_id>/mail.json", methods=["GET", "POST"])
+@login_required
+def mail_json(lead_id):
+    """Für das Mail-Fenster auf Heute und im CRM: fertiger Text aus der Vorlage (Firmenname, Anrede … eingesetzt).
+    Gibt es noch keinen Text, wird die Vorlage eingesetzt; POST mit neu=1 setzt sie neu ein."""
+    lead = lead_or_404(lead_id)
+    open_status = lead["status"] in ("passt", "entwurf", "aussortiert", "fehler") and not lead["interest"]
+    if open_status and (not (lead["body"] or "").strip() or request.form.get("neu") == "1"):
+        agent.template_draft(db(), lead_id)
+        lead = lead_or_404(lead_id)
+    ok, why = crm.may_email(lead, SETTINGS["OUTREACH_EMAIL"])
+    if g.account.get("demo") and lead["email"]:
+        ok, why = True, "Demo: Es wird nichts verschickt, nur als versendet markiert."
+    sent = lead["status"] in ("versendet", "beantwortet")
+    return jsonify(id=lead_id, name=lead["name"], email=lead["email"] or "", contact=lead["contact_name"] or "",
+                   subject=lead["subject"] or "", greeting=lead["greeting"] or "", body=lead["body"] or "",
+                   can_email=ok and not sent, why="Diese Nachricht ist schon raus." if sent else why,
+                   sent=sent, editable=open_status, letter=url_for("leads.letter", lead_id=lead_id),
+                   detail=url_for("leads.detail", lead_id=lead_id), preview=url_for("leads.preview", lead_id=lead_id))
+
+
 @bp.get("/leads/<int:lead_id>/brief")
 @login_required
 def letter(lead_id):

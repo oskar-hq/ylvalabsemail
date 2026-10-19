@@ -425,3 +425,33 @@ td .needs-ai{height:auto;padding:3px 8px;white-space:normal;line-height:1.3}
 .vbtn:hover{background:var(--s4)} .vbtn:active{transform:scale(.94)}
 .center{text-align:center}
 .crm-table td:last-child{min-width:150px}
+/* Board mit echten Karten (wie Trello) */
+.cards{gap:8px}
+.card{background:var(--s2);border-radius:12px;box-shadow:0 1px 0 var(--line),0 4px 14px rgba(0,0,0,.08)}
+.card:hover{background:var(--s3)}
+.card-link{padding:11px 12px 9px;padding-right:40px}
+.col{background:var(--s1);padding:10px;border-radius:14px}
+.col-head{padding:2px 4px 10px}
+.empty-col{padding:6px 4px}
+.card-mail{position:absolute;top:8px;right:8px;width:30px;height:30px;border-radius:9px;border:0;background:var(--s4);color:var(--ink);font-size:14px;cursor:pointer;opacity:.85}
+.card-mail:hover{opacity:1;background:var(--primary);color:var(--on-primary)}
+.card-actions{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:4px}
+/* Mail-Fenster: am Handy als Blatt von unten */
+dialog.sheet{width:min(100% - 24px,640px);max-height:calc(100vh - 40px);padding:0;overflow:auto}
+.mail-dlg{padding:20px}
+.mail-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin:0 0 12px}
+.mail-head h2{margin:0 0 2px;font:700 20px/1.25 var(--display)}
+.mail-head p{margin:0}
+.mail-dlg textarea{min-height:200px;font-size:15px;line-height:1.55}
+.mail-dlg .sub em{font-style:normal;color:var(--ink3);font-weight:400}
+.mail-tools{display:flex;gap:16px;flex-wrap:wrap;margin:-4px 0 14px}
+.mail-tools a,.mail-tools .link{color:var(--muted);font:500 13px var(--sans);text-decoration:none;background:none;border:0;padding:0;cursor:pointer}
+.mail-tools a:hover,.mail-tools .link:hover{color:var(--ink)}
+.mail-actions{display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;position:sticky;bottom:0;padding:12px 0 0;background:var(--s2)}
+.mail-actions .btn.primary{min-width:120px}
+.mail-dlg .note{margin:0 0 12px}
+@media (max-width:639px){
+  dialog.sheet{width:100%;max-width:none;margin:auto 0 0;border-radius:18px 18px 0 0;max-height:92vh}
+  .mail-dlg{padding:18px 16px calc(18px + var(--safe-bottom))}
+  .mail-actions .btn{flex:1}
+}

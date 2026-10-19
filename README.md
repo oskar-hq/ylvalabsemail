@@ -146,11 +146,14 @@ Gestaltet wie das Outreach Cockpit (ruhig, eine Sache pro Bildschirm). Hell, Dun
   führt direkt zur ersten Aufgabe.
 - **Leads**: Kennzahlen, die Liste nach „Zu tun“, „Läuft“ und „Abgeschlossen“. „Neue Betriebe finden“ startet einen
   Lauf oder die Recherche mit Claude.
-- **CRM**: die Pipeline als Board (Karten mit Maus oder Finger in eine andere Spalte ziehen) oder als **Tabelle**
-  (sortierbar). Jede Karte zeigt, was der Betrieb macht, Ort, Größe und Ansprechperson; „KI nötig“ heißt, das hat
+- **CRM**: die Pipeline als Board mit Karten (mit Maus oder Finger in eine andere Spalte ziehen), als Tabelle
+  über „···“. Jede Karte zeigt, was der Betrieb macht, Ort, Größe und Ansprechperson; „KI nötig“ heißt, das hat
   die kostenlose Suche nicht gefunden.
 - **Neue Betriebe prüfen** (auf „Heute“): passende Betriebe als Karte, nach rechts wischen = gut (ins CRM), nach links
   = nicht gut. Auch per Knopf oder Pfeiltasten, „Rückgängig“ holt die letzte Entscheidung zurück.
+- **✉ auf jeder Karte** (Heute und CRM): öffnet die fertige Mail aus der Vorlage mit Firmenname, Anrede und
+  Zeitfressern. Kurz ändern oder direkt senden. Ist der Erstkontakt per Mail aus, gibt es dort „Als Brief drucken“,
+  „Brief ist raus“ und „Angerufen“.
 - **Mailer**: gestaltete Mails verfassen und versenden.
 
 Einstellungen, Verlauf, Kosten und Systemcheck liegen im Konto-Menü (Kreis oben rechts). Die Einstellungen sind wie
