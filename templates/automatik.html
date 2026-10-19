@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% block title %}Automatisch suchen · Leads{% endblock %}
+{% macro when(iso) %}{% if iso %}{{ iso[8:10] }}.{{ iso[5:7] }}. {{ iso[11:16] }} Uhr{% endif %}{% endmacro %}
+{% block content %}
+<main class="page narrow">
+  <a class="back" href="{{ url_for('leads.search') }}">‹ Neue Betriebe finden</a>
+  <h1 class="title">Automatisch suchen</h1>
+  {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if m.startswith('Nicht') else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
+  {% if account.demo %}<p class="note warn small">Demo-Modus: Hier wird nichts gespeichert.</p>
+  {% elif not admin %}<p class="note warn small">Den Zeitplan ändern dürfen nur Admins.</p>{% endif %}
+  <p class="muted">Läufe starten zur gewählten Zeit von selbst. Läuft gerade einer, wartet der nächste. Verschickt wird trotzdem nichts ohne eure Freigabe.</p>
+
+  {% for kind in ['frei', 'ki'] %}{% set s = sched[kind] %}{% set c = s.cfg %}
+  <form method="post" action="{{ url_for('leads.automatic_save', kind=kind) }}" class="auto-card" autocomplete="off">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="auto-head">
+      <div><h2>{{ s.label }}</h2>
+        <span class="muted small">{% if kind == 'frei' %}Suchen und nach Regeln bewerten · kostet nichts{% else %}Entwürfe und Erinnerungen von der KI · kostet{% endif %}</span></div>
+      <label class="switch-big"><input type="checkbox" name="enabled" value="1" {{ 'checked' if c.enabled }} {{ 'disabled' if not admin }}><span></span><em class="sr">Eingeschaltet</em></label>
+    </div>
+    <p class="auto-state small">{% if c.enabled %}<i class="dot-on"></i>{{ s.summary }}{% if s.next %} · nächster Lauf {{ when(s.next) }}{% endif %}{% else %}<i class="dot-off"></i>Aus{% endif %}{% if s.last %} · zuletzt {{ when(s.last) }}{% endif %}</p>
+    {% if s.note %}<p class="note warn small">{{ s.note }}</p>{% endif %}
+
+    <div class="field"><span class="sub">Tage</span>
+      <div class="day-pick">{% for d in days %}<label><input type="checkbox" name="days" value="{{ loop.index0 }}" {{ 'checked' if loop.index0 in c.days }} {{ 'disabled' if not admin }}><span>{{ d }}</span></label>{% endfor %}</div></div>
+    <div class="grid3">
+      <label class="field"><span class="sub">Von</span><input type="time" name="start" value="{{ c.start }}" required {{ 'disabled' if not admin }}></label>
+      <label class="field"><span class="sub">Bis</span><input type="time" name="end" value="{{ c.end }}" required {{ 'disabled' if not admin }}></label>
+      <label class="field"><span class="sub">Alle … Minuten</span><input type="number" name="every" min="{{ min_every }}" max="1440" step="5" value="{{ c.every }}" inputmode="numeric" required {{ 'disabled' if not admin }}></label>
+    </div>
+    <div class="grid3">
+      <label class="field"><span class="sub">Betriebe bewerten</span><input type="number" name="bewerten" min="0" max="1000" value="{{ c.bewerten }}" inputmode="numeric" {{ 'disabled' if not admin }}></label>
+      <label class="field"><span class="sub">Davon ins CRM</span><input type="number" name="top" min="0" max="200" value="{{ c.top }}" inputmode="numeric" {{ 'disabled' if not admin }}></label>
+      {% if kind == 'frei' %}
+      <label class="field"><span class="sub">Neu suchen alle … Std.</span><input type="number" name="neu_suchen_h" min="1" max="336" value="{{ c.neu_suchen_h }}" inputmode="numeric" {{ 'disabled' if not admin }}></label>
+      {% else %}
+      <label class="field"><span class="sub">Entwürfe pro Lauf</span><input type="number" name="entwuerfe" min="0" max="50" value="{{ c.entwuerfe }}" inputmode="numeric" {{ 'disabled' if not admin }}></label>
+      {% endif %}
+    </div>
+    {% if kind == 'ki' %}
+    <div class="grid3">
+      <label class="field"><span class="sub">Budget pro Lauf (€)</span><input type="text" name="budget_eur" value="{{ '%.2f'|format(c.budget_eur)|replace('.', ',') }}" inputmode="decimal" {{ 'disabled' if not admin }}></label>
+      <label class="field"><span class="sub">Höchstens pro Tag (€)</span><input type="text" name="tag_max_eur" value="{{ '%.2f'|format(c.tag_max_eur)|replace('.', ',') }}" inputmode="decimal" {{ 'disabled' if not admin }}></label>
+      <label class="check field"><input type="checkbox" name="erinnerungen" value="1" {{ 'checked' if c.erinnerungen }} {{ 'disabled' if not admin }}> Fällige Erinnerungen schreiben</label>
+    </div>
+    <p class="hint">Heute schon {{ '%.2f'|format(today_eur)|replace('.', ',') }} € für die KI ausgegeben. Ist die Tagesgrenze erreicht, pausiert die Suche mit KI bis morgen. Das Monatsbudget ({{ '%.0f'|format(st.cap_eur) if st.cap_eur else 'keins' }}{{ ' €' if st.cap_eur }}) gilt immer.{% if not st.ai %} <b>Ohne KI-Schlüssel läuft diese Suche nicht.</b>{% endif %}</p>
+    {% else %}
+    <p class="hint">Die Kartensuche (OpenStreetMap) läuft höchstens so oft wie oben eingestellt, dazwischen werden die schon gefundenen Betriebe weiter bewertet. Bis über Mitternacht geht auch: z. B. 22:00 bis 06:00.</p>
+    {% endif %}
+    {% if admin %}<div class="run-actions"><button class="btn primary">Sichern</button></div>{% endif %}
+  </form>
+  {% endfor %}
+</main>
+{% endblock %}

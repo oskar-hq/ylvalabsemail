@@ -86,7 +86,7 @@
         const st = await resp.json();
         if (wasRunning && !st.run) { location.reload(); return; }
         if (!wasRunning && st.run) { location.reload(); return; }
-        const text = st.activity !== 'Wartet' ? st.activity : (st.run ? 'Startet gleich …' : 'Bereit. Läuft nur, wenn du einen Lauf startest.');
+        const text = st.activity !== 'Wartet' ? st.activity : (st.run ? 'Startet gleich …' : 'Bereit.');
         $('#activity').textContent = text;
         if ($('#progress')) $('#progress').textContent = st.activity;
         $('#runEur').textContent = euro(st.run_eur);

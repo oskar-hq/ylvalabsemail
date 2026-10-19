@@ -6,6 +6,9 @@
   <h1 class="title">Neue Betriebe finden</h1>
   {% include "_leads_bar.html" %}
   <ul class="menu" style="margin-top:28px">
+    <li><a href="{{ url_for('leads.automatic') }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
+      <span class="txt"><b>Automatisch suchen</b><span>Kostenlos: {{ sched.frei.summary }} · KI: {{ sched.ki.summary }}</span></span>
+      {% if sched.frei.cfg.enabled or sched.ki.cfg.enabled %}<span class="flag ok"><i></i>an</span>{% endif %}<span class="chev">›</span></a></li>
     <li><a href="{{ url_for('leads.claude') }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3Z"/></svg></span>
       <span class="txt"><b>Mit Claude recherchieren</b><span>Prompt kopieren, CSV hochladen, ohne API-Schlüssel</span></span><span class="chev">›</span></a></li>
     <li><a href="{{ url_for('leads.rules') }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M7 12h10"/><path d="M10 18h4"/></svg></span>

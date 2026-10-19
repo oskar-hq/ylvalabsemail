@@ -25,7 +25,7 @@ from email.message import EmailMessage
 from email.utils import formataddr, formatdate, parseaddr
 from urllib.parse import urlparse
 
-from . import ai, crm, emailbuild, finder, leaddb, regions, scoring, webpush
+from . import ai, crm, emailbuild, finder, leaddb, regions, schedule, scoring, webpush
 
 log = logging.getLogger("ylva.leads")
 
@@ -356,7 +356,7 @@ def template_draft(c, lead_id):
     leaddb.add_event(c, lead_id, "draft", "Entwurf aus der Vorlage erstellt (ohne KI).", author="Vorlage")
     return fields
 
-# ---------------------------------------------------------------- Läufe (nur von Hand gestartet)
+# ---------------------------------------------------------------- Läufe (von Hand oder nach Zeitplan, siehe schedule.py)
 
 # Grobe Kosten pro Aufruf in US-Dollar, bis genug eigene Messwerte da sind
 DEFAULT_COST_USD = {"entwurf": 0.06, "chat": 0.06, "lernen": 0.04, "erinnerung": 0.02}
@@ -534,8 +534,11 @@ def execute_run(c, run_id):
         c.commit()
         RUN.update(id=None, cancel=False, progress="")
         title = {"fertig": "Lauf fertig", "gestoppt": "Lauf gestoppt", "fehler": "Lauf mit Fehler beendet"}[status]
-        notify(c, title, " ".join(x for x in (message, summary) if x),
-               "/leads?tab=entwurf" if counts["entwuerfe"] else "/crm")
+        quiet = (run["started_by"] or "").startswith("Automatik") and status == "fertig" \
+            and not (counts["ins_crm"] or counts["entwuerfe"] or counts["erinnerungen"])
+        if not quiet:  # automatische Läufe melden sich nur, wenn etwas Neues da ist
+            notify(c, title, " ".join(x for x in (message, summary) if x),
+                   "/leads?tab=entwurf" if counts["entwuerfe"] else "/crm")
 
 # ---------------------------------------------------------------- Versand
 
@@ -783,6 +786,7 @@ def tick():
                     check_inbox(c)
             notify_due(c)
             notify_tasks(c)
+            start_scheduled(c)
             run = c.execute("SELECT id FROM runs WHERE status='wartet' ORDER BY id LIMIT 1").fetchone()
             if run:
                 execute_run(c, run["id"])
@@ -808,6 +812,34 @@ def tick():
         finally:
             c.close()
             set_activity("Wartet")
+
+
+def start_scheduled(c, now=None):
+    """Zeitplan (Leads → Neue Betriebe finden → Automatisch): fälligen Lauf anlegen. Höchstens einer pro Minute."""
+    now = now or datetime.now()
+    state = leaddb.kv_get(c, "schedule_state", {}) or {}
+    started = None
+    for kind, cfg in schedule.load(c).items():
+        last = (state.get(kind) or {}).get("last")
+        if not schedule.due(cfg, now, last):
+            continue
+        stamp = now.isoformat(timespec="seconds")
+        if kind == "ki" and not ai.available():
+            state[kind] = {"last": stamp, "note": "Kein KI-Schlüssel eingetragen, KI-Lauf übersprungen."}
+            continue
+        params, why = schedule.params_for(kind, cfg, c, now, ai.eur)
+        if not params:
+            state[kind] = {"last": stamp, "note": why}
+            continue
+        run_id, error = start_run(params, schedule.STARTED_BY[kind])
+        if error and "läuft schon" in error:
+            continue  # nächste Minute noch einmal
+        state[kind] = {"last": stamp, "note": error or "", "run_id": run_id}
+        if run_id:
+            started = run_id
+            break
+    leaddb.kv_set(c, "schedule_state", state)
+    return started
 
 
 def ensure_boundaries(c, force=False):

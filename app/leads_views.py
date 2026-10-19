@@ -6,7 +6,7 @@ from datetime import datetime
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from . import agent, ai, claude_research, crm, emailbuild, leaddb, scoring
+from . import agent, ai, claude_research, crm, emailbuild, leaddb, schedule, scoring
 from .main import DB_PATH, ROOT, SETTINGS, login_required
 
 bp = Blueprint("leads", __name__)
@@ -163,7 +163,54 @@ def overview():
 def search():
     """Neue Betriebe finden: Lauf starten (Kartensuche und Bewertung) oder mit Claude recherchieren."""
     return render_template("search.html", account=g.account, st=status_payload(), rd=run_defaults(),
+                           sched=schedule_view(), demo=SETTINGS["DEMO_MODE"])
+
+
+def schedule_view():
+    """Für die Anzeige: je Art die Einstellung, Kurzfassung, letzter und nächster Start."""
+    c = db()
+    state = leaddb.kv_get(c, "schedule_state", {}) or {}
+    now = datetime.now()
+    out = {}
+    for kind, cfg in schedule.load(c).items():
+        st = state.get(kind) or {}
+        nxt = schedule.next_start(cfg, now, st.get("last"))
+        out[kind] = {"cfg": cfg, "label": schedule.KINDS[kind], "summary": schedule.describe(cfg),
+                     "last": st.get("last"), "note": st.get("note"), "next": nxt.isoformat(timespec="minutes") if nxt else None}
+    return out
+
+
+@bp.get("/leads/automatik")
+@login_required
+def automatic():
+    from .settings_views import is_admin
+    return render_template("automatik.html", account=g.account, sched=schedule_view(), days=schedule.DAYS,
+                           min_every=schedule.MIN_EVERY, st=status_payload(), admin=is_admin(g.account),
+                           today_eur=money(leaddb._sum(db(), "at >= ?", (datetime.now().strftime("%Y-%m-%d"),))["usd"]),
                            demo=SETTINGS["DEMO_MODE"])
+
+
+@bp.post("/leads/automatik/<kind>")
+@login_required
+def automatic_save(kind):
+    from .settings_views import is_admin
+    if kind not in schedule.KINDS:
+        abort(404)
+    if not is_admin(g.account):
+        abort(403, "Nur Admins können den Zeitplan ändern.")
+    try:
+        cfg = schedule.parse(kind, request.form)
+    except schedule.ScheduleError as exc:
+        flash(f"Nicht gespeichert: {exc}")
+        return redirect(url_for("leads.automatic"))
+    if kind == "ki" and cfg["enabled"] and not ai.available():
+        flash("Nicht gespeichert: Für die Suche mit KI fehlt der KI-Schlüssel (Einstellungen → KI und Budget).")
+        return redirect(url_for("leads.automatic"))
+    schedule.save(db(), kind, cfg)
+    agent.log.info("Zeitplan „%s“ geändert von %s: %s", kind, who(), schedule.describe(cfg))
+    flash(f"{schedule.KINDS[kind]}: {schedule.describe(cfg)}. Gespeichert.")
+    agent.wake()
+    return redirect(url_for("leads.automatic"))
 
 
 @bp.get("/leads/status.json")

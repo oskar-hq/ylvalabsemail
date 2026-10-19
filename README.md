@@ -30,7 +30,7 @@ Damit gehen aufwendige HTML-Designs, die normale Mailprogramme nicht bauen könn
 Die App findet Betriebe, die zu Ylva Labs passen, bewertet sie **nach festen Regeln ohne KI**, und ihr verwaltet
 alles in einem CRM. Die KI ist nur noch ein optionales Werkzeug zum Schreiben.
 
-**Leads: finden und bewerten.** Ein Lauf startet **nie von selbst**. Er macht:
+**Leads: finden und bewerten.** Ein Lauf startet von Hand oder, wenn ihr es unter **Neue Betriebe finden → Automatisch suchen** einschaltet, nach Zeitplan (Tage, von–bis, alle X Minuten, mindestens 10; für die KI mit Tagesgrenze in Euro). Er macht:
 
 | Schritt | Was passiert | Kosten |
 |---|---|---|

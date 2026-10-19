@@ -23,7 +23,7 @@ from cryptography.hazmat.primitives import serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import ec  # noqa: E402
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: E402
 
-from app import agent, ai, claude_research, crm, finder, leaddb, regions, scoring, webpush  # noqa: E402
+from app import agent, ai, claude_research, crm, finder, leaddb, regions, schedule, scoring, webpush  # noqa: E402
 from app.main import app  # noqa: E402
 
 
@@ -649,6 +649,80 @@ class ClaudeResearchTest(unittest.TestCase):
             claude_research.import_csv(self.c, "a;b\n1;2\n", "t", (54.66, 9.93))
 
 
+class ScheduleTest(unittest.TestCase):
+    def setUp(self):
+        self.db_path = os.path.join(tempfile.mkdtemp(), "t.db")
+        self.c = leaddb.connect(self.db_path)
+        agent.CFG["db_path"] = self.db_path
+        agent.CFG["settings"]["LEADS_WORKER"] = True
+        agent.RUN.update(id=None, cancel=False)
+
+    def form(self, **kw):
+        data = {"enabled": "1", "start": "08:00", "end": "18:00", "every": "30", "bewerten": "20", "top": "5",
+                "neu_suchen_h": "24", "entwuerfe": "2", "budget_eur": "1,50", "tag_max_eur": "3", "erinnerungen": "1"}
+        data.update(kw)
+        days = data.pop("days", ["0", "1", "2", "3", "4"])
+
+        class F(dict):
+            def getlist(self, key):
+                return days if key == "days" else []
+        return F(data)
+
+    def test_window_and_interval(self):
+        cfg = schedule.parse("frei", self.form())
+        monday9 = datetime(2026, 10, 19, 9, 0)
+        self.assertTrue(schedule.in_window(cfg, monday9))
+        self.assertFalse(schedule.in_window(cfg, monday9.replace(hour=18)))  # bis 18:00, nicht mehr um 18:00
+        self.assertFalse(schedule.in_window(cfg, datetime(2026, 10, 18, 9, 0)))  # Sonntag
+        self.assertTrue(schedule.due(cfg, monday9, None))
+        self.assertFalse(schedule.due(cfg, monday9, (monday9 - timedelta(minutes=20)).isoformat()))
+        self.assertTrue(schedule.due(cfg, monday9, (monday9 - timedelta(minutes=30)).isoformat()))
+        night = schedule.parse("frei", self.form(start="22:00", end="06:00", days=["4"]))  # Freitagnacht
+        self.assertTrue(schedule.in_window(night, datetime(2026, 10, 23, 23, 0)))
+        self.assertTrue(schedule.in_window(night, datetime(2026, 10, 24, 5, 0)))  # Samstag früh gehört zu Freitag
+        self.assertFalse(schedule.in_window(night, datetime(2026, 10, 24, 23, 0)))
+        self.assertEqual(schedule.next_start(cfg, datetime(2026, 10, 18, 20, 0), None), datetime(2026, 10, 19, 8, 0))
+        self.assertEqual(schedule.describe(cfg), "Mo–Fr 08:00–18:00 Uhr, alle 30 Min.")
+
+    def test_validation(self):
+        with self.assertRaises(schedule.ScheduleError):
+            schedule.parse("frei", self.form(every="5"))  # mindestens 10 Minuten
+        with self.assertRaises(schedule.ScheduleError):
+            schedule.parse("frei", self.form(start="25:00"))
+        with self.assertRaises(schedule.ScheduleError):
+            schedule.parse("ki", self.form(entwuerfe="0", erinnerungen=""))
+        self.assertEqual(schedule.parse("ki", self.form())["budget_eur"], 1.5)
+
+    def test_starts_runs_by_itself(self):
+        schedule.save(self.c, "frei", schedule.parse("frei", self.form(days=[str(d) for d in range(7)],
+                                                                    start="00:00", end="23:59")))
+        now = datetime.now().replace(hour=12)
+        run_id = agent.start_scheduled(self.c, now)
+        self.assertTrue(run_id)
+        run = self.c.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+        params = json.loads(run["params"])
+        self.assertEqual((run["started_by"], params["bewerten"], params["entwuerfe"], params["suchen"]),
+                         ("Automatik · kostenlos", 20, 0, True))  # noch nie gesucht: neu suchen
+        self.assertIsNone(agent.start_scheduled(self.c, now + timedelta(minutes=10)))  # Abstand 30 Minuten
+        self.c.execute("UPDATE runs SET status='fertig'")
+        self.c.commit()
+        leaddb.kv_set(self.c, "last_search", {"at": (now + timedelta(minutes=5)).isoformat()})
+        second = agent.start_scheduled(self.c, now + timedelta(minutes=31))
+        self.assertFalse(json.loads(self.c.execute("SELECT params FROM runs WHERE id=?", (second,)).fetchone()[0])["suchen"])
+
+    def test_ai_runs_need_key_and_respect_day_cap(self):
+        schedule.save(self.c, "ki", schedule.parse("ki", self.form(days=[str(d) for d in range(7)], start="00:00",
+                                                                end="23:59", tag_max_eur="0,50")))
+        now = datetime.now().replace(hour=12)
+        with mock.patch.object(ai, "available", return_value=False):
+            self.assertIsNone(agent.start_scheduled(self.c, now))
+        self.assertIn("KI-Schlüssel", leaddb.kv_get(self.c, "schedule_state")["ki"]["note"])
+        leaddb.record_usage(self.c, "entwurf", "m", {"input": 1, "output": 1, "cache_write": 0, "cache_read": 0}, 1.0)
+        with mock.patch.object(ai, "available", return_value=True):
+            self.assertIsNone(agent.start_scheduled(self.c, now + timedelta(hours=1)))
+        self.assertIn("Tagesgrenze", leaddb.kv_get(self.c, "schedule_state")["ki"]["note"])
+
+
 class ViewsTest(unittest.TestCase):
     def setUp(self):
         self.client = app.test_client()
@@ -691,6 +765,8 @@ class ViewsTest(unittest.TestCase):
         self.assertIn("Pipeline.", html)
         self.assertIn("Anrufen, vormittags", html)  # Wiedervorlage von heute aus den Beispieldaten
         self.assertEqual(self.client.get("/leads/regeln").status_code, 200)
+        self.assertIn("Automatisch suchen", self.client.get("/leads/automatik").get_data(as_text=True))
+        self.assertEqual(self.client.post("/leads/automatik/frei", data={"_csrf": self.csrf}).status_code, 403)  # Demo
         self.assertIn("Prompt kopieren", self.client.get("/leads/claude?anzahl=20&branche=pflege").get_data(as_text=True))
         r = self.client.post("/leads/claude/import", data={"_csrf": self.csrf, "text": ClaudeResearchTest.CSV})
         self.assertEqual(r.status_code, 302)
