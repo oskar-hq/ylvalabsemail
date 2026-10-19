@@ -207,6 +207,13 @@ def check_csrf():
             abort(400, "Ungültiges Formular-Token. Bitte Seite neu laden.")
 
 
+@app.context_processor
+def _ui_theme():
+    """Darstellung (Hell, Dunkel, Automatisch) aus dem Cookie, damit die Seite gleich richtig gezeichnet wird."""
+    theme = request.cookies.get("theme", "")
+    return {"ui_theme": theme if theme in ("light", "dark") else "auto"}
+
+
 @app.after_request
 def security_headers(resp):
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")

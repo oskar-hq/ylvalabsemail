@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="de">
+<html lang="de" data-theme="{{ ui_theme }}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -11,8 +11,9 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Ylva Leads">
-<meta name="theme-color" content="#0b0b0c">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+{% if ui_theme == 'light' %}<meta name="theme-color" content="#ffffff">{% elif ui_theme == 'dark' %}<meta name="theme-color" content="#0b0b0c">{% else %}<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0b0b0c" media="(prefers-color-scheme: dark)">{% endif %}
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
 <link rel="stylesheet" href="{{ url_for('static', filename='cockpit.css') }}">
 </head>
@@ -38,6 +39,10 @@
       <summary class="avatar" aria-label="Konto und Einstellungen">{{ who_name[:1]|upper }}</summary>
       <div class="account-menu">
         <span class="who-full">{{ 'Demo, es wird nichts verschickt' if account.demo else who_name }}</span>
+        <div class="theme-pick" role="group" aria-label="Darstellung">
+          <span>Darstellung</span>
+          <span class="segmented small">{% for key, label in [('light', 'Hell'), ('dark', 'Dunkel'), ('auto', 'Auto')] %}<button type="button" data-theme-set="{{ key }}" class="{{ 'on' if ui_theme == key }}" aria-pressed="{{ 'true' if ui_theme == key else 'false' }}">{{ label }}</button>{% endfor %}</span>
+        </div>
         <a href="{{ url_for('settings.settings') }}">Einstellungen</a>
         <a href="{{ url_for('history') }}">Verlauf des Mailers</a>
         <a href="{{ url_for('leads.costs') }}">Kosten</a>
