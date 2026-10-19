@@ -61,6 +61,7 @@
 {% endif %}
 {% block content %}{% endblock %}
 {% block scripts %}{% endblock %}
+{% if account %}{% include "_mailsheet.html" %}<script src="{{ url_for('static', filename='mailsheet.js') }}"></script>{% endif %}
 <script src="{{ url_for('static', filename='nav.js') }}"></script>
 </body>
 </html>
