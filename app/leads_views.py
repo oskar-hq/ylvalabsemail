@@ -6,7 +6,7 @@ from datetime import datetime
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from . import agent, ai, claude_research, crm, emailbuild, leaddb, pixel, schedule, scoring
+from . import agent, ai, claude_research, crm, emailbuild, leaddb, mailbox, pixel, schedule, scoring
 from .main import DB_PATH, ROOT, SETTINGS, login_required
 
 bp = Blueprint("leads", __name__)
@@ -118,7 +118,9 @@ def _first_name(account):
 def home():
     st = status_payload()
     c = st["counts"]
-    parts = [(st["due_tasks"], "Wiedervorlagen" if st["due_tasks"] != 1 else "Wiedervorlage", url_for("crm.board")),
+    new_replies = mailbox.unread_count(db())
+    parts = [(new_replies, "neue Antworten" if new_replies != 1 else "neue Antwort", url_for("crm.inbox")),
+             (st["due_tasks"], "Wiedervorlagen" if st["due_tasks"] != 1 else "Wiedervorlage", url_for("crm.board")),
              (c["entwurf"], "Freigaben" if c["entwurf"] != 1 else "Freigabe", url_for("leads.overview", tab="entwurf")),
              (c["nachfassen"], "Nachfassen", url_for("leads.overview", tab="nachfassen")),
              (c["qualified"], "Interessenten" if c["qualified"] != 1 else "Interessent",
@@ -128,7 +130,9 @@ def home():
     total = sum(n for n, _, _ in parts)
     # „Starten“ führt direkt zur ersten Aufgabe: Wiedervorlagen, dann Freigaben, Nachfassen, Interessenten
     start = None
-    if st["due_tasks"]:
+    if new_replies:
+        start = url_for("crm.inbox")
+    elif st["due_tasks"]:
         start = url_for("crm.board")
     else:
         for key in ("entwurf", "nachfassen", "qualified"):

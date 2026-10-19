@@ -349,6 +349,45 @@ class AgentTest(unittest.TestCase):
         reply.set_content("Ja gern")
         self.assertEqual(agent._match_lead(self.c, reply), lead_id)
 
+    def test_inbox_thread_reply_and_next_answer(self):
+        from app import mailbox
+        lead_id = self.add("Hansen", status="versendet", channel="email", email="jens@hansen.de",
+                           sent_at=leaddb.now(), message_id="<m1@y>", subject="Eine Idee für Hansen", greeting="Moin,",
+                           body="Erste Nachricht.")
+        first = EmailMessage()
+        first["From"] = "Jens Hansen <jens@hansen.de>"
+        first["Subject"] = "Re: Eine Idee für Hansen"
+        first["In-Reply-To"] = "<m1@y>"
+        first.set_content("Das klingt spannend, rufen Sie gern an.")
+        self.assertTrue(agent.handle_reply(self.c, lead_id, first, "<r1@hansen.de>"))
+        groups = mailbox.grouped(self.c)
+        self.assertEqual([c["id"] for c in groups["offen"]], [lead_id])  # offen zum Antworten
+        self.assertEqual(groups["offen"][0]["mood"], "gut")
+        self.assertEqual(mailbox.unread_count(self.c), 1)
+        sent = []
+        smtp = mock.Mock(send_message=lambda m: sent.append(m))
+        settings = dict(agent.CFG["settings"], OUTREACH_USER="k@ylvalabs.de", OUTREACH_PASSWORD="x", IMAP_HOST="")
+        with mock.patch.dict(agent.CFG, {"settings": settings, "smtp_connect": lambda u, p: smtp}):
+            agent.send_reply(self.c, leaddb.get_lead(self.c, lead_id), "Gern, passt Dienstag?", "oskar")
+        msg = sent[0]
+        self.assertEqual((msg["To"], msg["Subject"], msg["In-Reply-To"]),
+                         ("Jens Hansen <jens@hansen.de>", "Re: Eine Idee für Hansen", "<r1@hansen.de>"))
+        self.assertIn("> Das klingt spannend", msg.get_content())
+        groups = mailbox.grouped(self.c)
+        self.assertEqual([c["id"] for c in groups["gesendet"]], [lead_id])  # nach dem Antworten: Gesendet
+        self.assertEqual(mailbox.unread_count(self.c), 0)
+        # Die nächste Antwort bezieht sich auf unsere Antwort und landet im selben Gespräch
+        nxt = EmailMessage()
+        nxt["From"] = "assistenz@ganz-anders.de"
+        nxt["In-Reply-To"] = msg["Message-ID"]
+        nxt.set_content("Dienstag ist leider schlecht.")
+        self.assertEqual(agent._match_lead(self.c, nxt), lead_id)
+        self.assertTrue(agent.handle_reply(self.c, lead_id, nxt, "<r2@x>"))
+        self.assertEqual(len(mailbox.thread(self.c, leaddb.get_lead(self.c, lead_id))), 4)  # erste, Antwort, wir, Antwort
+        self.assertEqual([c["id"] for c in mailbox.grouped(self.c)["offen"]], [lead_id])
+        leaddb.update_lead(self.c, lead_id, mood="mittel")  # von Hand gesetzt geht vor
+        self.assertEqual(mailbox.mood(leaddb.get_lead(self.c, lead_id), None)[0], "mittel")
+
     def test_boundaries_loaded_once_and_assigned(self):
         geo = {k: {"name": n, "rings": [[[lat - 0.05, lon - 0.05], [lat - 0.05, lon + 0.05], [lat + 0.05, lon + 0.05],
                                          [lat - 0.05, lon - 0.05]]]} for k, (n, lat, lon) in regions.KREISE.items()}
@@ -829,6 +868,18 @@ class ViewsTest(unittest.TestCase):
         sent = leaddb.get_lead(c, fresh[0])
         self.assertEqual((sent["status"], sent["stage"], sent["subject"]), ("versendet", "kontaktiert", "Hallo"))
         self.assertFalse(self.client.get(f"/leads/{fresh[0]}/mail.json").get_json()["can_email"])
+        # Postfach: Demo-Antworten stehen drin, Gespräch öffnen, antworten (Demo: nur vermerkt), Stimmung setzen
+        inbox = self.client.get("/crm/postfach").get_data(as_text=True)
+        self.assertIn("Offen zum Antworten", inbox)
+        self.assertIn("Tischlerei Hansen (Beispiel)", inbox)
+        hansen = c.execute("SELECT id FROM leads WHERE name='Tischlerei Hansen (Beispiel)'").fetchone()[0]
+        self.assertIn("rufen", self.client.get(f"/crm/postfach/{hansen}").get_data(as_text=True).lower())
+        r = self.client.post(f"/crm/postfach/{hansen}/antwort", data={"text": "Gern, Dienstag 10 Uhr?"},
+                             headers={"X-CSRF-Token": self.csrf})
+        self.assertTrue(r.get_json()["ok"])
+        self.assertIn("Gern, Dienstag 10 Uhr?", self.client.get(f"/crm/postfach/{hansen}").get_data(as_text=True))
+        self.client.post(f"/crm/postfach/{hansen}/stimmung", data={"mood": "gut"}, headers={"X-CSRF-Token": self.csrf})
+        self.assertEqual(leaddb.get_lead(c, hansen)["mood"], "gut")
         self.assertIn("Neue Betriebe prüfen", self.client.get("/leads/pruefen").get_data(as_text=True))
         table = self.client.get("/crm?ansicht=tabelle").get_data(as_text=True)
         self.assertIn('id="crmTable"', table)

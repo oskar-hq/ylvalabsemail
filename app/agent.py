@@ -22,10 +22,10 @@ import threading
 import time
 from datetime import datetime, timedelta
 from email.message import EmailMessage
-from email.utils import formataddr, formatdate, parseaddr
+from email.utils import formataddr, formatdate, make_msgid, parseaddr
 from urllib.parse import urlparse
 
-from . import ai, crm, emailbuild, finder, leaddb, regions, schedule, scoring, webpush
+from . import ai, crm, emailbuild, finder, leaddb, mailbox, regions, schedule, scoring, webpush
 
 log = logging.getLogger("ylva.leads")
 
@@ -726,7 +726,8 @@ def _message_text(msg):
 def _match_lead(c, msg):
     refs = " ".join(filter(None, (msg.get("In-Reply-To"), msg.get("References"))))
     for mid in re.findall(r"<[^>]+>", refs):
-        row = c.execute("SELECT id FROM leads WHERE message_id=? OR followup_message_id=?", (mid, mid)).fetchone()
+        row = c.execute("SELECT id FROM leads WHERE message_id=? OR followup_message_id=?", (mid, mid)).fetchone() \
+            or c.execute("SELECT lead_id AS id FROM messages WHERE message_id=?", (mid,)).fetchone()
         if row:
             return row["id"]
     sender = parseaddr(msg.get("From", ""))[1].lower()
@@ -772,7 +773,7 @@ def check_inbox(c):
             raw = next((p[1] for p in parts if isinstance(p, tuple)), b"")
             msg = email.message_from_bytes(raw, policy=email.policy.default)
             lead_id = _match_lead(c, msg)
-            if lead_id and handle_reply(c, lead_id, msg):
+            if lead_id and handle_reply(c, lead_id, msg, mid):
                 handled += 1
             c.execute("INSERT OR IGNORE INTO inbox_seen (message_id, at) VALUES (?,?)", (mid, leaddb.now()))
             c.commit()
@@ -784,12 +785,22 @@ def check_inbox(c):
     return handled
 
 
-def handle_reply(c, lead_id, msg):
-    """Antwort einer Firma: in die Akte, nach Stichworten einordnen (ohne KI), Pipeline und Wiedervorlage setzen."""
+def handle_reply(c, lead_id, msg, message_id=None):
+    """Antwort einer Firma: ins Postfach und in die Akte, nach Stichworten einordnen (ohne KI), Pipeline und
+    Wiedervorlage setzen. Weitere Antworten im laufenden Gespräch landen nur im Postfach (mit Hinweis)."""
     lead = leaddb.get_lead(c, lead_id)
     name, addr = parseaddr(msg.get("From", ""))
     text = _message_text(msg)
     subject = str(msg.get("Subject", ""))
+    mailbox.add(c, lead_id, "in", text or "(leere Nachricht)", subject=subject, from_addr=addr, from_name=name,
+                message_id=(message_id or msg.get("Message-ID") or "").strip() or None,
+                in_reply_to=(msg.get("In-Reply-To") or "").strip() or None, read=False)
+    if lead["status"] in ("beantwortet", "gesperrt") or lead.get("interest"):  # Gespräch läuft schon
+        leaddb.update_lead(c, lead_id, unread=1)
+        leaddb.add_event(c, lead_id, "reply", text or "(leere Nachricht)", author=name or addr,
+                         meta={"from": addr, "subject": subject, "date": str(msg.get("Date", ""))})
+        notify(c, f"Neue Antwort von {lead['name']}", (text or subject)[:220], f"/crm/postfach/{lead_id}")
+        return True
     leaddb.add_event(c, lead_id, "reply", text or "(leere Nachricht)", author=name or addr,
                      meta={"from": addr, "subject": subject, "date": str(msg.get("Date", ""))})
     result = scoring.classify_reply(subject, text, dict(msg.items()))
@@ -816,8 +827,58 @@ def handle_reply(c, lead_id, msg):
     leaddb.add_signal(c, "antwort", f"{lead['name']} ({lead['branche']} / {lead['category_label']}, "
                       f"{lead['distance_km']} km, Größe: {lead['research'].get('groesse') or '?'}): {kind}. "
                       f"Antwort: {result['zusammenfassung']}", lead_id)
-    notify(c, f"{INTEREST_TITLES[kind]} {lead['name']}", result["zusammenfassung"][:220], f"/leads/{lead_id}")
+    notify(c, f"{INTEREST_TITLES[kind]} {lead['name']}", result["zusammenfassung"][:220], f"/crm/postfach/{lead_id}")
     return True
+
+
+def send_reply(c, lead, text, sent_by, subject=None):
+    """Im Postfach antworten: schlichte, persönliche Mail im selben Gesprächsverlauf (In-Reply-To), mit Zitat.
+    Erlaubt, weil der Betrieb uns zuerst geschrieben hat; braucht nur das Akquise-Postfach."""
+    if not outreach_configured():
+        raise RuntimeError("Das Akquise-Postfach ist nicht eingerichtet (Einstellungen → Postfach und Versand).")
+    last = mailbox.last_incoming(c, lead["id"])
+    to = (last or {}).get("from_addr") or lead["email"]
+    if not to:
+        raise RuntimeError("Keine E-Mail-Adresse bekannt.")
+    msg = EmailMessage()
+    msg["From"] = formataddr((S("LEADS_SENDER_NAME") or S("ORG_NAME"), outreach_address()))
+    msg["To"] = formataddr(((last or {}).get("from_name") or lead["contact_name"] or "", to))
+    msg["Subject"] = subject or mailbox.reply_subject((last or {}).get("subject") or lead["subject"] or lead["name"])
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid(domain=_domain(outreach_address()) or None)
+    refs = [m for m in ((last or {}).get("message_id"), lead.get("message_id")) if m]
+    if refs:
+        msg["In-Reply-To"] = refs[0]
+        msg["References"] = " ".join(dict.fromkeys(reversed(refs)))
+    signature = "\n".join(x for x in ("Viele Grüße", S("LEADS_SENDER_NAME"), S("DEFAULT_FOOTER")) if x)
+    msg.set_content(f"{text.strip()}\n\n{signature}{mailbox.quote(last)}")
+    smtp = CFG["smtp_connect"](S("OUTREACH_USER"), S("OUTREACH_PASSWORD"))
+    try:
+        smtp.send_message(msg)
+    finally:
+        try:
+            smtp.quit()
+        except Exception:
+            pass
+    if S("IMAP_HOST"):
+        try:
+            imap = _imap()
+            try:
+                imap.append(CFG["sent_folder"](imap), "\\Seen", imaplib.Time2Internaldate(time.time()), msg.as_bytes())
+            finally:
+                imap.logout()
+        except Exception as exc:
+            log.warning("Ablage im Ordner „Gesendet“ fehlgeschlagen: %s", exc)
+    record_reply(c, lead, text, sent_by, msg["Subject"], to, msg["Message-ID"], refs[0] if refs else None)
+    return msg
+
+
+def record_reply(c, lead, text, sent_by, subject, to, message_id=None, in_reply_to=None, note=""):
+    mailbox.add(c, lead["id"], "out", text.strip(), subject=subject, from_addr=outreach_address(), to_addr=to,
+                message_id=message_id, in_reply_to=in_reply_to, sent_by=sent_by)
+    mailbox.mark_read(c, lead["id"])
+    leaddb.update_lead(c, lead["id"], unread=0)
+    leaddb.add_event(c, lead["id"], "sent", f"Im Postfach geantwortet an {to}.{note}", author=sent_by)
 
 # ---------------------------------------------------------------- Lernen
 

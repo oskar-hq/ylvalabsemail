@@ -3,7 +3,7 @@ Alle Betriebe sind erfunden."""
 import json
 from datetime import date, datetime, timedelta
 
-from . import crm, leaddb
+from . import crm, leaddb, mailbox
 
 # Ungefähre Ortsmitten (Breite, Länge) für die Karte
 ORTE = {"Kappeln": (54.661, 9.931), "Arnis": (54.630, 9.932), "Süderbrarup": (54.636, 9.773),
@@ -188,6 +188,9 @@ def seed(conn):
                              meta={"subject": "Re: " + d["subject"]})
             leaddb.add_event(conn, lead_id, "classify", d["reply_summary"], author="Regeln",
                              meta={"grund": d["grund"], "naechster_schritt": d["schritt"]})
+            mailbox.add(conn, lead_id, "in", d["reply"], subject="Re: " + d["subject"], from_addr=d.get("email") or "",
+                        from_name=d.get("contact_name") or d["name"], message_id=f"<demo-{i}@beispiel.example>",
+                        read=d.get("interest") != "qualified", at=at)
     _seed_reserve(conn, t0)
     for city, key in ORT_KREIS.items():
         conn.execute("UPDATE leads SET kreis=? WHERE city=? AND source_id LIKE 'demo:%'", (key, city))

@@ -7,6 +7,7 @@
     <h1 class="title">CRM <span class="muted" style="font-size:.45em;font-weight:500">{{ total_cards }}</span></h1>
     <div class="btn-row head-btns">
       <input type="search" id="boardFilter" placeholder="Name, Ort, Branche …" aria-label="Filtern" class="crm-search">
+      {% set n_in = inbox_unread() %}<a class="btn" href="{{ url_for('crm.inbox') }}">Postfach{% if n_in %} <span class="nav-count new-count">{{ n_in }}</span>{% endif %}</a>
       <button class="btn primary" type="button" id="newLead" title="Firma anlegen">+ Firma</button>
       <details class="more-menu account"><summary class="btn" aria-label="Mehr">···</summary>
         <div class="account-menu">
