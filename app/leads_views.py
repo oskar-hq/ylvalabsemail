@@ -123,6 +123,8 @@ def home():
              (c["nachfassen"], "Nachfassen", url_for("leads.overview", tab="nachfassen")),
              (c["qualified"], "Interessenten" if c["qualified"] != 1 else "Interessent",
               url_for("leads.overview", tab="qualified"))]
+    to_review = review_count()
+    parts.append((to_review, "zu prüfen", url_for("leads.review")))
     total = sum(n for n, _, _ in parts)
     # „Starten“ führt direkt zur ersten Aufgabe: Wiedervorlagen, dann Freigaben, Nachfassen, Interessenten
     start = None
@@ -134,9 +136,12 @@ def home():
                 first = leaddb.tab_leads(db(), key, limit=1)
                 start = url_for("leads.detail", lead_id=first[0]["id"]) if first else None
                 break
+        if not start and to_review:
+            start = url_for("leads.review")
     hour = datetime.now().hour
     greeting = "Guten Morgen" if hour < 11 else ("Guten Tag" if hour < 18 else "Guten Abend")
-    return render_template("home.html", account=g.account, sched=schedule_view(), st=st, parts=[p for p in parts if p[0]], total=total,
+    return render_template("home.html", account=g.account, sched=schedule_view(), queue=review_queue(10),
+                           to_review=to_review, st=st, parts=[p for p in parts if p[0]], total=total,
                            start=start, greeting=greeting, name=_first_name(g.account), demo=SETTINGS["DEMO_MODE"])
 
 # ---------------------------------------------------------------- Übersicht
@@ -428,18 +433,78 @@ def mark_sent(lead_id):
 @bp.post("/leads/<int:lead_id>/reject")
 @login_required
 def reject(lead_id):
-    lead = lead_or_404(lead_id)
-    reason = request.form.get("reason", "").strip()
+    _reject(lead_or_404(lead_id), request.form.get("reason", "").strip())
+    return jsonify(ok=True)
+
+
+def _reject(lead, reason):
+    lead_id = lead["id"]
     leaddb.update_lead(db(), lead_id, status="aussortiert", rejected_by="team", unread=0)
     leaddb.add_event(db(), lead_id, "status", f"Vom Team aussortiert. {reason}".strip(), author=who())
-    if lead["stage"] == "neu":  # noch nicht kontaktiert: raus aus der Pipeline
+    if lead["stage"] in (None, "neu"):  # noch nicht kontaktiert: nicht (mehr) in der Pipeline
         leaddb.update_lead(db(), lead_id, stage=None, stage_at=leaddb.now())
     else:
         crm.advance(db(), lead_id, "verloren", author=who())
     leaddb.add_signal(db(), "aussortiert", f"Das Team hält {lead['name']} ({lead['branche']} / {lead['category_label']}, "
                       f"{lead['distance_km']} km, {lead['fit_score']} Punkte) für ungeeignet. Grund: {reason or 'nicht genannt'}. "
                       f"Bewertung war: {lead['fit_reason']}", lead_id)
-    return jsonify(ok=True)
+
+
+# ---------------------------------------------------------------- Prüfen per Wischen (gut / nicht gut)
+
+REVIEW_SQL = ("SELECT * FROM leads WHERE status='passt' AND stage IS NULL AND interest IS NULL "
+              "AND IFNULL(rejected_by,'')='' ORDER BY fit_score DESC, distance_km LIMIT ?")
+
+
+def review_queue(limit=30):
+    out = []
+    for r in db().execute(REVIEW_SQL, (limit,)).fetchall():
+        lead = dict(r)
+        lead["p"] = crm.profile(lead)
+        research = leaddb.get_lead(db(), lead["id"])["research"]
+        lead["signale"] = sorted(research.get("signale") or [], key=lambda x: -x[0])[:5]
+        out.append(lead)
+    return out
+
+
+def review_count():
+    return db().execute("SELECT COUNT(*) FROM leads WHERE status='passt' AND stage IS NULL AND interest IS NULL "
+                        "AND IFNULL(rejected_by,'')=''").fetchone()[0]
+
+
+@bp.get("/leads/pruefen")
+@login_required
+def review():
+    return render_template("review.html", account=g.account, queue=review_queue(), total=review_count(),
+                           st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+
+
+@bp.post("/leads/<int:lead_id>/urteil")
+@login_required
+def verdict(lead_id):
+    """Gut: als „Neu“ ins CRM. Nicht gut: aussortieren (der Algorithmus lernt aus beidem)."""
+    lead = lead_or_404(lead_id)
+    good = request.form.get("gut") == "1"
+    if good:
+        crm.advance(db(), lead_id, "neu", author=who())
+        leaddb.update_lead(db(), lead_id, unread=0)
+        leaddb.add_event(db(), lead_id, "status", "Beim Prüfen als gut markiert, ins CRM.", author=who())
+        leaddb.add_signal(db(), "gut", f"Das Team findet {lead['name']} ({lead['branche']} / {lead['category_label']}, "
+                          f"{lead['fit_score']} Punkte) passend.", lead_id)
+    else:
+        _reject(lead, request.form.get("reason", "").strip() or "Beim Prüfen als nicht gut markiert.")
+    return jsonify(ok=True, left=review_count())
+
+
+@bp.post("/leads/<int:lead_id>/urteil/zurueck")
+@login_required
+def verdict_undo(lead_id):
+    lead = lead_or_404(lead_id)
+    leaddb.update_lead(db(), lead_id, status="passt", rejected_by=None, stage=None, stage_at=leaddb.now())
+    leaddb.add_event(db(), lead_id, "status", "Entscheidung beim Prüfen rückgängig gemacht.", author=who())
+    db().execute("DELETE FROM signals WHERE lead_id=? AND processed=0 AND kind IN ('gut','aussortiert')", (lead_id,))
+    db().commit()
+    return jsonify(ok=True, name=lead["name"], left=review_count())
 
 
 @bp.post("/leads/<int:lead_id>/interest")

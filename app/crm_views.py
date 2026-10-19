@@ -21,7 +21,8 @@ def _crm_globals():
 def board():
     today = date.today().isoformat()
     columns = crm.board(db())
-    return render_template("crm.html", account=g.account, columns=columns, today=today,
+    view = "tabelle" if request.args.get("ansicht") == "tabelle" else "board"
+    return render_template("crm.html", account=g.account, columns=columns, today=today, view=view,
                            total_cards=sum(len(col[3]) for col in columns),
                            due=crm.open_tasks(db(), until=today), upcoming=crm.open_tasks(db())[:40],
                            st=status_payload(), demo=SETTINGS["DEMO_MODE"])

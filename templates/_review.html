@@ -1,0 +1,39 @@
+{# Betriebe prüfen: oben liegt eine Karte, nach rechts wischen = gut (ins CRM), nach links = nicht gut. #}
+<section class="review" id="review" data-total="{{ total }}">
+  <div class="review-head">
+    <p class="label">Neue Betriebe prüfen · <span id="reviewLeft">{{ total }}</span></p>
+    <button type="button" class="btn small" id="reviewUndo" hidden>↶ Rückgängig</button>
+  </div>
+  <div class="stack" id="stack">
+    {% for l in queue %}{% set p = l.p %}
+    <article class="swipe-card" data-id="{{ l.id }}" data-name="{{ l.name }}" {{ 'hidden' if loop.index > 3 }}>
+      <span class="stamp yes">Gut</span><span class="stamp no">Nicht gut</span>
+      <header>
+        <h2>{{ l.name }}</h2>
+        <p class="muted">{{ p.kategorie }}{% if p.ort %} · {{ p.ort }}{% endif %}{% if p.km is not none %} · {{ p.km|round|int }} km{% endif %}{% if p.kreis %} · {{ p.kreis }}{% endif %}</p>
+        {% if p.punkte is not none %}<span class="score-badge" title="Punkte nach Regeln">{{ p.punkte }}<small>/100</small></span>{% endif %}
+      </header>
+      <dl class="swipe-facts">
+        <dt>Was sie machen</dt><dd>{% if p.beschreibung %}{{ p.beschreibung }}{% if p.quelle %} <span class="src">({{ p.quelle }})</span>{% endif %}{% else %}<span class="needs-ai">KI-Recherche nötig</span>{% endif %}</dd>
+        <dt>Größe</dt><dd>{{ p.groesse or '' }}{% if not p.groesse %}<span class="needs-ai">unklar · KI-Recherche nötig</span>{% endif %}</dd>
+        <dt>Kontakt</dt><dd>{% if p.kontakt %}{{ p.kontakt }}<br>{% endif %}{% if p.email %}{{ p.email }}<br>{% endif %}{% if p.telefon %}{{ p.telefon }}<br>{% endif %}{% if p.web %}<a href="{{ p.website }}" target="_blank" rel="noopener">{{ p.web }}</a>{% endif %}{% if not (p.kontakt or p.email) %} <span class="needs-ai">Ansprechperson fehlt</span>{% endif %}</dd>
+        {% if p.zeitfresser %}<dt>Zeitfresser</dt><dd>{{ p.zeitfresser|join(' · ') }}</dd>{% endif %}
+        {% if l.signale %}<dt>Warum es passt</dt><dd><ul class="signals small">{% for points, reason in l.signale %}<li><span class="{{ 'neg' if points < 0 }}">{{ '%+d'|format(points) }}</span> {{ reason }}</li>{% endfor %}</ul></dd>{% endif %}
+      </dl>
+      <a class="small muted open-file" href="{{ url_for('leads.detail', lead_id=l.id) }}">Akte öffnen →</a>
+    </article>
+    {% endfor %}
+    <div class="stack-empty" {{ 'hidden' if queue }}>
+      <p class="stack-done">Alles geprüft.</p>
+      <p class="muted small">Neue Betriebe kommen mit dem nächsten Lauf.</p>
+      <a class="btn" href="{{ url_for('leads.search') }}">Neue Betriebe finden</a>
+    </div>
+  </div>
+  {% if queue %}
+  <div class="verdict" id="verdict">
+    <button type="button" class="vbtn no" data-verdict="0" aria-label="Nicht gut (Pfeil links)">✕<span>Nicht gut</span></button>
+    <button type="button" class="vbtn yes" data-verdict="1" aria-label="Gut (Pfeil rechts)">✓<span>Gut</span></button>
+  </div>
+  <p class="muted small center">Nach rechts wischen = gut, kommt ins CRM · nach links = nicht gut · Pfeiltasten gehen auch</p>
+  {% endif %}
+</section>

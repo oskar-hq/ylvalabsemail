@@ -178,26 +178,109 @@
     function recount() {
       $$('.col', board).forEach(col => { $('.col-head h2 .muted', col).textContent = $$('.card:not([hidden])', col).length; });
     }
-    let dragged = null;
-    board.addEventListener('dragstart', e => {
-      dragged = e.target.closest('.card');
-      if (!dragged) return;
-      dragged.classList.add('dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', dragged.dataset.id);
+    // Ziehen und Ablegen mit Maus und Finger (Pointer Events): Maus sofort, Finger nach kurzem Gedrückthalten,
+    // damit normales Scrollen weiter geht. Eine Kopie der Karte folgt dem Zeiger, die Spalte darunter leuchtet.
+    let drag = null;
+    const colAt = (x, y) => document.elementFromPoint(x, y)?.closest('.col');
+    function startDrag(d) {
+      const r = d.card.getBoundingClientRect();
+      d.ghost = d.card.cloneNode(true);
+      d.ghost.classList.add('drag-ghost');
+      Object.assign(d.ghost.style, { width: r.width + 'px', left: r.left + 'px', top: r.top + 'px' });
+      d.dx = d.x - r.left; d.dy = d.y - r.top;
+      document.body.append(d.ghost);
+      d.card.classList.add('dragging');
+      d.active = true;
+      navigator.vibrate?.(15);
+    }
+    function moveDrag(d, x, y) {
+      d.ghost.style.left = (x - d.dx) + 'px';
+      d.ghost.style.top = (y - d.dy) + 'px';
+      const col = colAt(x, y);
+      $$('.col.over', board).forEach(c => { if (c !== col) c.classList.remove('over'); });
+      col?.classList.add('over');
+      // am Rand des Boards seitlich weiterscrollen
+      const br = board.getBoundingClientRect();
+      d.scroll = x < br.left + 40 ? -14 : x > br.right - 40 ? 14 : 0;
+      if (d.scroll && !d.timer) d.timer = setInterval(() => { board.scrollLeft += d.scroll; }, 16);
+      if (!d.scroll && d.timer) { clearInterval(d.timer); d.timer = null; }
+    }
+    function endDrag(d, x, y) {
+      clearTimeout(d.press);
+      if (d.timer) clearInterval(d.timer);
+      if (!d.active) return;
+      const col = colAt(x, y);
+      d.ghost.remove();
+      d.card.classList.remove('dragging');
+      $$('.col.over', board).forEach(c => c.classList.remove('over'));
+      if (col) move(d.card, col.dataset.stage);
+      d.card.dataset.justDragged = '1';
+      setTimeout(() => delete d.card.dataset.justDragged, 300);
+    }
+    board.addEventListener('pointerdown', e => {
+      const card = e.target.closest('.card');
+      if (!card || e.target.closest('select') || e.button > 0) return;
+      drag = { card, x: e.clientX, y: e.clientY, touch: e.pointerType !== 'mouse', active: false };
+      if (drag.touch) drag.press = setTimeout(() => { if (drag) { startDrag(drag); moveDrag(drag, drag.x, drag.y); } }, 280);
     });
-    board.addEventListener('dragend', () => { dragged?.classList.remove('dragging'); $$('.col.over', board).forEach(c => c.classList.remove('over')); dragged = null; });
-    $$('.col', board).forEach(col => {
-      col.addEventListener('dragover', e => { if (dragged) { e.preventDefault(); col.classList.add('over'); } });
-      col.addEventListener('dragleave', e => { if (!col.contains(e.relatedTarget)) col.classList.remove('over'); });
-      col.addEventListener('drop', e => { e.preventDefault(); col.classList.remove('over'); if (dragged) move(dragged, col.dataset.stage); });
+    window.addEventListener('pointermove', e => {
+      if (!drag) return;
+      const far = Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 8;
+      if (!drag.active) {
+        if (drag.touch) { if (far) { clearTimeout(drag.press); drag = null; } return; }  // Finger bewegt: scrollen
+        if (!far) return;
+        startDrag(drag);
+      }
+      moveDrag(drag, e.clientX, e.clientY);
     });
+    window.addEventListener('pointerup', e => { if (drag) { endDrag(drag, e.clientX, e.clientY); drag = null; } });
+    window.addEventListener('pointercancel', () => {
+      if (!drag) return;
+      clearTimeout(drag.press);
+      if (drag.active) { drag.ghost.remove(); drag.card.classList.remove('dragging'); }
+      drag = null;
+    });
+    // Beim Ziehen mit dem Finger nicht die Seite scrollen
+    board.addEventListener('touchmove', e => { if (drag?.active) e.preventDefault(); }, { passive: false });
+    // Nach dem Ablegen nicht versehentlich die Akte öffnen
+    board.addEventListener('click', e => { if (e.target.closest('.card')?.dataset.justDragged) e.preventDefault(); }, true);
+    board.addEventListener('contextmenu', e => { if (drag) e.preventDefault(); });
     // Ohne Maus (Handy): Stufe über die Auswahl auf der Karte
     $$('.card-move', board).forEach(sel => sel.addEventListener('change', () => move(sel.closest('.card'), sel.value)));
     $('#boardFilter')?.addEventListener('input', e => {
       const q = e.target.value.trim().toLowerCase();
       $$('.card', board).forEach(c => { c.hidden = q && !c.dataset.search.includes(q); });
       recount();
+    });
+  }
+  // ---------------------------------------------------------------- CRM: Tabelle (sortieren, filtern, Stufe ändern)
+  const table = $('#crmTable');
+  if (table) {
+    $$('.row-move', table).forEach(sel => {
+      sel.dataset.was = sel.value;
+      sel.addEventListener('change', async () => {
+        const row = sel.closest('tr');
+        try {
+          await post(`/crm/${row.dataset.id}/stufe`, { stage: sel.value });
+          sel.dataset.was = sel.value;
+          sel.closest('td').dataset.v = sel.selectedIndex;
+          toast('Stufe geändert.');
+        } catch (e) { sel.value = sel.dataset.was; toast(e.message, true); }
+      });
+    });
+    $$('th[data-sort]', table).forEach((th, _) => th.addEventListener('click', () => {
+      const idx = [...th.parentNode.children].indexOf(th);
+      const dir = th.dataset.dir === 'asc' ? 'desc' : 'asc';
+      $$('th', table).forEach(h => delete h.dataset.dir);
+      th.dataset.dir = dir;
+      const num = th.dataset.sort === 'num';
+      const val = (tr) => { const td = tr.children[idx]; const v = td.dataset.v ?? td.textContent.trim().toLowerCase(); return num ? parseFloat(v) || 0 : v; };
+      const rows = $$('tbody tr', table).sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * (dir === 'asc' ? 1 : -1));
+      $('tbody', table).append(...rows);
+    }));
+    $('#boardFilter')?.addEventListener('input', e => {
+      const q = e.target.value.trim().toLowerCase();
+      $$('tbody tr', table).forEach(r => { r.hidden = q && !r.dataset.search.includes(q); });
     });
   }
   $('#newLead')?.addEventListener('click', () => $('#newDlg').showModal());
