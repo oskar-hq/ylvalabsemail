@@ -137,7 +137,7 @@ class SearchError(Exception):
 
 def run_search(c):
     lat, lon = S("LEADS_CENTER")
-    keys = list(niches.load(c))
+    keys = niches.search_keys(c)
     where = REGION_LABELS.get(S("LEADS_REGION"), S("LEADS_REGION")) if S("LEADS_REGION") \
         else f"im Umkreis von {S('LEADS_RADIUS_KM'):g} km"
     set_activity(f"Schritt 1/3 · Sucht Betriebe {where} (kostenlos, dauert ein paar Minuten) …")
@@ -552,14 +552,15 @@ def execute_run(c, run_id):
     c.commit()
     status, message = "fertig", None
     try:
-        # Schritt 1: suchen und grob filtern (kostenlos). Neu suchen auch, wenn ihr andere Nischen gewählt habt
+        # Schritt 1: suchen und grob filtern (kostenlos). Neu suchen auch, wenn eine gewählte Nische noch nie
+        # gesucht wurde. Welche Auswahl gilt: die der manuellen oder der automatischen Suche (params „nischen“)
         niches.backfill(c)
-        weights = niches.load(c)
+        weights = niches.load(c, p.get("nischen", "manuell"))
         searched = (leaddb.kv_get(c, "last_search") or {}).get("niches")
         marks = ",".join("?" * len(weights))
         waiting = c.execute(f"SELECT 1 FROM leads WHERE status='kandidat' AND (niche IN ({marks}) "
                             "OR source_id LIKE 'claude:%')", list(weights)).fetchone()
-        if p.get("suchen") or (check and (not waiting or (searched is not None and set(searched) != set(weights)))):
+        if p.get("suchen") or (check and (not waiting or (searched is not None and not set(weights) <= set(searched)))):
             counts["neu_gefunden"], counts["grobfilter"] = run_search(c)
         counts["grobfilter"] += learned_filter(c)
         ensure_boundaries(c)

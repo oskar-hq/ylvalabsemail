@@ -847,6 +847,20 @@ class NicheTest(unittest.TestCase):
         self.assertTrue(scoring.score({"branche": "handwerk"}, site)["ko"])
         self.assertFalse([k for k in scoring.score({"branche": "kreativ"}, site)["ko"] if "Agentur" in k])
 
+    def test_profiles(self):
+        niches.save(self.c, niches.parse(["tischlerei", "werbeagentur"]))
+        self.assertEqual(niches.load(self.c, "auto"), {"tischlerei": 50, "werbeagentur": 50})  # wie die manuelle
+        self.assertFalse(niches.has_own(self.c, "auto"))
+        niches.save(self.c, niches.parse(["video", "werbeagentur"], {"video": "30", "werbeagentur": "70"}), "auto")
+        self.assertEqual(niches.load(self.c, "auto"), {"werbeagentur": 70, "video": 30})
+        self.assertEqual(niches.load(self.c), {"tischlerei": 50, "werbeagentur": 50})  # manuelle bleibt
+        self.assertEqual(niches.search_keys(self.c), ["tischlerei", "werbeagentur", "video"])  # eine Suche für beide
+        self.assertTrue(niches.is_custom(self.c, "auto"))
+        niches.reset(self.c, "auto")
+        self.assertEqual(niches.load(self.c, "auto"), niches.load(self.c))
+        cfg = schedule.load(self.c)["frei"]
+        self.assertEqual(schedule.params_for("frei", cfg, self.c, datetime.now(), lambda usd: usd)[0]["nischen"], "auto")
+
     def test_pick_follows_weights(self):
         weights, taken = {"a": 70, "b": 15, "c": 15}, {}
         for _ in range(100):
@@ -937,6 +951,22 @@ class ViewsTest(unittest.TestCase):
         self.assertIn("/leads/suche", r.headers["Location"])
         self.assertEqual(niches.load(c), {"tischlerei": 15, "werbeagentur": 70, "video": 15})
         self.assertIn("Werbeagentur <i>70 %</i>", self.client.get("/leads/suche").get_data(as_text=True))
+        # automatische Suche: eigene Auswahl, im Demo-Modus (kein Admin) nur ansehen
+        html = self.client.get("/leads/nischen?fuer=auto").get_data(as_text=True)
+        self.assertIn("dieselben Nischen wie die manuelle", html)
+        r = self.client.post("/leads/nischen", data={"fuer": "auto", "niche": ["video"]}, headers={"X-CSRF-Token": self.csrf})
+        self.assertEqual(r.status_code, 403)
+        self.assertIn("Nischen und Gewichtung", self.client.get("/leads/automatik").get_data(as_text=True))
+        # Schnellsuche: Seiten mit Stichworten, Betriebe nach Namen
+        pages = self.client.get("/suche.json").get_json()["pages"]
+        auto = next(p for p in pages if p["t"] == "Automatisch suchen")
+        self.assertEqual(auto["u"], "/leads/automatik")
+        self.assertTrue(any(p["t"] == "Postausgang" and "SMTP" in p["k"] for p in pages))
+        for p in pages:
+            if p.get("u"):
+                self.assertLess(self.client.get(p["u"]).status_code, 400, p["u"])
+        leads = self.client.get("/suche.json?q=Tischlerei Hansen").get_json()["leads"]
+        self.assertTrue(leads and leads[0]["u"].startswith("/leads/"))
         # Demo-Daten: ein Betrieb ist zum Nachfassen fällig
         due = c.execute("SELECT id FROM leads WHERE name LIKE 'Steuerbüro%'").fetchone()[0]
         self.assertIn("Erinnerung schreiben lassen", self.client.get(f"/leads/{due}").get_data(as_text=True))

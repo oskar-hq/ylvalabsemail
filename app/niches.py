@@ -154,18 +154,41 @@ def equal(keys):
     return {k: base + (1 if i < rest else 0) for i, k in enumerate(keys)}
 
 
-def load(c):
+# Eigene Auswahl für die manuelle Suche (Knopf „Suche starten“) und für die automatische (Zeitplan).
+# Solange die automatische keine eigene hat, nimmt sie die der manuellen.
+PROFILES = {"manuell": "niches", "auto": "niches_auto"}
+PROFILE_LABELS = {"manuell": "Manuelle Suche", "auto": "Automatische Suche"}
+
+
+def _stored(c, profile):
+    return leaddb.kv_get(c, PROFILES[profile]) or {}
+
+
+def has_own(c, profile):
+    return bool(_stored(c, profile).get("weights"))
+
+
+def load(c, profile="manuell"):
     """Gewählte Nischen in Katalog-Reihenfolge mit Prozent: {schlüssel: prozent}, Summe 100."""
-    stored = leaddb.kv_get(c, "niches") or {}
+    if profile == "auto" and not has_own(c, "auto"):
+        return load(c, "manuell")
+    stored = _stored(c, profile)
     weights = {k: int(v) for k, v in (stored.get("weights") or {}).items() if k in NICHES}
     if not weights or sum(weights.values()) != 100:
         return equal(DEFAULT_KEYS if not weights else [k for k in NICHES if k in weights])
     return {k: weights[k] for k in NICHES if k in weights}
 
 
-def is_custom(c):
-    stored = leaddb.kv_get(c, "niches") or {}
-    return bool(stored.get("custom"))
+def is_custom(c, profile="manuell"):
+    if profile == "auto" and not has_own(c, "auto"):
+        return is_custom(c, "manuell")
+    return bool(_stored(c, profile).get("custom"))
+
+
+def search_keys(c):
+    """Was die Kartensuche holt: die Nischen beider Suchen zusammen, damit eine Suche für beide reicht."""
+    both = set(load(c, "manuell")) | set(load(c, "auto"))
+    return [k for k in NICHES if k in both]
 
 
 def parse(keys, weights=None):
@@ -190,8 +213,13 @@ def parse(keys, weights=None):
     return out
 
 
-def save(c, weights):
-    leaddb.kv_set(c, "niches", {"weights": weights, "custom": weights != equal(list(weights))})
+def save(c, weights, profile="manuell"):
+    leaddb.kv_set(c, PROFILES[profile], {"weights": weights, "custom": weights != equal(list(weights))})
+
+
+def reset(c, profile):
+    """Automatische Suche wieder wie die manuelle."""
+    leaddb.kv_set(c, PROFILES[profile], {})
 
 
 def selectors(keys):

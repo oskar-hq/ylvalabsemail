@@ -10,6 +10,12 @@
   {% elif not admin %}<p class="note warn small">Den Zeitplan ändern dürfen nur Admins.</p>{% endif %}
   <p class="muted">Läufe starten zur gewählten Zeit von selbst. Läuft gerade einer, wartet der nächste. Verschickt wird trotzdem nichts ohne eure Freigabe.</p>
 
+  <div class="niche-card">
+    <div class="niche-card-head"><span><b>Nischen</b> <span class="muted small">· für beide automatischen Suchen · {{ niche_weights|length }} gewählt{% if not niche_own %} · wie die manuelle Suche{% endif %}</span></span>
+      <a class="btn small" href="{{ url_for('leads.niche_page', fuer='auto') }}">Nischen und Gewichtung</a></div>
+    <div class="niche-tags">{% for k, w in niche_weights|dictsort(by='value', reverse=true) %}{% if loop.index <= 12 %}<span>{{ niche_info[k].label }} <i>{{ w }} %</i></span>{% endif %}{% endfor %}{% if niche_weights|length > 12 %}<span>+{{ niche_weights|length - 12 }} weitere</span>{% endif %}</div>
+  </div>
+
   {% for kind in ['frei', 'ki'] %}{% set s = sched[kind] %}{% set c = s.cfg %}
   <form method="post" action="{{ url_for('leads.automatic_save', kind=kind) }}" class="auto-card" autocomplete="off">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
