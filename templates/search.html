@@ -4,6 +4,12 @@
 <main class="page search-page">
   <a class="back" href="{{ url_for('leads.overview') }}">‹ Leads</a>
   <h1 class="title">Neue Betriebe finden</h1>
+  {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note small">{{ m }}</p>{% endfor %}{% endwith %}
+  <div class="niche-card">
+    <div class="niche-card-head"><span><b>Nischen</b> <span class="muted small">· {{ niche_weights|length }} gewählt</span></span>
+      <a class="btn small" href="{{ url_for('leads.niche_page') }}">Nischen und Gewichtung</a></div>
+    <div class="niche-tags">{% for k, w in niche_weights|dictsort(by='value', reverse=true) %}{% if loop.index <= 12 %}<span>{{ niche_info[k].label }} <i>{{ w }} %</i></span>{% endif %}{% endfor %}{% if niche_weights|length > 12 %}<span>+{{ niche_weights|length - 12 }} weitere</span>{% endif %}</div>
+  </div>
   {% include "_leads_bar.html" %}
   <ul class="menu" style="margin-top:28px">
     <li><a href="{{ url_for('leads.automatic') }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>

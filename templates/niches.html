@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Nischen · Leads{% endblock %}
+{% block content %}
+<main class="page niche-page">
+  <a class="back" href="{{ url_for('leads.search') }}">‹ Neue Betriebe finden</a>
+  <h1 class="title">Nischen wählen</h1>
+  {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if m.startswith('Nicht') else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
+  <p class="muted">Wähle, welche Betriebe die Suche holt. Ohne eigene Verteilung bekommt jede Nische gleich viel. Über <b>Gewichtung</b> verteilst du die 100 % selbst, zum Beispiel 70 % Werbeagenturen und je 15 % für die anderen.</p>
+
+  <form method="post" action="{{ url_for('leads.niche_save') }}" id="nicheForm" autocomplete="off"
+        data-weights="{{ weights|tojson|forceescape }}" data-custom="{{ '1' if custom else '' }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="eigene" value="{{ '1' if custom else '' }}" id="nicheCustom">
+    <div class="niche-tools">
+      <input type="search" id="nicheFilter" placeholder="Nische suchen, z. B. Design, Pflege, Werft" aria-label="Nische suchen">
+      <button class="btn small" type="button" id="nicheNone">Keine</button>
+      <button class="btn small" type="button" id="nicheDefault" data-keys="{{ default_keys|tojson|forceescape }}">Standard</button>
+    </div>
+
+    {% for g, label, items in groups %}
+    <section class="niche-group" data-group="{{ g }}">
+      <div class="niche-group-head"><h2>{{ label }}</h2><button class="link-btn small" type="button" data-all="{{ g }}">alle</button></div>
+      <div class="niche-chips">
+        {% for n in items %}
+        <label class="niche-chip" data-label="{{ n.label|lower }} {{ g }}">
+          <input type="checkbox" name="niche" value="{{ n.key }}" {{ 'checked' if n.key in weights }} data-label="{{ n.label }}">
+          <span>{{ n.label }}{% if counts.get(n.key) %} <em>{{ counts[n.key] }}</em>{% endif %}</span>
+        </label>
+        {% endfor %}
+      </div>
+    </section>
+    {% endfor %}
+    <p class="muted small" id="nicheEmpty" hidden>Keine Nische gefunden.</p>
+    <p class="muted small">Die Zahl an einer Nische: so viele Betriebe warten schon auf die Bewertung. Agenturen und IT-Firmen fallen sonst als „baut so etwas selbst“ raus; wählst du sie hier, gilt das nicht.</p>
+
+    <div class="niche-bar">
+      <span class="niche-sum small"><b id="nicheCount">0</b> gewählt · <span id="nicheSplit" class="muted"></span></span>
+      <button class="btn" type="button" id="weightOpen">Gewichtung</button>
+      <button class="btn primary">Speichern</button>
+    </div>
+
+    <dialog id="weightDlg" class="sheet"><div class="dlg">
+      <h2>Gewichtung</h2>
+      <p class="small">Schiebst du einen Regler, passen sich die anderen an. Zusammen bleiben es immer genau 100 %.</p>
+      <div id="weightRows" class="weight-rows"></div>
+      <p class="weight-total small">Summe <b id="weightTotal">100 %</b></p>
+      <div class="dlg-actions">
+        <button class="btn" type="button" id="weightEqual">Gleichmäßig</button>
+        <button class="btn primary" type="button" id="weightDone">Fertig</button>
+      </div>
+    </div></dialog>
+  </form>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='niches.js') }}"></script>{% endblock %}

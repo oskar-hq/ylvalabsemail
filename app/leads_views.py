@@ -6,7 +6,7 @@ from datetime import datetime
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from . import agent, ai, claude_research, crm, emailbuild, leaddb, mailbox, pixel, schedule, scoring
+from . import agent, ai, claude_research, crm, emailbuild, leaddb, mailbox, niches, pixel, schedule, scoring
 from .main import DB_PATH, ROOT, SETTINGS, login_required
 
 bp = Blueprint("leads", __name__)
@@ -172,8 +172,40 @@ def overview():
 @login_required
 def search():
     """Neue Betriebe finden: Lauf starten (Kartensuche und Bewertung) oder mit Claude recherchieren."""
+    weights = niches.load(db())
     return render_template("search.html", account=g.account, st=status_payload(), rd=run_defaults(),
-                           sched=schedule_view(), demo=SETTINGS["DEMO_MODE"])
+                           sched=schedule_view(), niche_weights=weights, niche_info=niches.NICHES,
+                           niche_summary=niches.describe(weights), demo=SETTINGS["DEMO_MODE"])
+
+
+@bp.get("/leads/nischen")
+@login_required
+def niche_page():
+    """Nischen für die Suche wählen und die Prozente verteilen."""
+    c = db()
+    counts = {r["niche"]: r["n"] for r in c.execute(
+        "SELECT niche, COUNT(*) n FROM leads WHERE status='kandidat' AND niche IS NOT NULL GROUP BY niche")}
+    return render_template("niches.html", account=g.account, groups=niches.catalog(), weights=niches.load(c),
+                           custom=niches.is_custom(c), default_keys=niches.DEFAULT_KEYS, counts=counts, st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+
+
+@bp.post("/leads/nischen")
+@login_required
+def niche_save():
+    keys = request.form.getlist("niche")
+    weights = None
+    if request.form.get("eigene") == "1":
+        weights = {k: request.form.get(f"w_{k}", "") for k in keys}
+    try:
+        result = niches.parse(keys, weights)
+    except niches.NicheError as exc:
+        flash(f"Nicht gespeichert: {exc}")
+        return redirect(url_for("leads.niche_page"))
+    niches.save(db(), result)
+    agent.log.info("Nischen geändert von %s: %s", who(), niches.describe(result, limit=50))
+    flash(f"{len(result)} Nischen gespeichert: {niches.describe(result)}. Der nächste Lauf sucht neu und bewertet "
+          "in diesem Verhältnis.")
+    return redirect(url_for("leads.search"))
 
 
 def schedule_view():
@@ -666,7 +698,7 @@ def claude():
     brain = leaddb.brain(db())
     template = leaddb.brain_sections(brain, [agent.TEMPLATE_HEADING])
     prompt = claude_research.build_prompt(brain, SETTINGS, count, branche, claude_research.known_hosts(db()),
-                                          template)
+                                          template, niches.load(db()))
     waiting = db().execute("SELECT COUNT(*) FROM leads WHERE status='kandidat' AND source_id LIKE 'claude:%'"
                            ).fetchone()[0]
     return render_template("claude.html", account=g.account, prompt=prompt, count=count, branche=branche,

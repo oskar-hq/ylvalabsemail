@@ -23,7 +23,7 @@ from cryptography.hazmat.primitives import serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import ec  # noqa: E402
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: E402
 
-from app import agent, ai, claude_research, crm, finder, leaddb, regions, schedule, scoring, webpush  # noqa: E402
+from app import agent, ai, claude_research, crm, finder, leaddb, niches, regions, schedule, scoring, webpush  # noqa: E402
 from app.main import app  # noqa: E402
 
 
@@ -801,6 +801,100 @@ class ScheduleTest(unittest.TestCase):
         self.assertIn("Tagesgrenze", leaddb.kv_get(self.c, "schedule_state")["ki"]["note"])
 
 
+class NicheTest(unittest.TestCase):
+    def setUp(self):
+        self.c = leaddb.connect(os.path.join(tempfile.mkdtemp(), "n.db"))
+
+    def test_weights(self):
+        self.assertEqual(niches.equal(["a", "b", "c"]), {"a": 34, "b": 33, "c": 33})
+        self.assertEqual(sum(niches.load(self.c).values()), 100)  # ohne Auswahl: die passenden Nischen, gleich verteilt
+        self.assertEqual(set(niches.load(self.c)), set(niches.DEFAULT_KEYS))
+        w = niches.parse(["tischlerei", "video", "werbeagentur"],
+                         {"werbeagentur": "70", "tischlerei": "15", "video": "15"})
+        self.assertEqual(w, {"tischlerei": 15, "werbeagentur": 70, "video": 15})
+        for bad in ({"werbeagentur": "50", "tischlerei": "70", "video": "15"},   # über 100
+                    {"werbeagentur": "50", "tischlerei": "20", "video": "15"},   # unter 100
+                    {"werbeagentur": "100", "tischlerei": "0", "video": "0"}):   # 0 % gibt es nicht
+            with self.assertRaises(niches.NicheError):
+                niches.parse(["tischlerei", "video", "werbeagentur"], bad)
+        with self.assertRaises(niches.NicheError):
+            niches.parse([], None)
+        niches.save(self.c, w)
+        self.assertEqual(niches.load(self.c), w)
+        self.assertTrue(niches.is_custom(self.c))
+        niches.save(self.c, niches.parse(["tischlerei", "video"]))
+        self.assertEqual(niches.load(self.c), {"tischlerei": 50, "video": 50})
+        self.assertFalse(niches.is_custom(self.c))
+
+    def test_search_and_classify(self):
+        keys = ["werbeagentur", "foto", "tischlerei"]
+        q = finder.overpass_query(54.6, 9.9, 50, "DE-SH", keys)
+        self.assertIn('["office"="advertising_agency"]', q)
+        self.assertIn('["craft"~"^(photographer|carpenter|joiner|cabinet_maker)$"]', q)
+        self.assertIn('[~"^(craft|office|shop)$"~"."]["name"~"werbeagentur|', q)
+        self.assertNotIn("(?", q)  # Overpass kennt keine Python-Gruppen
+        self.assertNotIn("home_care", q)
+        self.assertEqual(finder.classify({"office": "advertising_agency"}, keys)[3], "werbeagentur")
+        self.assertEqual(finder.classify({"office": "company", "name": "Nordlicht Werbeagentur"}, keys)[:2],
+                         ("kreativ", "office=company"))
+        self.assertEqual(finder.classify({"craft": "roofer"}, keys)[0], "sonstige")  # nicht gewählt
+        # Fotografen gelten sonst als zu klein; gezielt gewählt nicht
+        self.assertIsNone(finder.rough_filter({"craft": "photographer"}, "https://f.de", "f.de", "craft=photographer"))
+        self.assertIn("Verwaltung", finder.rough_filter({"craft": "photographer"}, "https://f.de", "f.de"))
+        # Agenturen fallen nur raus, wenn ihr sie nicht gezielt sucht
+        site = {"pages": [{"url": "https://a.de", "title": "Agentur", "text": "Ihre Werbeagentur im Norden."}],
+                "emails": ["chef@a.de"], "links": []}
+        self.assertTrue(scoring.score({"branche": "handwerk"}, site)["ko"])
+        self.assertFalse([k for k in scoring.score({"branche": "kreativ"}, site)["ko"] if "Agentur" in k])
+
+    def test_pick_follows_weights(self):
+        weights, taken = {"a": 70, "b": 15, "c": 15}, {}
+        for _ in range(100):
+            k = niches.pick(weights, taken, {"a", "b", "c"})
+            taken[k] = taken.get(k, 0) + 1
+        self.assertEqual(taken, {"a": 70, "b": 15, "c": 15})
+        self.assertEqual(niches.pick(weights, {}, {"b"}), "b")  # nichts mehr in a: die nächste mit Betrieben
+        self.assertIsNone(niches.pick(weights, {}, set()))
+        self.assertEqual(claude_research.niche_plan({"a": 70, "b": 15, "c": 15}, 40), {"a": 28, "b": 6, "c": 6})
+        self.assertEqual(sum(claude_research.niche_plan({"a": 34, "b": 33, "c": 33}, 10).values()), 10)
+
+    def test_run_respects_weights(self):
+        db_path = os.path.join(tempfile.mkdtemp(), "r.db")
+        c = leaddb.connect(db_path)
+        for i in range(30):
+            for niche, cat in (("tischlerei", "craft=carpenter"), ("werbeagentur", "office=advertising_agency"),
+                               ("dach", "craft=roofer")):
+                c.execute("INSERT INTO leads (source_id, created_at, updated_at, name, branche, category, "
+                          "category_label, distance_km, status, website) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                          (f"t:{niche}{i}", leaddb.now(), leaddb.now(), f"{niche} {i}", "handwerk", cat, "x", 5,
+                           "kandidat", "https://x.example"))
+        c.commit()
+        niches.backfill(c)
+        self.assertEqual(c.execute("SELECT COUNT(*) FROM leads WHERE niche='werbeagentur'").fetchone()[0], 30)
+        plan = {"weights": {"werbeagentur": 70, "tischlerei": 30}, "taken": {}}
+        for _ in range(20):
+            lead = leaddb.get_lead(c, agent.next_candidate(c, plan))
+            plan["taken"][lead["niche"]] = plan["taken"].get(lead["niche"], 0) + 1
+            c.execute("UPDATE leads SET status='passt' WHERE id=?", (lead["id"],))
+        self.assertEqual(plan["taken"], {"werbeagentur": 14, "tischlerei": 6})  # Dachdecker nicht gewählt
+
+    def test_prompt_and_import(self):
+        brain = leaddb.brain(self.c)
+        p = claude_research.build_prompt(brain, {"LEADS_REGION": "DE-SH"}, 20, "", (), "",
+                                         {"werbeagentur": 70, "tischlerei": 30})
+        self.assertIn("- Werbeagentur: 14 (70 %)", p)
+        self.assertIn("- Tischlerei und Schreinerei: 6 (30 %)", p)
+        self.assertNotIn("keine IT-Firmen oder Agenturen", p)
+        self.assertIn("Nische", p)
+        p = claude_research.build_prompt(brain, {"LEADS_REGION": "DE-SH"}, 20, "", (), "", {"tischlerei": 100})
+        self.assertIn("keine IT-Firmen oder Agenturen", p)
+        csv_text = "Firma;Webseite;Ort;Nische;Kategorie\nNordlicht;https://nordlicht.example;Kiel;Werbeagentur;Agentur\n"
+        r = claude_research.import_csv(self.c, csv_text.encode(), "test", (54.6, 9.9))
+        self.assertEqual(r["neu"], 1)
+        row = self.c.execute("SELECT branche, niche FROM leads WHERE name='Nordlicht'").fetchone()
+        self.assertEqual((row["branche"], row["niche"]), ("kreativ", "werbeagentur"))
+
+
 class ViewsTest(unittest.TestCase):
     def setUp(self):
         self.client = app.test_client()
@@ -830,6 +924,19 @@ class ViewsTest(unittest.TestCase):
         self.assertEqual(leaddb.get_lead(c, lead_id)["status"], "versendet")
         self.assertEqual(leaddb.get_lead(c, lead_id)["body"], "Kurz.")  # ohne mitgeschickten Text nicht überschrieben
         self.assertEqual(self.client.get("/leads/gehirn").status_code, 200)
+        html = self.client.get("/leads/nischen").get_data(as_text=True)
+        self.assertIn("Werbeagentur", html)
+        self.assertIn("Gewichtung", html)
+        r = self.client.post("/leads/nischen", data={"niche": ["werbeagentur", "video", "tischlerei"], "eigene": "1",
+                                                     "w_werbeagentur": "70", "w_video": "20", "w_tischlerei": "20"},
+                             headers={"X-CSRF-Token": self.csrf})
+        self.assertIn("/leads/nischen", r.headers["Location"])  # 110 %: nicht gespeichert
+        r = self.client.post("/leads/nischen", data={"niche": ["werbeagentur", "video", "tischlerei"], "eigene": "1",
+                                                     "w_werbeagentur": "70", "w_video": "15", "w_tischlerei": "15"},
+                             headers={"X-CSRF-Token": self.csrf})
+        self.assertIn("/leads/suche", r.headers["Location"])
+        self.assertEqual(niches.load(c), {"tischlerei": 15, "werbeagentur": 70, "video": 15})
+        self.assertIn("Werbeagentur <i>70 %</i>", self.client.get("/leads/suche").get_data(as_text=True))
         # Demo-Daten: ein Betrieb ist zum Nachfassen fällig
         due = c.execute("SELECT id FROM leads WHERE name LIKE 'Steuerbüro%'").fetchone()[0]
         self.assertIn("Erinnerung schreiben lassen", self.client.get(f"/leads/{due}").get_data(as_text=True))
