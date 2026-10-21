@@ -25,7 +25,7 @@ from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid, parseaddr
 from urllib.parse import urlparse
 
-from . import ai, crm, emailbuild, finder, leaddb, mailbox, regions, schedule, scoring, webpush
+from . import ai, crm, emailbuild, finder, leaddb, mailbox, niches, regions, schedule, scoring, webpush
 
 log = logging.getLogger("ylva.leads")
 
@@ -137,11 +137,12 @@ class SearchError(Exception):
 
 def run_search(c):
     lat, lon = S("LEADS_CENTER")
+    keys = list(niches.load(c))
     where = REGION_LABELS.get(S("LEADS_REGION"), S("LEADS_REGION")) if S("LEADS_REGION") \
         else f"im Umkreis von {S('LEADS_RADIUS_KM'):g} km"
     set_activity(f"Schritt 1/3 · Sucht Betriebe {where} (kostenlos, dauert ein paar Minuten) …")
     try:
-        found = finder.search_osm(lat, lon, S("LEADS_RADIUS_KM"), S("OVERPASS_URL"), S("LEADS_REGION"))
+        found = finder.search_osm(lat, lon, S("LEADS_RADIUS_KM"), S("OVERPASS_URL"), S("LEADS_REGION"), keys)
     except Exception as exc:
         raise SearchError(f"Die Kartensuche (OpenStreetMap) ist gerade nicht erreichbar ({exc}). "
                           "Bitte später erneut starten; es sind keine Kosten entstanden.") from exc
@@ -150,16 +151,19 @@ def run_search(c):
         reason = f.get("filter_reason")
         cur = c.execute(
             "INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, category_label,"
-            " address, city, lat, lon, distance_km, website, email, phone, status, rejected_by, fit_reason)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " niche, address, city, lat, lon, distance_km, website, email, phone, status, rejected_by, fit_reason)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (f["source_id"], leaddb.now(), leaddb.now(), f["name"], f["branche"], f["category"], f["category_label"],
+             f.get("niche"),
              f["address"], f["city"], f["lat"], f["lon"], f["distance_km"], f["website"], f["email"], f["phone"],
              "aussortiert" if reason else "kandidat", "filter" if reason else None,
              f"Grobfilter: {reason}" if reason else None))
         new += cur.rowcount
         filtered += cur.rowcount if reason else 0
     c.commit()
-    leaddb.kv_set(c, "last_search", {"at": leaddb.now(), "found": len(found), "new": new, "filtered": filtered})
+    niches.backfill(c)  # schon bekannte Betriebe, die jetzt in eine gewählte Nische fallen
+    leaddb.kv_set(c, "last_search", {"at": leaddb.now(), "found": len(found), "new": new, "filtered": filtered,
+                                     "niches": keys})
     return new, filtered
 
 
@@ -193,9 +197,11 @@ def _beta(pos, neg):
     return random.betavariate(1 + pos, 1 + neg)
 
 
-def next_candidate(c):
+def next_candidate(c, plan=None):
     """Welche Firma als Nächstes? Branchen, die bisher gut liefen, kommen öfter dran (Thompson-Sampling),
-    und ab und zu wird ganz bewusst etwas anderes ausprobiert, damit die Suche nicht festfährt."""
+    und ab und zu wird ganz bewusst etwas anderes ausprobiert, damit die Suche nicht festfährt.
+    `plan` = {"weights": {nische: prozent}, "taken": {nische: anzahl}}: nur die gewählten Nischen, im Verhältnis
+    ihrer Prozente. Die gezählte Nische trägt der Aufrufer in taken ein (siehe execute_run)."""
     stats = {}
     for r in c.execute("""
             SELECT branche, category,
@@ -209,10 +215,15 @@ def next_candidate(c):
             s = stats.setdefault(key, [0.0, 0.0])
             s[0] += 3 * (r["q"] or 0) + 1.5 * (r["m"] or 0) + 0.5 * (r["ok"] or 0)
             s[1] += (r["k"] or 0) + (r["rt"] or 0) + 0.5 * (r["rk"] or 0)
-    rows = c.execute("SELECT id, source_id, branche, category, distance_km FROM leads WHERE status='kandidat'").fetchall()
+    rows = c.execute("SELECT id, source_id, branche, category, niche, distance_km FROM leads "
+                     "WHERE status='kandidat'").fetchall()
     imported = [r for r in rows if (r["source_id"] or "").startswith("claude:")]
     if imported:  # Betriebe aus der Claude-Recherche zuerst, die habt ihr gezielt suchen lassen
         rows = imported
+    elif plan:
+        rows = [r for r in rows if r["niche"] in plan["weights"]]
+        niche = niches.pick(plan["weights"], plan["taken"], {r["niche"] for r in rows})
+        rows = [r for r in rows if r["niche"] == niche]
     if rows and random.random() < EXPLORE:
         return random.choice(rows)["id"]
     best, best_score = None, -1e9
@@ -335,6 +346,14 @@ VERSTAENDNIS = {
                       "jedes Mal wieder Zeit.",
     "industrie": "Auf einer Werft hängt viel an Absprachen, Prüfprotokollen und Unterlagen, die zur richtigen Zeit am "
                  "richtigen Ort sein müssen. Wenn das von Hand läuft, kostet es gute Leute jeden Tag Zeit.",
+    "kreativ": "In einem Studio wie Ihrem soll die Zeit in die Gestaltung fließen. Stattdessen gehen oft Stunden in "
+               "Briefings, Abstimmungsschleifen, Angebote und Rechnungen, die sich bei jedem Projekt wiederholen.",
+    "gesundheit": "In einer Praxis wie Ihrer klingelt das Telefon den ganzen Tag, dazu kommen Termine, Rezepte und "
+                  "Unterlagen. Das ist Zeit, die am Empfang und am Ende bei den Patienten fehlt.",
+    "gastgewerbe": "Bei Ihnen dreht sich alles um die Gäste, und trotzdem laufen nebenher Anfragen, Buchungen, "
+                   "Dienstpläne und Bestellungen, die jeden Tag wieder Zeit kosten.",
+    "handel": "Neben dem Verkauf landen bei Ihnen vermutlich Anfragen, Bestellungen und Lieferscheine auf dem Tisch, "
+              "die alle von Hand nachgehalten werden wollen.",
 }
 VERSTAENDNIS_SONST = ("Ich kann mir gut vorstellen, dass bei Ihnen vieles an wenigen Köpfen hängt und Routinearbeit im "
                       "Büro Zeit kostet, die an anderer Stelle fehlt.")
@@ -349,6 +368,14 @@ BEISPIEL = {
                       "Antwortvorschlag in Ihrem Postfach liegen.",
     "industrie": "Genau da setzen wir an, zum Beispiel mit Prüfprotokollen und Berichten, die aus Fotos und kurzen "
                  "Notizen von selbst entstehen.",
+    "kreativ": "Genau da setzen wir an, zum Beispiel mit Angeboten und Projektplänen, die aus einem kurzen Briefing "
+               "fast von selbst entstehen, damit mehr Zeit für die eigentliche Arbeit bleibt.",
+    "gesundheit": "Genau da setzen wir an, zum Beispiel mit Anfragen und Terminwünschen, die vorsortiert und mit einem "
+                  "Antwortvorschlag bei Ihnen ankommen.",
+    "gastgewerbe": "Genau da setzen wir an, zum Beispiel mit Buchungsanfragen, die automatisch vorbereitet und mit "
+                   "einer passenden Antwort bei Ihnen liegen.",
+    "handel": "Genau da setzen wir an, zum Beispiel mit Bestellungen und Anfragen, die automatisch erfasst und "
+              "sortiert bei Ihnen ankommen.",
 }
 BEISPIEL_SONST = "Genau da setzen wir an, zum Beispiel mit einem kleinen Werkzeug, das wiederkehrende Schreibarbeit übernimmt."
 # Alte Vorlage (bis Oktober 2026), wird beim Start einmal durch die neue ersetzt, wenn ihr sie nicht geändert habt
@@ -525,8 +552,14 @@ def execute_run(c, run_id):
     c.commit()
     status, message = "fertig", None
     try:
-        # Schritt 1: suchen und grob filtern (kostenlos)
-        if p.get("suchen") or (check and not c.execute("SELECT 1 FROM leads WHERE status='kandidat'").fetchone()):
+        # Schritt 1: suchen und grob filtern (kostenlos). Neu suchen auch, wenn ihr andere Nischen gewählt habt
+        niches.backfill(c)
+        weights = niches.load(c)
+        searched = (leaddb.kv_get(c, "last_search") or {}).get("niches")
+        marks = ",".join("?" * len(weights))
+        waiting = c.execute(f"SELECT 1 FROM leads WHERE status='kandidat' AND (niche IN ({marks}) "
+                            "OR source_id LIKE 'claude:%')", list(weights)).fetchone()
+        if p.get("suchen") or (check and (not waiting or (searched is not None and set(searched) != set(weights)))):
             counts["neu_gefunden"], counts["grobfilter"] = run_search(c)
         counts["grobfilter"] += learned_filter(c)
         ensure_boundaries(c)
@@ -534,12 +567,15 @@ def execute_run(c, run_id):
 
         # Schritt 2: nach Regeln bewerten (kostenlos, nur die Webseite wird gelesen)
         learned = scoring.learned_adjustments(leaddb.category_outcomes(c))
+        plan = {"weights": weights, "taken": {}}
         for i in range(check):
             if RUN["cancel"]:
                 raise BudgetStop("Von Hand gestoppt.")
-            lead_id = next_candidate(c)
+            lead_id = next_candidate(c, plan)
             if not lead_id:
                 break
+            niche = leaddb.get_lead(c, lead_id)["niche"]
+            plan["taken"][niche] = plan["taken"].get(niche, 0) + 1
             _progress(f"Schritt 2/3 · Bewertet {i + 1}/{check}: {leaddb.get_lead(c, lead_id)['name']} (kostenlos)")
             counts["bewertet"] += 1
             counts["passen"] += stage_score(c, lead_id, learned, promote=False)

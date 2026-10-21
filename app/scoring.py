@@ -23,7 +23,10 @@ TIER_A = {"handwerk", "pflege", "landwirtschaft"}
 TIER_B = {"dienstleistung", "industrie"}
 BRANCHE_LABELS = {"handwerk": "Handwerk", "pflege": "Pflege", "landwirtschaft": "Landwirtschaft",
                   "industrie": "Werft und Bootsbau", "dienstleistung": "Dienstleistung (Verwaltung, Planung, Logistik)",
-                  "handel": "Handel", "gastgewerbe": "Gastgewerbe"}
+                  "handel": "Handel", "gastgewerbe": "Gastgewerbe", "gesundheit": "Gesundheit und Praxen",
+                  "kreativ": "Design, Werbung und Medien", "it": "IT und Digitales", "bildung": "Bildung und Soziales"}
+# Agenturen und IT-Firmen fallen sonst raus (bauen so etwas selbst). Habt ihr diese Nischen gezielt gewählt, nicht.
+AGENCY_BRANCHEN = {"kreativ", "it"}
 # Typische Zeitfresser je Branche (aus „Beispiele, was wir bauen können“ im Gehirn)
 BRANCHE_ZEITFRESSER = {"handwerk": "Angebote, Aufmaß und Nachkalkulation",
                        "pflege": "Dokumentation nach jedem Einsatz",
@@ -206,7 +209,7 @@ def score(lead, research, learned=None, region=None, now=None):
         add(-10, "Schon digital (Online-Buchung, Kundenportal oder App)")
 
     # Ausschlussgründe
-    if IT_FIRM.search(text) or IT_FIRM.search(title):
+    if branche not in AGENCY_BRANCHEN and (IT_FIRM.search(text) or IT_FIRM.search(title)):
         ko.append("IT-Firma oder Agentur, baut so etwas selbst")
     if AUTHORITY.search(title) or AUTHORITY.search((lead.get("name") or "").lower()):
         ko.append("Behörde oder Verwaltung")

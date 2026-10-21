@@ -13,10 +13,10 @@ import json
 import re
 from urllib.parse import urlparse
 
-from . import crm, finder, leaddb
+from . import crm, finder, leaddb, niches
 
 FILENAME = "ylva-recherche.csv"
-BRANCHEN = ("handwerk", "pflege", "landwirtschaft", "dienstleistung", "industrie")
+BRANCHEN = tuple(k for k, _ in niches.GROUPS)
 
 # (Spaltenüberschrift, Feld, Pflicht, Beschreibung für Claude, Platzhalter in der Vorlage)
 COLUMNS = [
@@ -34,6 +34,7 @@ COLUMNS = [
     ("PLZ", "postcode", False, "Postleitzahl", ""),
     ("Ort", "city", True, "Ort des Betriebs", "{ort}"),
     ("Branche", "branche", True, "Genau eines von: " + ", ".join(BRANCHEN), ""),
+    ("Nische", "niche", False, "Genau einer der Namen aus der Verteilung oben (z. B. „Werbeagentur“)", ""),
     ("Kategorie", "category_label", True, "Kurz und deutsch, z. B. „Tischlerei“, „Ambulante Pflege“, "
      "„Hausverwaltung“", "{kategorie}"),
     ("Tätigkeit", "taetigkeit", False, "Ein Satz, was der Betrieb macht und für wen (z. B. „Bäder und Heizungen für "
@@ -76,8 +77,18 @@ def placeholders(template_text):
     return sorted(set(re.findall(r"\{\w+\}", template_text or "")))
 
 
-def build_prompt(brain_text, settings, count=40, branche="", known_hosts=(), template_text=""):
-    """Der Prompt für Claude. `known_hosts`: Webseiten, die schon in der App sind und nicht nochmal kommen sollen."""
+def niche_plan(weights, count):
+    """Wie viele Betriebe je Nische? Nach Prozent, gerundet, zusammen genau count."""
+    raw = {k: w * count / 100 for k, w in weights.items()}
+    out = {k: int(v) for k, v in raw.items()}
+    for k in sorted(raw, key=lambda k: raw[k] - out[k], reverse=True)[:count - sum(out.values())]:
+        out[k] += 1
+    return out
+
+
+def build_prompt(brain_text, settings, count=40, branche="", known_hosts=(), template_text="", weights=None):
+    """Der Prompt für Claude. `known_hosts`: Webseiten, die schon in der App sind und nicht nochmal kommen sollen.
+    `weights`: die gewählten Nischen mit Prozent; ohne Branchen-Schwerpunkt verteilt Claude die Betriebe danach."""
     sections = leaddb.brain_sections(brain_text, ["Über uns", "Wen wir suchen"]).strip()
     used = placeholders(template_text)
     lines = []
@@ -85,6 +96,16 @@ def build_prompt(brain_text, settings, count=40, branche="", known_hosts=(), tem
         note = f" Wird in der Nachricht als {ph} eingesetzt." if ph and (not used or ph in used) else ""
         lines.append(f"- {header}{' (Pflicht)' if required else ''}: {desc}.{note}")
     focus = f" Schwerpunkt dieses Mal: Branche „{branche}“." if branche else ""
+    chosen = {k: w for k, w in (weights or {}).items() if not branche or niches.NICHES[k]["branche"] == branche}
+    split = ""
+    if chosen:
+        total = sum(chosen.values())
+        plan = niche_plan({k: round(w * 100 / total) for k, w in chosen.items()}, count)
+        split = "\nVerteilung nach Nischen (ungefähr so viele Betriebe je Nische):\n" + "\n".join(
+            f"- {niches.NICHES[k]['label']}: {n} ({round(chosen[k] * 100 / total)} %)"
+            for k, n in plan.items() if n) + "\n"
+    agencies = any(niches.NICHES[k]["branche"] in ("kreativ", "it") for k in chosen)
+    no_agencies = "" if agencies else ", keine IT-Firmen oder Agenturen"
     known = ""
     if known_hosts:
         known = ("\nDiese Webseiten kennen wir schon, bitte nicht noch einmal aufnehmen:\n"
@@ -93,7 +114,7 @@ def build_prompt(brain_text, settings, count=40, branche="", known_hosts=(), tem
 die Webseiten der Betriebe (Startseite, Impressum, Kontakt, Über uns, Karriere).
 
 Aufgabe: Finde {count} Betriebe {_region_text(settings)}, die nach den Kriterien unten gut passen.{focus}
-Lieber weniger, aber passende Betriebe als eine lange Liste. Jeder Betrieb nur einmal.
+{split}Lieber weniger, aber passende Betriebe als eine lange Liste. Jeder Betrieb nur einmal.
 
 {sections}
 
@@ -101,7 +122,7 @@ Regeln:
 - Nur öffentliche, geschäftliche Angaben aus Impressum, Kontaktseite oder Stellenanzeigen. Keine privaten Adressen \
 oder Nummern, keine Angaben aus sozialen Netzwerken.
 - Nichts erfinden. Was du nicht belegen kannst, bleibt leer.
-- Keine Filialen von Ketten, keine Franchise, keine Behörden, keine IT-Firmen oder Agenturen.
+- Keine Filialen von Ketten, keine Franchise, keine Behörden{no_agencies}.
 - Nur Betriebe mit eigener Webseite.
 {known}
 Ergebnis: eine CSV-Datei „{FILENAME}“ (UTF-8, Trennzeichen Semikolon, Text mit Semikolon in Anführungszeichen, \
@@ -179,9 +200,10 @@ def import_csv(conn, raw, author, center):
         if dup:
             skipped.append((line, f"{name}: gibt es schon („{dup['name']}“)"))
             continue
+        niche = niches.by_label(d.get("niche", ""))
         branche = d.get("branche", "").lower().strip()
         if branche not in BRANCHEN:
-            branche = "sonstige"
+            branche = niches.NICHES[niche]["branche"] if niche else "sonstige"
         city = d.get("city", "")
         street = d.get("street", "")
         plz_ort = " ".join(x for x in (d.get("postcode", ""), city) if x)
@@ -204,9 +226,10 @@ def import_csv(conn, raw, author, center):
         source_id = "claude:" + hashlib.sha1(f"{name}|{email}|{website}".lower().encode()).hexdigest()[:16]
         cur = conn.execute(
             "INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, category_label,"
-            " address, city, lat, lon, distance_km, website, email, phone, contact_name, status, research)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (source_id, now, now, name, branche, "", d.get("category_label") or "Betrieb",
+            " niche, address, city, lat, lon, distance_km, website, email, phone, contact_name, status, research)"
+            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            (source_id, now, now, name, branche, "",
+             d.get("category_label") or (niches.NICHES[niche]["label"] if niche else "Betrieb"), niche,
              ", ".join(x for x in (street, plz_ort) if x), city, lat, lon, distance, website or None,
              email or None, d.get("phone") or None, d.get("contact_name") or None, "kandidat",
              json.dumps(info, ensure_ascii=False)))

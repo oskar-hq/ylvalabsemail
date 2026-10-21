@@ -122,6 +122,8 @@ MIGRATIONS = [
     "ALTER TABLE leads ADD COLUMN mail_design TEXT",
     # Stimmung im Gespräch, von euch gesetzt: gut, mittel, schlecht, neutral (leer = automatisch nach Stichworten)
     "ALTER TABLE leads ADD COLUMN mood TEXT",
+    # Nische aus der Suche (Schlüssel aus niches.py), danach verteilt ein Lauf die Bewertungen
+    "ALTER TABLE leads ADD COLUMN niche TEXT",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.

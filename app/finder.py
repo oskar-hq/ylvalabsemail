@@ -10,24 +10,11 @@ import urllib.request
 import urllib.robotparser
 from html.parser import HTMLParser
 
+from . import niches
+
 USER_AGENT = "YlvaLabsLeadBot/1.0 (+https://ylvalabs.de; info@ylvalabs.de)"
 
-# Welche OpenStreetMap-Einträge gesucht werden, und in welche Branche sie fallen. Bewusst nur Branchen, die zu
-# Ylva Labs passen (siehe Gehirn, „Wen wir suchen“), statt alle Betriebe im Land.
-# Stufe A: handwerk, pflege, landwirtschaft. Stufe B: dienstleistung, industrie (Werften).
-QUERIES = [
-    ('["craft"~"^(hvac|plumber|heating_engineer|electrician|carpenter|joiner|cabinet_maker|metal_construction|'
-     'roofer|builder|window_construction|gardener|landscaper)$"]', "handwerk"),
-    ('["healthcare"~"^(home_care|nursing_home)$"]', "pflege"),
-    ('["amenity"="nursing_home"]', "pflege"),
-    ('["social_facility"~"^(nursing_home|assisted_living|day_care)$"]', "pflege"),
-    ('["craft"="agricultural_engines"]', "landwirtschaft"),
-    ('["shop"="agrarian"]', "landwirtschaft"),
-    ('["place"="farm"]', "landwirtschaft"),
-    ('["office"~"^(property_management|engineer|surveyor|logistics|moving_company)$"]', "dienstleistung"),
-    ('["craft"~"^(boatbuilder|shipbuilder)$"]', "industrie"),
-    ('["industrial"="shipyard"]', "industrie"),
-]
+# Welche OpenStreetMap-Einträge gesucht werden, steht in niches.py (ihr wählt die Nischen in der App aus).
 
 LABELS = {
     "carpenter": "Tischlerei", "joiner": "Tischlerei", "electrician": "Elektro", "plumber": "Sanitär",
@@ -67,33 +54,27 @@ def haversine_km(lat1, lon1, lat2, lon2):
     return 2 * r * math.asin(math.sqrt(a))
 
 
-def overpass_query(lat, lon, radius_km, region=""):
-    """Suche in einem Bundesland (ISO-Code, z. B. DE-SH) oder, ohne Region, im Umkreis um einen Punkt."""
+def overpass_query(lat, lon, radius_km, region="", keys=None):
+    """Suche in einem Bundesland (ISO-Code, z. B. DE-SH) oder, ohne Region, im Umkreis um einen Punkt.
+    `keys`: die gewählten Nischen (ohne Angabe die, die zu Ylva Labs passen)."""
     if region:
         head, where = f'area["ISO3166-2"="{region}"]->.gebiet;', "(area.gebiet)"
     else:
         head, where = "", f"(around:{int(radius_km * 1000)},{lat},{lon})"
-    parts = "".join(f"nwr{where}{sel}[\"name\"];" for sel, _ in QUERIES)
+    parts = "".join(f"nwr{where}{sel}[\"name\"];" for sel in niches.selectors(keys or niches.DEFAULT_KEYS))
     return f"[out:json][timeout:300];{head}({parts});out center tags;"
 
 
-def classify(tags):
-    """OSM-Tags -> (branche, kategorie, lesbares Label)."""
-    for key in ("craft", "healthcare", "office", "social_facility", "amenity", "shop", "industrial",
-                "man_made", "tourism", "place", "landuse"):
-        value = tags.get(key)
-        if not value:
-            continue
-        for sel, branche in QUERIES:
-            if f'["{key}"' not in sel:
-                continue
-            m = re.search(r'"~"\^\(([^)]*)\)\$"', sel) or re.search(r'"="([^"]+)"', sel)
-            if m is None or value in m.group(1).split("|"):
-                label = LABELS.get(value, value.replace("_", " ").capitalize())
-                if key == "industrial" and value not in LABELS:
-                    label = "Industrie: " + value.replace("_", " ")
-                return branche, f"{key}={value}", label
-    return "sonstige", "", "Betrieb"
+def classify(tags, keys=None):
+    """OSM-Tags -> (branche, kategorie, lesbares Label, nische)."""
+    niche, category = niches.match(tags, keys or niches.DEFAULT_KEYS)
+    if niche is None:
+        return "sonstige", category, "Betrieb", None
+    value = category.split("=", 1)[1] if category else ""
+    label = LABELS.get(value) or niches.NICHES[niche]["label"]
+    if category.startswith("industrial=") and value not in LABELS:
+        label = "Industrie: " + value.replace("_", " ")
+    return niches.NICHES[niche]["branche"], category, label, niche
 
 
 def normalize_url(url):
@@ -112,8 +93,9 @@ SMALL_CATEGORIES = {"craft=hairdresser", "craft=beautician", "craft=tailor", "cr
                     "craft=photographer", "amenity=driving_school"}
 
 
-def rough_filter(tags, website, host):
-    """Kostenloser Grobfilter vor jeder KI. Gibt einen Grund zurück, wenn der Betrieb rausfällt."""
+def rough_filter(tags, website, host, category=""):
+    """Kostenloser Grobfilter vor jeder KI. Gibt einen Grund zurück, wenn der Betrieb rausfällt.
+    `category`: die gewählte Nische, nach der gesucht wurde; die gilt nie als „zu klein“."""
     if tags.get("brand") or tags.get("brand:wikidata") or tags.get("operator:wikidata"):
         return "Filiale einer Kette (laut Kartendaten)"
     if not website:
@@ -121,12 +103,12 @@ def rough_filter(tags, website, host):
     if any(host == h or host.endswith("." + h) for h in SOCIAL_HOSTS):
         return "Nur eine Social-Media- oder Baukasten-Seite, vermutlich sehr klein"
     for key, value in tags.items():
-        if f"{key}={value}" in SMALL_CATEGORIES:
+        if f"{key}={value}" in SMALL_CATEGORIES and f"{key}={value}" != category:
             return f"Branche meist ohne nennenswerte Verwaltung ({LABELS.get(value, value)})"
     return None
 
 
-def parse_elements(elements, lat, lon, radius_km=None):
+def parse_elements(elements, lat, lon, radius_km=None, keys=None):
     """Overpass-Antwort -> Liste von Firmen (nur mit Webseite oder E-Mail)."""
     found, seen = [], set()
     for el in elements:
@@ -148,13 +130,13 @@ def parse_elements(elements, lat, lon, radius_km=None):
         if dedupe in seen:  # Filialen/mehrere Einträge derselben Firma nur einmal
             continue
         seen.add(dedupe)
-        branche, category, label = classify(tags)
-        filter_reason = rough_filter(tags, website, host)
+        branche, category, label, niche = classify(tags, keys)
+        filter_reason = rough_filter(tags, website, host, category)
         street = " ".join(x for x in (tags.get("addr:street"), tags.get("addr:housenumber")) if x)
         city = " ".join(x for x in (tags.get("addr:postcode"), tags.get("addr:city")) if x)
         found.append({
             "source_id": f"osm:{el.get('type')}/{el.get('id')}", "name": name, "branche": branche,
-            "category": category, "category_label": label,
+            "category": category, "category_label": label, "niche": niche,
             "address": ", ".join(x for x in (street, city) if x), "city": tags.get("addr:city", ""),
             "lat": plat, "lon": plon, "distance_km": round(dist, 1), "website": website, "email": email,
             "phone": (tags.get("phone") or tags.get("contact:phone") or "").split(";")[0].strip(),
@@ -163,13 +145,13 @@ def parse_elements(elements, lat, lon, radius_km=None):
     return found
 
 
-def search_osm(lat, lon, radius_km, overpass_url, region=""):
+def search_osm(lat, lon, radius_km, overpass_url, region="", keys=None):
     """Mit Region (z. B. DE-SH) zählt nur das Bundesland, Entfernung dient dann nur der Anzeige."""
-    data = urllib.parse.urlencode({"data": overpass_query(lat, lon, radius_km, region)}).encode()
+    data = urllib.parse.urlencode({"data": overpass_query(lat, lon, radius_km, region, keys)}).encode()
     req = urllib.request.Request(overpass_url, data=data, headers={"User-Agent": USER_AGENT})
     with urllib.request.urlopen(req, timeout=330) as resp:
         payload = json.load(resp)
-    return parse_elements(payload.get("elements", []), lat, lon, None if region else radius_km)
+    return parse_elements(payload.get("elements", []), lat, lon, None if region else radius_km, keys)
 
 # ---------------------------------------------------------------- Webseite lesen
 
