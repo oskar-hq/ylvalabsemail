@@ -178,20 +178,38 @@ def search():
                            niche_summary=niches.describe(weights), demo=SETTINGS["DEMO_MODE"])
 
 
+def _profile():
+    fuer = request.values.get("fuer", "manuell")
+    return fuer if fuer in niches.PROFILES else "manuell"
+
+
 @bp.get("/leads/nischen")
 @login_required
 def niche_page():
-    """Nischen für die Suche wählen und die Prozente verteilen."""
-    c = db()
+    """Nischen für die Suche wählen und die Prozente verteilen, getrennt für die manuelle und die automatische Suche."""
+    from .settings_views import is_admin
+    c, profile = db(), _profile()
     counts = {r["niche"]: r["n"] for r in c.execute(
         "SELECT niche, COUNT(*) n FROM leads WHERE status='kandidat' AND niche IS NOT NULL GROUP BY niche")}
-    return render_template("niches.html", account=g.account, groups=niches.catalog(), weights=niches.load(c),
-                           custom=niches.is_custom(c), default_keys=niches.DEFAULT_KEYS, counts=counts, st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+    return render_template("niches.html", account=g.account, groups=niches.catalog(), weights=niches.load(c, profile),
+                           custom=niches.is_custom(c, profile), default_keys=niches.DEFAULT_KEYS, counts=counts,
+                           profile=profile, profiles=niches.PROFILE_LABELS, own=niches.has_own(c, profile),
+                           locked=profile == "auto" and not is_admin(g.account),
+                           st=status_payload(), demo=SETTINGS["DEMO_MODE"])
 
 
 @bp.post("/leads/nischen")
 @login_required
 def niche_save():
+    from .settings_views import is_admin
+    profile = _profile()
+    back = url_for("leads.niche_page", fuer=profile)
+    if profile == "auto" and not is_admin(g.account):
+        abort(403, "Die Nischen der automatischen Suche ändern nur Admins, wie den Zeitplan.")
+    if request.form.get("zuruecksetzen") == "1":
+        niches.reset(db(), profile)
+        flash("Die automatische Suche nimmt wieder dieselben Nischen wie die manuelle.")
+        return redirect(back)
     keys = request.form.getlist("niche")
     weights = None
     if request.form.get("eigene") == "1":
@@ -200,12 +218,12 @@ def niche_save():
         result = niches.parse(keys, weights)
     except niches.NicheError as exc:
         flash(f"Nicht gespeichert: {exc}")
-        return redirect(url_for("leads.niche_page"))
-    niches.save(db(), result)
-    agent.log.info("Nischen geändert von %s: %s", who(), niches.describe(result, limit=50))
-    flash(f"{len(result)} Nischen gespeichert: {niches.describe(result)}. Der nächste Lauf sucht neu und bewertet "
-          "in diesem Verhältnis.")
-    return redirect(url_for("leads.search"))
+        return redirect(back)
+    niches.save(db(), result, profile)
+    agent.log.info("Nischen (%s) geändert von %s: %s", profile, who(), niches.describe(result, limit=50))
+    flash(f"{niches.PROFILE_LABELS[profile]}: {len(result)} Nischen gespeichert ({niches.describe(result)}). "
+          "Bewertet wird in diesem Verhältnis.")
+    return redirect(url_for("leads.automatic") if profile == "auto" else url_for("leads.search"))
 
 
 def schedule_view():
@@ -226,7 +244,10 @@ def schedule_view():
 @login_required
 def automatic():
     from .settings_views import is_admin
+    auto_weights = niches.load(db(), "auto")
     return render_template("automatik.html", account=g.account, sched=schedule_view(), days=schedule.DAYS,
+                           niche_weights=auto_weights, niche_info=niches.NICHES,
+                           niche_own=niches.has_own(db(), "auto"),
                            min_every=schedule.MIN_EVERY, st=status_payload(), admin=is_admin(g.account),
                            today_eur=money(leaddb._sum(db(), "at >= ?", (datetime.now().strftime("%Y-%m-%d"),))["usd"]),
                            demo=SETTINGS["DEMO_MODE"])

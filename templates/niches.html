@@ -2,14 +2,21 @@
 {% block title %}Nischen · Leads{% endblock %}
 {% block content %}
 <main class="page niche-page">
-  <a class="back" href="{{ url_for('leads.search') }}">‹ Neue Betriebe finden</a>
+  {% if profile == 'auto' %}<a class="back" href="{{ url_for('leads.automatic') }}">‹ Automatisch suchen</a>
+  {% else %}<a class="back" href="{{ url_for('leads.search') }}">‹ Neue Betriebe finden</a>{% endif %}
   <h1 class="title">Nischen wählen</h1>
+  <div class="segmented" role="tablist" aria-label="Für welche Suche">
+    {% for key, label in profiles.items() %}<a href="{{ url_for('leads.niche_page', fuer=key) }}" class="{{ 'on' if profile == key }}" role="tab" aria-selected="{{ 'true' if profile == key else 'false' }}">{{ label }}</a>{% endfor %}
+  </div>
   {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if m.startswith('Nicht') else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
+  {% if profile == 'auto' %}<p class="note small">{% if own %}Die automatische Suche (Zeitplan) hat eine eigene Auswahl.{% else %}Die automatische Suche nimmt gerade <b>dieselben Nischen wie die manuelle</b>. Speicherst du hier, bekommt sie eine eigene Auswahl.{% endif %}{% if locked %} Ändern dürfen das nur Admins, wie den Zeitplan.{% endif %}</p>
+  {% else %}<p class="note small">Gilt für die Suche, die du mit „Suche starten“ von Hand startest. Für den Zeitplan gibt es oben eine eigene Auswahl.</p>{% endif %}
   <p class="muted">Wähle, welche Betriebe die Suche holt. Ohne eigene Verteilung bekommt jede Nische gleich viel. Über <b>Gewichtung</b> verteilst du die 100 % selbst, zum Beispiel 70 % Werbeagenturen und je 15 % für die anderen.</p>
 
   <form method="post" action="{{ url_for('leads.niche_save') }}" id="nicheForm" autocomplete="off"
         data-weights="{{ weights|tojson|forceescape }}" data-custom="{{ '1' if custom else '' }}">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <input type="hidden" name="fuer" value="{{ profile }}">
     <input type="hidden" name="eigene" value="{{ '1' if custom else '' }}" id="nicheCustom">
     <div class="niche-tools">
       <input type="search" id="nicheFilter" placeholder="Nische suchen, z. B. Design, Pflege, Werft" aria-label="Nische suchen">
@@ -36,7 +43,7 @@
     <div class="niche-bar">
       <span class="niche-sum small"><b id="nicheCount">0</b> gewählt · <span id="nicheSplit" class="muted"></span></span>
       <button class="btn" type="button" id="weightOpen">Gewichtung</button>
-      <button class="btn primary">Speichern</button>
+      <button class="btn primary" {{ 'disabled' if locked }}>Speichern</button>
     </div>
 
     <dialog id="weightDlg" class="sheet"><div class="dlg">
@@ -50,6 +57,11 @@
       </div>
     </div></dialog>
   </form>
+  {% if profile == 'auto' and own and not locked %}
+  <form method="post" action="{{ url_for('leads.niche_save') }}" class="niche-reset">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="fuer" value="auto">
+    <button class="link-btn small" name="zuruecksetzen" value="1">Wieder dieselben Nischen wie die manuelle Suche</button>
+  </form>{% endif %}
 </main>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='niches.js') }}"></script>{% endblock %}

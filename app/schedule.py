@@ -136,13 +136,13 @@ def params_for(kind, cfg, c, now, eur):
         last = (leaddb.kv_get(c, "last_search") or {}).get("at")
         stale = not last or now - datetime.fromisoformat(last) >= timedelta(hours=cfg["neu_suchen_h"])
         return {"bewerten": cfg["bewerten"], "top": cfg["top"], "entwuerfe": 0, "budget_eur": 0.0,
-                "suchen": stale, "erinnerungen": False}, None
+                "suchen": stale, "erinnerungen": False, "nischen": "auto"}, None
     left = cfg["tag_max_eur"] - today_cost_eur(c, eur) if cfg["tag_max_eur"] else cfg["budget_eur"]
     budget = min(cfg["budget_eur"], left)
     if budget <= 0.005:
         return None, f"Tagesgrenze von {cfg['tag_max_eur']:.2f} € erreicht."
     return {"bewerten": cfg["bewerten"], "top": cfg["top"], "entwuerfe": cfg["entwuerfe"],
-            "budget_eur": round(budget, 2), "suchen": False, "erinnerungen": cfg["erinnerungen"]}, None
+            "budget_eur": round(budget, 2), "suchen": False, "erinnerungen": cfg["erinnerungen"], "nischen": "auto"}, None
 
 
 def describe(cfg):

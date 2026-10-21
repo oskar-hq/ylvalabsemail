@@ -538,3 +538,31 @@ dialog.sheet{width:min(100% - 24px,640px);max-height:calc(100vh - 40px);padding:
   .niche-bar{padding:10px 16px}
   .niche-sum #nicheSplit{display:none}
 }
+.niche-page .segmented a{display:inline-flex;align-items:center;height:32px;padding:0 14px;border-radius:8px;color:var(--muted);font:600 13.5px/1 var(--sans);white-space:nowrap}
+.niche-page .segmented a.on{background:var(--canvas);color:var(--ink)}
+.niche-reset{margin-top:18px}
+
+/* Schnellsuche (⌘K) */
+.find-btn{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 10px 0 12px;margin-left:6px;border:0;border-radius:10px;background:var(--s3);color:var(--muted);font:500 13.5px/1 var(--sans);cursor:pointer}
+.find-btn:hover{color:var(--ink)}
+.find-btn svg{width:16px;height:16px}
+.find-btn kbd,.find-foot kbd{font:600 11px/1 var(--sans);color:var(--muted);background:var(--s4);border-radius:5px;padding:4px 6px}
+dialog.find{width:min(100% - 24px,600px);margin:12vh auto auto;padding:0;overflow:hidden}
+.find-box{display:flex;flex-direction:column;max-height:70vh}
+.find-field{display:flex;align-items:center;gap:10px;padding:0 16px;border-bottom:1px solid var(--line)}
+.find-field svg{width:18px;height:18px;color:var(--muted);flex:none}
+.find-field input{flex:1;min-width:0;height:56px;border:0;background:none;padding:0;font:500 17px/1 var(--sans);color:var(--ink);outline:none;box-shadow:none}
+.find-field input::-webkit-search-cancel-button{display:none}
+.find-list{list-style:none;margin:0;padding:6px;overflow:auto}
+.find-list li{display:flex;flex-direction:column;gap:3px;padding:10px 12px;border-radius:10px;cursor:pointer}
+.find-list li b{font:600 14.5px/1.25 var(--sans);color:var(--ink)}
+.find-list li span{font-size:12.5px;color:var(--muted)}
+.find-list li[aria-selected=true]{background:var(--light)}
+.find-list li.find-none{cursor:default;color:var(--muted)}
+.find-foot{display:flex;gap:16px;margin:0;padding:10px 16px;border-top:1px solid var(--line);color:var(--muted)}
+@media (max-width:760px){
+  .find-btn span,.find-btn kbd{display:none}
+  .find-btn{padding:0 9px;margin-left:0}
+  .find-foot{display:none}
+  dialog.find{margin-top:10px}
+}

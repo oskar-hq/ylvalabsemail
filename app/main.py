@@ -611,9 +611,11 @@ def healthz():
 from . import agent, crm, leaddb  # noqa: E402
 from .crm_views import bp as crm_bp  # noqa: E402
 from .leads_views import bp as leads_bp  # noqa: E402
+from .palette import bp as palette_bp  # noqa: E402
 from .settings_views import bp as settings_bp  # noqa: E402
 
 app.register_blueprint(leads_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(crm_bp)
+app.register_blueprint(palette_bp)
 agent.init(SETTINGS, smtp_connect, imap_sent_folder, DB_PATH, SETTINGS["DATA_DIR"])
