@@ -73,8 +73,23 @@ def encrypt(payload, p256dh, auth):
     return salt + struct.pack("!IB", 4096, len(as_public)) + as_public + ciphertext
 
 
+# Die Push-Dienste der Browser (Chrome/Android, Firefox, Safari/iOS, Edge). Andere Adressen nimmt die App nicht an,
+# sonst könnte man den Server über ein gefälschtes Abo Anfragen an Geräte im eigenen Netz schicken lassen.
+PUSH_HOSTS = ("fcm.googleapis.com", "android.googleapis.com", "push.services.mozilla.com", "push.apple.com",
+              "notify.windows.com")
+
+
+def valid_endpoint(url):
+    parts = urllib.parse.urlparse(url or "")
+    host = (parts.hostname or "").lower()
+    return parts.scheme == "https" and not parts.port and any(host == h or host.endswith("." + h)
+                                                              for h in PUSH_HOSTS)
+
+
 def send(vapid, subscription, message, subject, ttl=86400):
     """Gibt True zurück, wenn zugestellt; False, wenn das Abo nicht mehr gilt (dann löschen)."""
+    if not valid_endpoint(subscription.get("endpoint")):
+        return False
     body = encrypt(json.dumps(message, ensure_ascii=False).encode(),
                    subscription["keys"]["p256dh"], subscription["keys"]["auth"])
     req = urllib.request.Request(subscription["endpoint"], data=body, method="POST", headers={

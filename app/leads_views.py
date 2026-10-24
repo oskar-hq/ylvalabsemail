@@ -6,7 +6,7 @@ from datetime import datetime
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from . import agent, ai, claude_research, crm, emailbuild, leaddb, mailbox, niches, pixel, schedule, scoring
+from . import agent, ai, claude_research, crm, emailbuild, leaddb, mailbox, niches, pixel, schedule, scoring, webpush
 from .main import DB_PATH, ROOT, SETTINGS, login_required
 
 bp = Blueprint("leads", __name__)
@@ -919,7 +919,7 @@ def push_key():
 def push_subscribe():
     try:
         sub = json.loads(request.form.get("subscription", ""))
-        assert sub["endpoint"].startswith("https://") and sub["keys"]["p256dh"] and sub["keys"]["auth"]
+        assert webpush.valid_endpoint(sub["endpoint"]) and sub["keys"]["p256dh"] and sub["keys"]["auth"]
     except Exception:
         return jsonify(error="Ungültiges Abo."), 400
     db().execute("INSERT INTO push_subs (endpoint, data, user, created_at) VALUES (?,?,?,?) "
@@ -932,7 +932,7 @@ def push_subscribe():
 @bp.post("/push/unsubscribe")
 @login_required
 def push_unsubscribe():
-    db().execute("DELETE FROM push_subs WHERE endpoint=?", (request.form.get("endpoint", ""),))
+    db().execute("DELETE FROM push_subs WHERE endpoint=? AND user=?", (request.form.get("endpoint", ""), who()))
     db().commit()
     return jsonify(ok=True)
 

@@ -1,4 +1,5 @@
 """Firmen finden (OpenStreetMap) und ihre Webseite lesen."""
+import http.client
 import ipaddress
 import json
 import math
@@ -247,13 +248,48 @@ def check_public(url):
             raise PermissionError(f"{parts.hostname} zeigt auf eine interne Adresse")
 
 
+def _check_peer(sock):
+    """Nach dem Verbinden: Ist die Gegenstelle wirklich öffentlich? check_public allein reicht nicht, weil ein
+    Name beim zweiten Nachschlagen (DNS-Rebinding) plötzlich auf ein Gerät im eigenen Netz zeigen kann."""
+    if ALLOW_PRIVATE:
+        return
+    ip = sock.getpeername()[0]
+    if not ipaddress.ip_address(ip).is_global:
+        sock.close()
+        raise PermissionError(f"Verbindung zu interner Adresse {ip} abgelehnt")
+
+
+class _PublicHTTPConnection(http.client.HTTPConnection):
+    def connect(self):
+        super().connect()
+        if not self._tunnel_host:  # über einen Proxy ist die Gegenstelle der Proxy selbst
+            _check_peer(self.sock)
+
+
+class _PublicHTTPSConnection(http.client.HTTPSConnection):
+    def connect(self):
+        super().connect()
+        if not self._tunnel_host:  # über einen Proxy ist die Gegenstelle der Proxy selbst
+            _check_peer(self.sock)
+
+
+class _PublicHTTPHandler(urllib.request.HTTPHandler):
+    def http_open(self, req):
+        return self.do_open(_PublicHTTPConnection, req)
+
+
+class _PublicHTTPSHandler(urllib.request.HTTPSHandler):
+    def https_open(self, req):
+        return self.do_open(_PublicHTTPSConnection, req, context=self._context)
+
+
 class _SafeRedirect(urllib.request.HTTPRedirectHandler):
     def redirect_request(self, req, fp, code, msg, headers, newurl):
         check_public(newurl)
         return super().redirect_request(req, fp, code, msg, headers, newurl)
 
 
-_opener = urllib.request.build_opener(_SafeRedirect)
+_opener = urllib.request.build_opener(_SafeRedirect, _PublicHTTPHandler, _PublicHTTPSHandler)
 
 
 def fetch_page(url, robots_cache):

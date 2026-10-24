@@ -1,5 +1,6 @@
 (() => {
   const form = document.getElementById('mail');
+  form.addEventListener('submit', (e) => e.preventDefault());  // gesendet wird per Knopf und fetch
   const csrf = document.querySelector('meta[name=csrf-token]').content;
   const frame = document.getElementById('frame');
   const $ = (sel, root = document) => root.querySelector(sel);

@@ -2,7 +2,7 @@
 {% block title %}Verfassen · Ylva Labs Mailer{% endblock %}
 {% block content %}
 <main class="compose">
-<form id="mail" class="editor" autocomplete="off" data-from-history="{{ 'true' if from_history else 'false' }}" onsubmit="return false">
+<form id="mail" class="editor" autocomplete="off" data-from-history="{{ 'true' if from_history else 'false' }}">
   <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
 
   <div class="editor-head">

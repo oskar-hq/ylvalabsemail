@@ -289,6 +289,9 @@ def _cell(value):
         return ""
     if isinstance(value, float):
         return f"{value:g}".replace(".", ",")  # deutsches Excel erwartet Komma
+    if isinstance(value, str) and value[:1] in ("=", "+", "-", "@", "\t", "\r"):
+        # Namen und Texte kommen von fremden Webseiten: „=HYPERLINK(…)“ soll in Excel Text bleiben, keine Formel
+        return "'" + value
     return value
 
 
