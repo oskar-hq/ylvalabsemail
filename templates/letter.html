@@ -21,7 +21,7 @@
 </style>
 </head>
 <body>
-<div class="bar"><span>Brief für {{ lead.name }} · Text änderst du im Entwurf, dann neu laden.</span><button onclick="window.print()">Drucken</button></div>
+<div class="bar"><span>Brief für {{ lead.name }} · Text änderst du im Entwurf, dann neu laden.</span><button type="button" id="printBtn">Drucken</button></div>
 <div class="sheet">
   <div class="sender">{{ footer }}</div>
   <div class="to">{{ lead.name }}
@@ -35,5 +35,6 @@
   <p>{{ sender_name }}<br>{{ org }}</p>
   <div class="foot">{{ footer }} · info@ylvalabs.de · ylvalabs.de</div>
 </div>
+<script src="{{ url_for('static', filename='letter.js') }}"></script>
 </body>
 </html>

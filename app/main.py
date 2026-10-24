@@ -225,13 +225,31 @@ def _ui_theme():
     return {"ui_theme": theme if theme in ("light", "dark") else "auto"}
 
 
+# Skripte nur aus der App selbst: Selbst wenn irgendwo fremder Text als HTML durchrutscht, läuft kein Skript.
+# Kartenkacheln kommen von OpenStreetMap, Styles dürfen inline sein (Mails und Leaflet brauchen das).
+CSP = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+       "img-src 'self' data: blob: https://tile.openstreetmap.org; connect-src 'self'; frame-src 'self'; "
+       "frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'")
+
+
 @app.after_request
 def security_headers(resp):
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     resp.headers.setdefault("Referrer-Policy", "same-origin")
     if resp.mimetype == "text/html" and not request.path.startswith(("/preview", "/history/")):
         resp.headers.setdefault("X-Frame-Options", "DENY")
+    if resp.mimetype == "text/html":
+        resp.headers.setdefault("Content-Security-Policy", CSP)
+    if app.config["SESSION_COOKIE_SECURE"]:
+        resp.headers.setdefault("Strict-Transport-Security", "max-age=31536000")
     return resp
+
+
+def safe_next(nxt):
+    """Nur Pfade innerhalb der App. „//evil.de“ und „/\\evil.de“ behandeln Browser als fremde Adresse."""
+    if not nxt.startswith("/") or nxt.startswith("//") or "\\" in nxt or any(ord(ch) < 32 for ch in nxt):
+        return ""
+    return nxt
 
 
 @app.route("/login", methods=["GET", "POST"])
@@ -272,8 +290,7 @@ def login():
                               "address": user if "@" in user else SETTINGS["FROM_ADDRESS"]}
         session.clear()
         session["sid"] = sid
-        nxt = request.args.get("next", "")
-        return redirect(nxt if nxt.startswith("/") and not nxt.startswith("//") else url_for("index"))
+        return redirect(safe_next(request.args.get("next", "")) or url_for("index"))
     if current_account():
         return redirect(url_for("index"))
     return render_template("login.html")

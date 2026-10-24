@@ -9,22 +9,4 @@
   <a class="btn" href="{{ url_for('login') }}" id="restartLink" hidden>Zur Anmeldung</a>
 </main>
 {% endblock %}
-{% block scripts %}
-<script>
-(() => {
-  const start = Date.now();
-  const tick = async () => {
-    try {
-      const r = await fetch('/healthz', { cache: 'no-store' });
-      if (r.ok && Date.now() - start > 3000) {
-        document.getElementById('restartMsg').textContent = 'Fertig. Die App läuft wieder.';
-        document.getElementById('restartLink').hidden = false;
-        return;
-      }
-    } catch (e) {}
-    setTimeout(tick, 1500);
-  };
-  setTimeout(tick, 2500);
-})();
-</script>
-{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='restarting.js') }}"></script>{% endblock %}

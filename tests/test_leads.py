@@ -801,6 +801,55 @@ class ScheduleTest(unittest.TestCase):
         self.assertIn("Tagesgrenze", leaddb.kv_get(self.c, "schedule_state")["ki"]["note"])
 
 
+class SecurityTest(unittest.TestCase):
+    def test_login_redirect_stays_in_app(self):
+        from app.main import safe_next
+        self.assertEqual(safe_next("/leads/suche?x=1"), "/leads/suche?x=1")
+        for bad in ("//evil.example", "/\\evil.example", "https://evil.example", "/\tevil", ""):
+            self.assertEqual(safe_next(bad), "", bad)
+
+    def test_push_only_to_browser_services(self):
+        self.assertTrue(webpush.valid_endpoint("https://fcm.googleapis.com/fcm/send/abc"))
+        self.assertTrue(webpush.valid_endpoint("https://web.push.apple.com/QAbc"))
+        self.assertTrue(webpush.valid_endpoint("https://updates.push.services.mozilla.com/wpush/v2/x"))
+        for bad in ("https://192.168.1.10:8006/api2/json", "https://evil.example/push.apple.com",
+                    "https://push.apple.com.evil.example/x", "http://fcm.googleapis.com/x",
+                    "https://fcm.googleapis.com:8443/x"):
+            self.assertFalse(webpush.valid_endpoint(bad), bad)
+
+    def test_csv_export_neutralizes_formulas(self):
+        self.assertEqual(crm._cell('=HYPERLINK("http://x","klick")'), '\'=HYPERLINK("http://x","klick")')
+        self.assertEqual(crm._cell("@SUM(A1)"), "'@SUM(A1)")
+        self.assertEqual(crm._cell("Tischlerei"), "Tischlerei")
+        self.assertEqual(crm._cell(2.5), "2,5")
+
+    def test_peer_must_be_public(self):
+        class Sock:
+            def __init__(self, ip):
+                self.ip, self.closed = ip, False
+
+            def getpeername(self):
+                return (self.ip, 443)
+
+            def close(self):
+                self.closed = True
+        with mock.patch.object(finder, "ALLOW_PRIVATE", False):
+            sock = Sock("192.168.178.20")
+            with self.assertRaises(PermissionError):
+                finder._check_peer(sock)
+            self.assertTrue(sock.closed)
+            finder._check_peer(Sock("93.184.216.34"))  # öffentlich: in Ordnung
+
+    def test_headers(self):
+        client = app.test_client()
+        r = client.get("/login")
+        self.assertIn("script-src 'self'", r.headers["Content-Security-Policy"])
+        self.assertEqual(r.headers["X-Frame-Options"], "DENY")
+        for tpl in Path(__file__).resolve().parent.parent.glob("templates/*.html"):
+            html = tpl.read_text(encoding="utf-8")
+            self.assertNotRegex(html, r"<script>|\son[a-z]+=\"", tpl.name)  # keine Inline-Skripte (CSP)
+
+
 class NicheTest(unittest.TestCase):
     def setUp(self):
         self.c = leaddb.connect(os.path.join(tempfile.mkdtemp(), "n.db"))
@@ -967,6 +1016,10 @@ class ViewsTest(unittest.TestCase):
                 self.assertLess(self.client.get(p["u"]).status_code, 400, p["u"])
         leads = self.client.get("/suche.json?q=Tischlerei Hansen").get_json()["leads"]
         self.assertTrue(leads and leads[0]["u"].startswith("/leads/"))
+        r = self.client.post("/push/subscribe", data={"subscription": json.dumps(
+            {"endpoint": "https://192.168.1.1:8006/x", "keys": {"p256dh": "a", "auth": "b"}})},
+            headers={"X-CSRF-Token": self.csrf})
+        self.assertEqual(r.status_code, 400)  # Abo auf ein Gerät im eigenen Netz: abgelehnt
         # Demo-Daten: ein Betrieb ist zum Nachfassen fällig
         due = c.execute("SELECT id FROM leads WHERE name LIKE 'Steuerbüro%'").fetchone()[0]
         self.assertIn("Erinnerung schreiben lassen", self.client.get(f"/leads/{due}").get_data(as_text=True))
