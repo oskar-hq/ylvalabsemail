@@ -17,12 +17,14 @@ import json
 import logging
 import random
 import re
+import smtplib
+import socket
 import ssl
 import threading
 import time
 from datetime import datetime, timedelta
 from email.message import EmailMessage
-from email.utils import formataddr, formatdate, make_msgid, parseaddr
+from email.utils import formataddr, formatdate, make_msgid, parseaddr, parsedate_to_datetime
 from urllib.parse import urlparse
 
 from . import ai, crm, emailbuild, finder, leaddb, mailbox, niches, regions, schedule, scoring, webpush
@@ -770,8 +772,8 @@ def _match_lead(c, msg):
     sender = parseaddr(msg.get("From", ""))[1].lower()
     if not sender:
         return None
-    row = c.execute("SELECT id FROM leads WHERE lower(email)=? AND status IN ('versendet','beantwortet') "
-                    "ORDER BY sent_at DESC LIMIT 1", (sender,)).fetchone()
+    row = c.execute("SELECT id FROM leads WHERE lower(email)=? ORDER BY status IN ('versendet','beantwortet') DESC, "
+                    "sent_at DESC, id DESC LIMIT 1", (sender,)).fetchone()
     if row:
         return row["id"]
     domain = _domain(sender)
@@ -789,12 +791,64 @@ INTEREST_TITLES = {"qualified": "Interesse!", "mittel": "Antwort (mittel)", "kei
                    "abmeldung": "Möchte keine Nachrichten", "automatisch": "Automatische Antwort"}
 
 
+INBOX_START_DAYS = 3  # beim ersten Abruf: Mails der letzten drei Tage übernehmen, ältere nicht
+_inbox_lock = threading.Lock()
+BULK_SENDER = re.compile(r"^(?:no-?reply|do-?not-?reply|mailer-daemon|postmaster|bounces?|newsletter|news|"
+                         r"notifications?|info-?mail)\b", re.I)
+
+
+def _is_bulk(msg):
+    """Newsletter, Rundmails, Zustellfehler und automatische Mails von Unbekannten gehören nicht ins Postfach."""
+    if msg.get("List-Unsubscribe") or msg.get("List-Id"):
+        return True
+    if (msg.get("Precedence") or "").strip().lower() in ("bulk", "list", "junk"):
+        return True
+    if (msg.get("Auto-Submitted") or "no").strip().lower() != "no":
+        return True
+    local = parseaddr(msg.get("From", ""))[1].split("@")[0]
+    return bool(BULK_SENDER.match(local))
+
+
+def _contact_for(c, msg):
+    """Unbekannter Absender: als Kontakt anlegen (nicht in der Pipeline, nicht in den Leads-Reitern)."""
+    name, addr = parseaddr(msg.get("From", ""))
+    addr = addr.lower()
+    row = c.execute("SELECT id FROM leads WHERE lower(email)=? ORDER BY id DESC LIMIT 1", (addr,)).fetchone()
+    if row:
+        return row["id"]
+    now = leaddb.now()
+    cur = c.execute(
+        "INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, category_label, "
+        "email, contact_name, status, fit_reason) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (f"mail:{addr}", now, now, name or addr, "sonstige", "", "Kontakt", addr, name or None, "kontakt",
+         "Hat uns geschrieben."))
+    c.commit()
+    if cur.rowcount:
+        leaddb.add_event(c, cur.lastrowid, "status", "Hat uns eine Mail geschrieben, als Kontakt angelegt.", author="Postfach")
+        return cur.lastrowid
+    return c.execute("SELECT id FROM leads WHERE source_id=?", (f"mail:{addr}",)).fetchone()["id"]
+
+
 def check_inbox(c):
-    first = c.execute("SELECT MIN(sent_at) FROM leads WHERE sent_at IS NOT NULL AND channel='email'").fetchone()[0]
-    if not first:
+    """Neue Mails aus dem Akquise-Postfach holen. Antworten von Betrieben landen in ihrem Gespräch, Mails von
+    Unbekannten als neuer Kontakt im Postfach. Newsletter und automatische Mails bleiben draußen."""
+    if not _inbox_lock.acquire(timeout=60):
         return 0
+    try:
+        return _check_inbox(c)
+    finally:
+        _inbox_lock.release()
+
+
+def _check_inbox(c):
+    state = leaddb.kv_get(c, "inbox_state") or {}
+    if not state.get("start"):
+        state["start"] = (datetime.now() - timedelta(days=INBOX_START_DAYS)).isoformat(timespec="seconds")
+        leaddb.kv_set(c, "inbox_state", state)
+    start = datetime.fromisoformat(state["start"])
+    since = max(start, datetime.now() - timedelta(days=30)) - timedelta(days=1)
+    own = (outreach_address() or "").lower()
     set_activity("Liest das Postfach …")
-    since = datetime.fromisoformat(first) - timedelta(days=1)
     imap = _imap()
     handled = 0
     try:
@@ -803,14 +857,13 @@ def check_inbox(c):
         for num in (data[0] or b"").split()[-300:]:
             _, header = imap.fetch(num, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
             mid_raw = next((p[1] for p in header if isinstance(p, tuple)), b"")
-            mid = email.message_from_bytes(mid_raw).get("Message-ID", "").strip() or f"num:{num.decode()}:{first}"
+            mid = email.message_from_bytes(mid_raw).get("Message-ID", "").strip() or f"num:{num.decode()}:{state['start']}"
             if c.execute("SELECT 1 FROM inbox_seen WHERE message_id=?", (mid,)).fetchone():
                 continue
             _, parts = imap.fetch(num, "(BODY.PEEK[])")
             raw = next((p[1] for p in parts if isinstance(p, tuple)), b"")
             msg = email.message_from_bytes(raw, policy=email.policy.default)
-            lead_id = _match_lead(c, msg)
-            if lead_id and handle_reply(c, lead_id, msg, mid):
+            if _take(c, msg, mid, start, own):
                 handled += 1
             c.execute("INSERT OR IGNORE INTO inbox_seen (message_id, at) VALUES (?,?)", (mid, leaddb.now()))
             c.commit()
@@ -820,6 +873,25 @@ def check_inbox(c):
         except Exception:
             pass
     return handled
+
+
+def _take(c, msg, mid, start, own):
+    """Eine neue Mail einsortieren. Gibt True zurück, wenn sie im Postfach gelandet ist."""
+    sender = parseaddr(msg.get("From", ""))[1].lower()
+    if not sender or sender == own or str(msg.get("Subject", "")).startswith("[Leads]"):
+        return False  # eigene Mails und unsere Benachrichtigungen, sonst schreibt sich die App selbst
+    try:
+        sent = parsedate_to_datetime(msg.get("Date")).astimezone().replace(tzinfo=None)
+    except (TypeError, ValueError):
+        sent = None
+    if sent and sent < start:
+        return False  # älter als der erste Abruf: steht schon in eurem Mailprogramm
+    lead_id = _match_lead(c, msg)
+    if not lead_id:
+        if _is_bulk(msg):
+            return False
+        lead_id = _contact_for(c, msg)
+    return bool(handle_reply(c, lead_id, msg, mid))
 
 
 def handle_reply(c, lead_id, msg, message_id=None):
@@ -832,11 +904,12 @@ def handle_reply(c, lead_id, msg, message_id=None):
     mailbox.add(c, lead_id, "in", text or "(leere Nachricht)", subject=subject, from_addr=addr, from_name=name,
                 message_id=(message_id or msg.get("Message-ID") or "").strip() or None,
                 in_reply_to=(msg.get("In-Reply-To") or "").strip() or None, read=False)
-    if lead["status"] in ("beantwortet", "gesperrt") or lead.get("interest"):  # Gespräch läuft schon
+    if lead["status"] in ("beantwortet", "gesperrt", "kontakt") or lead.get("interest"):  # Gespräch läuft schon
         leaddb.update_lead(c, lead_id, unread=1)
         leaddb.add_event(c, lead_id, "reply", text or "(leere Nachricht)", author=name or addr,
                          meta={"from": addr, "subject": subject, "date": str(msg.get("Date", ""))})
-        notify(c, f"Neue Antwort von {lead['name']}", (text or subject)[:220], f"/crm/postfach/{lead_id}")
+        notify(c, f"Neue Mail von {lead['name']}" if lead["status"] == "kontakt" else f"Neue Antwort von {lead['name']}",
+               (text or subject)[:220], f"/crm/postfach/{lead_id}")
         return True
     leaddb.add_event(c, lead_id, "reply", text or "(leere Nachricht)", author=name or addr,
                      meta={"from": addr, "subject": subject, "date": str(msg.get("Date", ""))})
@@ -889,14 +962,24 @@ def send_reply(c, lead, text, sent_by, subject=None):
         msg["References"] = " ".join(dict.fromkeys(reversed(refs)))
     signature = "\n".join(x for x in ("Viele Grüße", S("LEADS_SENDER_NAME"), S("DEFAULT_FOOTER")) if x)
     msg.set_content(f"{text.strip()}\n\n{signature}{mailbox.quote(last)}")
-    smtp = CFG["smtp_connect"](S("OUTREACH_USER"), S("OUTREACH_PASSWORD"))
+    _deliver(msg)
+    record_reply(c, lead, text, sent_by, msg["Subject"], to, msg["Message-ID"], refs[0] if refs else None)
+    return msg
+
+
+def _deliver(msg):
+    """Über das Akquise-Postfach verschicken und eine Kopie in „Gesendet“ ablegen. Fehler mit klarer Meldung."""
     try:
-        smtp.send_message(msg)
-    finally:
+        smtp = CFG["smtp_connect"](S("OUTREACH_USER"), S("OUTREACH_PASSWORD"))
         try:
-            smtp.quit()
-        except Exception:
-            pass
+            smtp.send_message(msg)
+        finally:
+            try:
+                smtp.quit()
+            except Exception:
+                pass
+    except Exception as exc:
+        raise RuntimeError(mail_error(exc)) from exc
     if S("IMAP_HOST"):
         try:
             imap = _imap()
@@ -906,16 +989,32 @@ def send_reply(c, lead, text, sent_by, subject=None):
                 imap.logout()
         except Exception as exc:
             log.warning("Ablage im Ordner „Gesendet“ fehlgeschlagen: %s", exc)
-    record_reply(c, lead, text, sent_by, msg["Subject"], to, msg["Message-ID"], refs[0] if refs else None)
+
+
+def send_new(c, lead, to, subject, text, sent_by):
+    """Neue Mail aus dem Postfach (nicht als Antwort): schlicht, mit Unterschrift, unter dem Namen von Ylva Labs."""
+    if not outreach_configured():
+        raise RuntimeError("Das Akquise-Postfach ist nicht eingerichtet (Einstellungen → Postfach und Versand).")
+    msg = EmailMessage()
+    msg["From"] = formataddr((S("LEADS_SENDER_NAME") or S("ORG_NAME"), outreach_address()))
+    msg["To"] = formataddr((lead.get("contact_name") or "", to))
+    msg["Subject"] = subject
+    msg["Date"] = formatdate(localtime=True)
+    msg["Message-ID"] = make_msgid(domain=_domain(outreach_address()) or None)
+    signature = "\n".join(x for x in ("Viele Grüße", S("LEADS_SENDER_NAME"), S("DEFAULT_FOOTER")) if x)
+    msg.set_content(f"{text.strip()}\n\n{signature}")
+    _deliver(msg)
+    record_reply(c, lead, text, sent_by, subject, to, msg["Message-ID"], what="Neue Mail aus dem Postfach")
     return msg
 
 
-def record_reply(c, lead, text, sent_by, subject, to, message_id=None, in_reply_to=None, note=""):
+def record_reply(c, lead, text, sent_by, subject, to, message_id=None, in_reply_to=None, note="",
+                 what="Im Postfach geantwortet"):
     mailbox.add(c, lead["id"], "out", text.strip(), subject=subject, from_addr=outreach_address(), to_addr=to,
                 message_id=message_id, in_reply_to=in_reply_to, sent_by=sent_by)
     mailbox.mark_read(c, lead["id"])
     leaddb.update_lead(c, lead["id"], unread=0)
-    leaddb.add_event(c, lead["id"], "sent", f"Im Postfach geantwortet an {to}.{note}", author=sent_by)
+    leaddb.add_event(c, lead["id"], "sent", f"{what} an {to}.{note}", author=sent_by)
 
 # ---------------------------------------------------------------- Lernen
 
@@ -944,6 +1043,33 @@ def wake():
     _wake.set()
 
 
+def mail_error(exc):
+    """Verständliche Meldung, wenn Senden oder Abrufen am Postfach scheitert."""
+    text = str(exc)
+    if isinstance(exc, smtplib.SMTPAuthenticationError) or "AUTHENTICATIONFAILED" in text or \
+            "Password required" in text or "authentication failed" in text.lower():
+        return ("Strato lehnt die Anmeldung ab: Benutzer oder Passwort des Akquise-Postfachs stimmen nicht. "
+                "Bitte unter Einstellungen → Postfach und Versand → Akquise-Postfach neu eintragen.")
+    if isinstance(exc, (socket.timeout, TimeoutError, ConnectionError, socket.gaierror, ssl.SSLError)):
+        return f"Der Mailserver ist nicht erreichbar ({exc.__class__.__name__}). Server und Port in den Einstellungen prüfen."
+    if isinstance(exc, smtplib.SMTPRecipientsRefused):
+        return "Die Empfängeradresse wurde abgelehnt. Bitte prüfen."
+    return f"{exc.__class__.__name__}: {text}"
+
+
+def fetch_inbox(c):
+    """Postfach abrufen und das Ergebnis merken (für den Hinweis im Postfach und an der Glocke)."""
+    try:
+        n = check_inbox(c)
+        leaddb.kv_set(c, "inbox_status", {"at": leaddb.now(), "ok": True, "neu": n})
+        return n, None
+    except Exception as exc:
+        log.warning("Postfach abrufen fehlgeschlagen: %s", exc)
+        msg = mail_error(exc)
+        leaddb.kv_set(c, "inbox_status", {"at": leaddb.now(), "ok": False, "error": msg})
+        return 0, msg
+
+
 def tick():
     with _job_lock:
         c = conn()
@@ -951,9 +1077,10 @@ def tick():
             # Antworten lesen ist kostenlos, nur das Einordnen einer echten Antwort kostet ein paar Cent
             if outreach_configured() and S("IMAP_HOST"):
                 last = leaddb.kv_get(c, "last_inbox", 0)
-                if time.time() - last > S("INBOX_MINUTES") * 60:
+                if time.time() - last > S("INBOX_MINUTES") * 60 or leaddb.kv_get(c, "request:inbox"):
                     leaddb.kv_set(c, "last_inbox", time.time())
-                    check_inbox(c)
+                    leaddb.kv_set(c, "request:inbox", False)
+                    fetch_inbox(c)
             notify_due(c)
             notify_tasks(c)
             start_scheduled(c)
