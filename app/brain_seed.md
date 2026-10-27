@@ -75,7 +75,7 @@ Typische Aufgaben, bei denen wir helfen können: {probleme}. {beispiel}
 
 Ein kleines Rechenbeispiel: {rechenbeispiel}
 
-Vielleicht frisst bei Ihnen aber auch etwas ganz anderes Zeit. Dann erzählen Sie uns gern davon, wir schauen es uns unverbindlich an. Für unsere eigene Akquise haben wir uns zum Beispiel ein Werkzeug gebaut, das passende Betriebe findet und Antworten vorsortiert. Das Entwicklungsrisiko tragen wir, und lohnt es sich für Sie nicht, sagen wir das ehrlich.
+Vielleicht frisst bei Ihnen aber auch etwas ganz anderes Zeit. Dann erzählen Sie uns gern davon, wir schauen es uns unverbindlich an. Für unsere eigene Akquise haben wir uns zum Beispiel ein Werkzeug gebaut, das passende Betriebe findet, Anschreiben vorbereitet und Antworten vorsortiert. So etwas bauen wir auch für andere: Wir helfen Ihnen, die Gewinnung und Ansprache neuer Kunden zu automatisieren. Das Entwicklungsrisiko tragen wir, und lohnt es sich für Sie nicht, sagen wir das ehrlich.
 
 Hätten Sie Lust auf ein kurzes Gespräch, 30 Minuten am Telefon oder bei Ihnen vor Ort?
 

@@ -502,10 +502,35 @@ def upgrade_template(c):
     return leaddb.save_brain(c, "".join(out), "Update", "Neue Vorlage: erst vorstellen, Beispiele, Rechenbeispiel")
 
 
+OLD_OUTREACH_SENTENCE = ("Für unsere eigene Akquise haben wir uns zum Beispiel ein Werkzeug gebaut, das passende Betriebe "
+                         "findet und Antworten vorsortiert.")
+NEW_OUTREACH_SENTENCE = ("Für unsere eigene Akquise haben wir uns zum Beispiel ein Werkzeug gebaut, das passende Betriebe "
+                         "findet, Anschreiben vorbereitet und Antworten vorsortiert. So etwas bauen wir auch für andere: "
+                         "Wir helfen Ihnen, die Gewinnung und Ansprache neuer Kunden zu automatisieren.")
+
+
+def upgrade_outreach_sentence(c):
+    """Einmalig: in der Vorlage (Gehirn und eigene Vorlagen) den Satz zum Akquise-Werkzeug ergänzen, dass wir
+    Kundenakquise auch für andere automatisieren. Nur dieser eine Satz wird ersetzt, der Rest bleibt."""
+    if leaddb.kv_get(c, "template_v4"):
+        return False
+    leaddb.kv_set(c, "template_v4", True)
+    for m in team.members(c):
+        own = team.settings(c, m["key"])["vorlage"] or ""
+        if OLD_OUTREACH_SENTENCE in own:
+            team.save_settings(c, m["key"], vorlage=own.replace(OLD_OUTREACH_SENTENCE, NEW_OUTREACH_SENTENCE))
+    current = leaddb.brain(c)
+    if OLD_OUTREACH_SENTENCE not in current:
+        return False
+    return leaddb.save_brain(c, current.replace(OLD_OUTREACH_SENTENCE, NEW_OUTREACH_SENTENCE), "Update",
+                             "Vorlage: wir automatisieren auch Kundenakquise")
+
+
 def template_text(c, member=None):
     """Die Vorlage als Text („Betreff: …“, „Anrede: …“, Leerzeile, Text): die eigene der Person, sonst die aus
     dem Gehirn (Abschnitt „Vorlage (ohne KI)“)."""
     upgrade_template(c)
+    upgrade_outreach_sentence(c)
     own = (team.settings(c, member)["vorlage"] if member else "") or ""
     if own.strip():
         return own.strip()
