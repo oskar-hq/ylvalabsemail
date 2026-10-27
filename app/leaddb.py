@@ -32,7 +32,7 @@ STATUS_LABELS = {
     "kandidat": "Gefunden", "recherche": "Wird bewertet", "passt": "Passt",
     "vorgeprueft": "Vorgeprüft", "analysiert": "Analysiert", "entwurf": "Zur Prüfung",
     "versendet": "Versendet", "beantwortet": "Beantwortet", "aussortiert": "Aussortiert",
-    "gesperrt": "Gesperrt", "fehler": "Fehler",
+    "gesperrt": "Gesperrt", "fehler": "Fehler", "kontakt": "Kontakt (per Mail)",
 }
 INTEREST_LABELS = {"qualified": "Qualified", "mittel": "Mittel", "kein_interesse": "Kein Interesse"}
 

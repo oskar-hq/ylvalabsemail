@@ -182,7 +182,92 @@ def load_borders():
 @login_required
 def inbox():
     return render_template("inbox.html", account=g.account, groups=mailbox.grouped(db()), moods=mailbox.MOODS,
+                           inbox_status=leaddb.kv_get(db(), "inbox_status"), ready=_mail_ready(),
                            st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+
+
+def _mail_ready():
+    """Kann die App Mails schicken und abrufen? None = ja, sonst was fehlt."""
+    if not agent.outreach_configured():
+        return "Das Akquise-Postfach ist noch nicht eingetragen."
+    if not SETTINGS["IMAP_HOST"]:
+        return "Der Posteingang (IMAP) fehlt, Antworten kommen dann nicht in die App."
+    return None
+
+
+@bp.get("/crm/postfach/neu.json")
+@login_required
+def inbox_news():
+    """Für die Glocke oben: ungelesene Gespräche und ob das Abrufen klappt."""
+    c = db()
+    items = [{"name": cv["name"], "n": cv["unread_msgs"], "at": cv["last_at"],
+              "text": (cv["last_text"] or "").replace("\n", " ")[:120],
+              "url": f"/crm/postfach/{cv['id']}"} for cv in mailbox.conversations(c) if cv["unread_msgs"]][:8]
+    status = leaddb.kv_get(c, "inbox_status") or {}
+    return jsonify(count=mailbox.unread_count(c), items=items,
+                   error=None if status.get("ok", True) else status.get("error"), checked=status.get("at"))
+
+
+@bp.post("/crm/postfach/abrufen")
+@login_required
+def inbox_fetch():
+    """„Jetzt abrufen“: Postfach sofort lesen statt auf die nächsten Minuten zu warten."""
+    if g.account.get("demo"):
+        return jsonify(ok=True, neu=0, message="Demo: Es wird kein echtes Postfach gelesen.")
+    missing = _mail_ready()
+    if missing:
+        return jsonify(error=missing), 400
+    n, error = agent.fetch_inbox(db())
+    if error:
+        return jsonify(error=error), 502
+    return jsonify(ok=True, neu=n, message=f"{n} neue Mails." if n != 1 else "1 neue Mail.")
+
+
+@bp.route("/crm/postfach/schreiben", methods=["GET", "POST"])
+@login_required
+def compose_mail():
+    """Neue Mail an irgendwen, unter dem Namen von Ylva Labs aus dem Akquise-Postfach."""
+    c = db()
+    if request.method == "GET":
+        lead = None
+        if request.args.get("lead", "").isdigit():
+            lead = lead_or_404(int(request.args["lead"]))
+        return render_template("mail_new.html", account=g.account, lead=lead, ready=_mail_ready(),
+                               sender=agent.outreach_address(), sender_name=SETTINGS["LEADS_SENDER_NAME"] or SETTINGS["ORG_NAME"],
+                               st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+    to = request.form.get("to", "").strip().lower()
+    subject = request.form.get("subject", "").strip()
+    text = request.form.get("text", "").strip()
+    if not re.fullmatch(r"[^@\s,;<>]+@[^@\s,;<>]+\.[^@\s,;<>]+", to):
+        return jsonify(error="Bitte eine gültige E-Mail-Adresse eintragen (eine Adresse)."), 400
+    if not subject or not text:
+        return jsonify(error="Bitte Betreff und Text schreiben."), 400
+    row = c.execute("SELECT id FROM leads WHERE lower(email)=? ORDER BY id DESC LIMIT 1", (to,)).fetchone()
+    if row:
+        lead = leaddb.get_lead(c, row["id"])
+        if lead["status"] != "kontakt":
+            ok, why = crm.may_email(lead, SETTINGS["OUTREACH_EMAIL"])
+            if not ok:
+                return jsonify(error=why), 400
+    else:
+        now = leaddb.now()
+        cur = c.execute("INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, "
+                        "category_label, email, status, fit_reason) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        (f"mail:{to}", now, now, request.form.get("name", "").strip() or to, "sonstige", "", "Kontakt",
+                         to, "kontakt", "Von euch angeschrieben."))
+        c.commit()
+        lead_id = cur.lastrowid or c.execute("SELECT id FROM leads WHERE source_id=?", (f"mail:{to}",)).fetchone()["id"]
+        lead = leaddb.get_lead(c, lead_id)
+    if lead["status"] == "gesperrt":
+        return jsonify(error="Diese Adresse möchte keine Nachrichten mehr bekommen."), 400
+    if g.account.get("demo"):
+        agent.record_reply(c, lead, text, who(), subject, to, note=" Demo: nicht verschickt.", what="Neue Mail aus dem Postfach")
+        return jsonify(ok=True, url=f"/crm/postfach/{lead['id']}")
+    try:
+        agent.send_new(c, lead, to, subject, text, who())
+    except Exception as exc:
+        return jsonify(error=str(exc)), 502
+    return jsonify(ok=True, url=f"/crm/postfach/{lead['id']}")
 
 
 @bp.get("/crm/postfach/<int:lead_id>")
@@ -212,6 +297,10 @@ def reply(lead_id):
     if lead["status"] == "gesperrt":
         return jsonify(error="Dieser Betrieb möchte keine Nachrichten mehr bekommen."), 400
     subject = request.form.get("subject", "").strip() or None
+    if not mailbox.last_incoming(db(), lead_id) and lead["status"] != "kontakt":
+        ok, why = crm.may_email(lead, SETTINGS["OUTREACH_EMAIL"])  # noch keine Antwort: Erstkontakt-Regel gilt
+        if not ok:
+            return jsonify(error=why), 400
     if g.account.get("demo"):
         last = mailbox.last_incoming(db(), lead_id)
         agent.record_reply(db(), lead, text, who(), subject or "Re: …", (last or {}).get("from_addr") or lead["email"] or "",

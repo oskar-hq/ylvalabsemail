@@ -15,11 +15,21 @@
 {% block content %}
 <main class="page narrow">
   <a class="back" href="{{ url_for('crm.board') }}">‹ CRM</a>
-  <h1 class="title">Postfach</h1>
-  <p class="muted small">Antworten der Betriebe aus dem Akquise-Postfach. Antworten Sie hier direkt, der Verlauf bleibt zusammen.
+  <div class="inbox-head">
+    <h1 class="title">Postfach</h1>
+    <span class="inbox-actions">
+      <button class="btn small" type="button" id="inboxFetch" {{ 'disabled' if ready and not account.demo }}>Jetzt abrufen</button>
+      <a class="btn small primary" href="{{ url_for('crm.compose_mail') }}">Neue Mail</a>
+    </span>
+  </div>
+  {% if ready %}<p class="note warn small">{{ ready }} Senden und Empfangen gehen erst danach: <a href="{{ url_for('settings.page', gid='postfach', pid='zugang') }}">Einstellungen → Akquise-Postfach</a>.</p>
+  {% elif inbox_status and not inbox_status.ok %}<p class="note err small">Das Postfach konnte zuletzt nicht abgerufen werden ({{ inbox_status.at|kurzdatum }}): {{ inbox_status.error }} <a href="{{ url_for('leads.system') }}">Systemcheck →</a></p>
+  {% elif inbox_status %}<p class="muted small">Zuletzt abgerufen {{ inbox_status.at|kurzdatum }}. Neue Mails kommen alle paar Minuten von selbst.</p>{% endif %}
+  <p class="muted small" id="inboxMsg" hidden></p>
+  <p class="muted small">Alle Mails an das Akquise-Postfach, nach Absender. Antworten Sie hier direkt, der Verlauf bleibt zusammen. Newsletter und automatische Mails bleiben draußen.
     Der Punkt zeigt, wie es läuft: <i class="mood mood-gut"></i> gut <i class="mood mood-mittel"></i> mittel <i class="mood mood-schlecht"></i> eher schlecht <i class="mood mood-neutral"></i> neutral.</p>
   {% if not groups.offen and not groups.gesendet %}
-  <p class="note small">Noch keine Antworten. Sobald ein Betrieb auf eine Mail antwortet, steht er hier.{% if st.warnings %} Prüfen Sie dafür das Akquise-Postfach unter Einstellungen.{% endif %}</p>
+  <p class="note small">Noch keine Mails. Sobald jemand an das Akquise-Postfach schreibt oder auf eine Mail antwortet, steht es hier.{% if st.warnings %} Prüfen Sie dafür das Akquise-Postfach unter Einstellungen.{% endif %}</p>
   {% endif %}
 
   <section class="inbox-group">
@@ -34,3 +44,4 @@
   </section>
 </main>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='inbox.js') }}"></script>{% endblock %}

@@ -388,6 +388,81 @@ class AgentTest(unittest.TestCase):
         leaddb.update_lead(self.c, lead_id, mood="mittel")  # von Hand gesetzt geht vor
         self.assertEqual(mailbox.mood(leaddb.get_lead(self.c, lead_id), None)[0], "mittel")
 
+    def test_inbox_takes_all_mail_but_not_bulk(self):
+        from email.utils import format_datetime
+        from app import mailbox
+
+        def mail(frm, subject, text, mid, **headers):
+            m = EmailMessage()
+            m["From"], m["Subject"], m["Message-ID"] = frm, subject, mid
+            m["Date"] = format_datetime(datetime.now().astimezone())
+            for k, v in headers.items():
+                m[k.replace("_", "-")] = v
+            m.set_content(text)
+            return m.as_bytes()
+
+        old = EmailMessage()
+        old["From"], old["Subject"], old["Message-ID"] = "alt@kunde.de", "Alt", "<old@x>"
+        old["Date"] = "Mon, 01 Jan 2024 10:00:00 +0100"
+        old.set_content("Uralt")
+        inbox = [mail("Lisa Meier <lisa@partner.de>", "Kooperation?", "Hallo, wollen wir reden?", "<a@x>"),
+                 mail("Shop <newsletter@shop.de>", "Angebote", "Rabatt", "<b@x>", List_Unsubscribe="<mailto:x@y>"),
+                 mail("k@ylvalabs.de", "[Leads] Neue Antwort", "Benachrichtigung", "<c@x>"),
+                 mail("Abwesend <lisa2@partner.de>", "Abwesend", "Bin weg", "<d@x>", Auto_Submitted="auto-replied"),
+                 old.as_bytes()]
+
+        class Imap:
+            def select(self, *a, **k):
+                return "OK", [b"5"]
+
+            def search(self, *a):
+                return "OK", [b" ".join(str(i + 1).encode() for i in range(len(inbox)))]
+
+            def fetch(self, num, what):
+                raw = inbox[int(num) - 1]
+                if "HEADER" in what:
+                    mid = email_mod.message_from_bytes(raw)["Message-ID"]
+                    return "OK", [(b"x", f"Message-ID: {mid}\r\n\r\n".encode())]
+                return "OK", [(b"x", raw)]
+
+            def logout(self):
+                pass
+        import email as email_mod
+        settings = dict(agent.CFG["settings"], OUTREACH_USER="k@ylvalabs.de", OUTREACH_PASSWORD="x", IMAP_HOST="imap.x")
+        with mock.patch.dict(agent.CFG, {"settings": settings}), mock.patch.object(agent, "_imap", return_value=Imap()):
+            self.assertEqual(agent.check_inbox(self.c), 1)  # nur Lisa: kein Newsletter, keine eigene, keine Abwesenheit
+            self.assertEqual(agent.check_inbox(self.c), 0)  # schon gesehen
+        contact = leaddb.get_lead(self.c, self.c.execute("SELECT id FROM leads WHERE email='lisa@partner.de'").fetchone()[0])
+        self.assertEqual((contact["status"], contact["name"], contact["stage"]), ("kontakt", "Lisa Meier", None))
+        self.assertEqual(mailbox.unread_count(self.c), 1)
+        in_tabs = {r["id"] for k, _, _ in leaddb.TABS for r in leaddb.tab_leads(self.c, k)}
+        self.assertNotIn(contact["id"], in_tabs)  # Kontakte stehen im Postfach, nicht bei den Leads
+        self.notify.assert_called()
+        self.assertIn("Neue Mail von Lisa Meier", self.notify.call_args[0][1])
+        # Antwort von uns auf den Kontakt (kein Erstkontakt, die Person hat geschrieben)
+        sent = []
+        smtp = mock.Mock(send_message=lambda m: sent.append(m))
+        with mock.patch.dict(agent.CFG, {"settings": dict(settings, IMAP_HOST=""), "smtp_connect": lambda u, p: smtp}):
+            agent.send_reply(self.c, contact, "Sehr gern!", "oskar")
+            agent.send_new(self.c, contact, "lisa@partner.de", "Unterlagen", "Anbei die Infos.", "oskar")
+        self.assertEqual(sent[0]["To"], "Lisa Meier <lisa@partner.de>")
+        self.assertEqual((sent[1]["Subject"], sent[1]["From"].addresses[0].addr_spec), ("Unterlagen", "k@ylvalabs.de"))
+        self.assertIn("Viele Grüße", sent[1].get_content())
+
+    def test_mail_errors_are_readable(self):
+        import smtplib
+        self.assertIn("Passwort", agent.mail_error(smtplib.SMTPAuthenticationError(535, b"wrong user/password")))
+        self.assertIn("Passwort", agent.mail_error(Exception("LOGIN command error: BAD [CLIENTBUG] (Password required)")))
+        self.assertIn("nicht erreichbar", agent.mail_error(ConnectionRefusedError("refused")))
+        settings = dict(agent.CFG["settings"], OUTREACH_USER="k@ylvalabs.de", OUTREACH_PASSWORD="x", IMAP_HOST="")
+
+        def fail(u, p):
+            raise smtplib.SMTPAuthenticationError(535, b"no")
+        lead = leaddb.get_lead(self.c, self.add("Fehler", email="a@b.de", status="kontakt"))
+        with mock.patch.dict(agent.CFG, {"settings": settings, "smtp_connect": fail}):
+            with self.assertRaisesRegex(RuntimeError, "Akquise-Postfach"):
+                agent.send_new(self.c, lead, "a@b.de", "Hallo", "Text", "oskar")
+
     def test_boundaries_loaded_once_and_assigned(self):
         geo = {k: {"name": n, "rings": [[[lat - 0.05, lon - 0.05], [lat - 0.05, lon + 0.05], [lat + 0.05, lon + 0.05],
                                          [lat - 0.05, lon - 0.05]]]} for k, (n, lat, lon) in regions.KREISE.items()}
@@ -1016,6 +1091,25 @@ class ViewsTest(unittest.TestCase):
                 self.assertLess(self.client.get(p["u"]).status_code, 400, p["u"])
         leads = self.client.get("/suche.json?q=Tischlerei Hansen").get_json()["leads"]
         self.assertTrue(leads and leads[0]["u"].startswith("/leads/"))
+        # Postfach: neue Mail an eine unbekannte Adresse (Demo: wird nicht verschickt), Glocke, Erstkontakt-Regel
+        r = self.client.post("/crm/postfach/schreiben", data={"to": "neu@partner.example", "subject": "Hallo",
+                                                             "text": "Kurze Frage.", "name": "Neue Partnerin"},
+                             headers={"X-CSRF-Token": self.csrf})
+        self.assertTrue(r.get_json()["ok"])
+        cid = c.execute("SELECT id FROM leads WHERE email='neu@partner.example'").fetchone()[0]
+        self.assertEqual(leaddb.get_lead(c, cid)["status"], "kontakt")
+        self.assertIn("Kurze Frage.", self.client.get(r.get_json()["url"]).get_data(as_text=True))
+        prospect = c.execute("SELECT id, email FROM leads WHERE status='passt' AND email IS NOT NULL LIMIT 1").fetchone()
+        if prospect:
+            r = self.client.post("/crm/postfach/schreiben", data={"to": prospect["email"], "subject": "x", "text": "y"},
+                                 headers={"X-CSRF-Token": self.csrf})
+            self.assertEqual(r.status_code, 400)  # Betrieb hat nie geschrieben: Erstkontakt per Mail ist aus
+            self.assertIn("OUTREACH_EMAIL", r.get_json()["error"])
+        news = self.client.get("/crm/postfach/neu.json").get_json()
+        self.assertIn("count", news)
+        self.assertIn('id="bellBtn"', self.client.get("/crm/postfach").get_data(as_text=True))
+        self.assertEqual(self.client.get("/crm/postfach/schreiben").status_code, 200)
+        self.assertTrue(self.client.post("/crm/postfach/abrufen", headers={"X-CSRF-Token": self.csrf}).get_json()["ok"])
         r = self.client.post("/push/subscribe", data={"subscription": json.dumps(
             {"endpoint": "https://192.168.1.1:8006/x", "keys": {"p256dh": "a", "auth": "b"}})},
             headers={"X-CSRF-Token": self.csrf})

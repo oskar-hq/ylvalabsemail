@@ -1,0 +1,21 @@
+{% extends "base.html" %}
+{% block title %}Neue Mail · Postfach{% endblock %}
+{% block content %}
+<main class="page narrow" id="newMail">
+  <a class="back" href="{{ url_for('crm.inbox') }}">‹ Postfach</a>
+  <h1 class="title">Neue Mail</h1>
+  {% if ready %}<p class="note warn small">{{ ready }} <a href="{{ url_for('settings.page', gid='postfach', pid='zugang') }}">Einstellungen → Akquise-Postfach</a></p>{% endif %}
+  <p class="muted small">Geht als schlichte Mail von <b>{{ sender_name }} &lt;{{ sender or 'Akquise-Postfach' }}&gt;</b> raus, mit Gruß und Unterschrift. Antworten landen hier im Postfach.{% if account.demo %} Demo: wird nicht verschickt.{% endif %}</p>
+  <form class="mail-new" id="mailNew" autocomplete="off">
+    <label class="field"><span class="sub">An</span><input type="email" name="to" required value="{{ lead.email if lead and lead.email else '' }}" placeholder="name@firma.de" inputmode="email"></label>
+    <label class="field"><span class="sub">Name <em class="muted">(optional, für neue Kontakte)</em></span><input type="text" name="name" value="{{ lead.contact_name or lead.name if lead else '' }}"></label>
+    <label class="field"><span class="sub">Betreff</span><input type="text" name="subject" required></label>
+    <label class="field"><span class="sub">Nachricht</span><textarea name="text" rows="10" required placeholder="Guten Tag …"></textarea></label>
+    <div class="reply-actions">
+      <span class="muted small">Für gestaltete Mails mit Bild oder Pixel-Band gibt es den <a href="{{ url_for('compose') }}">Mailer</a>.</span>
+      <button class="btn primary" {{ 'disabled' if ready and not account.demo }}>Senden</button>
+    </div>
+  </form>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='inbox.js') }}"></script>{% endblock %}
