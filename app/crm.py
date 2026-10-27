@@ -99,10 +99,11 @@ def profile(lead):
 
 
 def owner_sql(who, me=None):
-    """Filter nach Zuständigkeit: "alle", "meine" (mir zugeordnet oder noch niemandem) oder ein Schlüssel."""
-    if who == "meine" and me:
-        return "(l.owner = ? OR l.owner IS NULL)", [me]
-    if who and who not in ("alle", "meine"):
+    """Filter nach Zuständigkeit: "alle" (Gesamt, auch noch niemandem zugeordnete) oder der Schlüssel einer Person
+    (nur ihre). „meine“ heißt: die angemeldete Person."""
+    if who == "meine":
+        who = me
+    if who and who != "alle":
         return "l.owner = ?", [who]
     return "1", []
 
@@ -120,7 +121,7 @@ def set_owner(conn, lead_id, key, author):
 
 
 def board(conn, who="alle", me=None):
-    """Betriebe in der Pipeline, gruppiert nach Stufe, mit nächster Wiedervorlage. `who`: siehe owner_sql."""
+    """Betriebe in der Pipeline, gruppiert nach Stufe, mit nächster Wiedervorlage. `who`: "alle" oder eine Person."""
     where, args = owner_sql(who, me)
     rows = conn.execute(f"""
         SELECT l.*, (SELECT MIN(due) FROM tasks t WHERE t.lead_id = l.id AND t.done_at IS NULL) AS next_due,
@@ -172,7 +173,8 @@ def open_tasks(conn, until=None, lead_id=None, who="alle", me=None):
 
 
 def due_count(conn, me=None):
-    where, args = owner_sql("meine", me)
+    """Fällige Wiedervorlagen: ohne Person alle, sonst nur die eigenen."""
+    where, args = owner_sql(me or "alle")
     return conn.execute(f"SELECT COUNT(*) FROM tasks t JOIN leads l ON l.id = t.lead_id "
                         f"WHERE t.done_at IS NULL AND t.due <= ? AND {where}",
                         [date.today().isoformat(), *args]).fetchone()[0]

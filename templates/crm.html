@@ -22,9 +22,8 @@
   </div>
 
   <nav class="segmented owner-filter" aria-label="Wessen CRM">
-    {% if account.team %}<a href="{{ url_for('crm.board', wer='meine', ansicht=request.args.get('ansicht')) }}" class="{{ 'on' if wer == 'meine' }}">Meine</a>{% endif %}
     <a href="{{ url_for('crm.board', wer='alle', ansicht=request.args.get('ansicht')) }}" class="{{ 'on' if wer == 'alle' }}">Gesamt</a>
-    {% for k, n in people.items() %}<a href="{{ url_for('crm.board', wer=k, ansicht=request.args.get('ansicht')) }}" class="{{ 'on' if wer == k }}">{{ n.split(' ')[0] }}</a>{% endfor %}
+    {% for k, n in people.items() %}<a href="{{ url_for('crm.board', wer=k, ansicht=request.args.get('ansicht')) }}" class="{{ 'on' if wer == k }}">{{ n.split(' ')[0] }}{% if k == account.team %} <em class="you">du</em>{% endif %}</a>{% endfor %}
   </nav>
 
   {% if due %}

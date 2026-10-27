@@ -6,7 +6,7 @@
   {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if m.startswith('Nicht') else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
   <ul class="menu profile-links">
     <li><a href="{{ url_for('team.template_editor') }}"><span class="txt"><b>Meine Vorlage</b><span>Text und Design deiner Mails, mit Vorschau</span></span><span class="chev">›</span></a></li>
-    <li><a href="{{ url_for('crm.board', wer='meine') }}"><span class="txt"><b>Mein CRM</b><span>Deine Betriebe und die noch niemandem zugeordneten</span></span><span class="chev">›</span></a></li>
+    <li><a href="{{ url_for('crm.board', wer=member.key) }}"><span class="txt"><b>Mein CRM</b><span>Nur die Betriebe, für die du zuständig bist</span></span><span class="chev">›</span></a></li>
     <li><a href="{{ url_for('team.overview') }}"><span class="txt"><b>Team und Zahlen</b><span>Wer wie viele angeschrieben hat, Antworten, Kunden</span></span><span class="chev">›</span></a></li>
   </ul>
 

@@ -947,7 +947,9 @@ class TeamTest(unittest.TestCase):
         free = self.lead("C", stage="neu")
         self.lead("D", stage="kunde", owner="oskar", sent_at=leaddb.now(), replied_at=leaddb.now(), deal_eur=5000)
         ids = lambda cols: {c["id"] for col in cols for c in col[3]}
-        self.assertEqual(ids(crm.board(self.c, "meine", "finn")), {a, free})  # eigene und noch niemandem zugeordnete
+        self.assertEqual(ids(crm.board(self.c, "finn", "finn")), {a})  # nur die eigenen
+        self.assertEqual(ids(crm.board(self.c, "meine", "finn")), {a})
+        self.assertIn(free, ids(crm.board(self.c, "alle", "finn")))  # noch niemandem zugeordnet: nur im Gesamt
         self.assertEqual(len(ids(crm.board(self.c, "alle", "finn"))), 4)
         self.assertNotIn(free, ids(crm.board(self.c, "oskar", "finn")))
         crm.claim(self.c, free, "hamza")
@@ -1058,7 +1060,8 @@ class SecurityTest(unittest.TestCase):
         self.assertEqual(r.headers["Location"], "/team")
         html = client.get("/crm").get_data(as_text=True)
         self.assertIn("Finn Adams", html)
-        self.assertIn('class="on">Meine', html)  # eigenes CRM zuerst
+        self.assertIn('class="on">Finn <em class="you">du</em>', html)  # automatisch das eigene CRM
+        self.assertNotIn(">Meine<", html)
         csrf = html.split('name="csrf-token" content="')[1].split('"')[0]
         # eigenes Passwort ändern nur mit dem bisherigen
         r = client.post("/profil/passwort", data={"current": "falsch", "new": "neu-passwort-2", "again": "neu-passwort-2"},
@@ -1351,7 +1354,7 @@ class ViewsTest(unittest.TestCase):
         self.assertEqual(leaddb.tab_of(leaddb.get_lead(c, due)), "versendet")
         self.assertEqual(self.client.get("/sw.js").headers["Service-Worker-Allowed"], "/")
         # CRM
-        html = self.client.get("/crm").get_data(as_text=True)
+        html = self.client.get("/crm?wer=alle").get_data(as_text=True)  # Gesamt: auch noch niemandem zugeordnete
         self.assertIn("Pipeline.", html)
         self.assertIn("Anrufen, vormittags", html)  # Wiedervorlage von heute aus den Beispieldaten
         self.assertEqual(self.client.get("/leads/regeln").status_code, 200)
