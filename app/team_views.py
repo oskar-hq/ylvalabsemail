@@ -5,7 +5,7 @@ from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, rende
 
 from . import agent, emailbuild, leaddb, pixel, team
 from .leads_views import db, me, status_payload, who
-from .main import SETTINGS, login_required, safe_next, update_session
+from .main import SETTINGS, login_required, remember_member, safe_next, update_session
 
 bp = Blueprint("team", __name__)
 
@@ -83,7 +83,8 @@ def password():
     agent.log.info("Passwort für %s gesetzt von %s", member["name"], who())
     flash(f"Passwort für {member['name']} gespeichert." if key != me() else
           "Passwort gespeichert. Ab jetzt meldest du dich mit deinem Namen und diesem Passwort an.")
-    return redirect(url_for("team.profile"))
+    resp = redirect(url_for("team.profile"))
+    return remember_member(resp, key) if key == me() else resp
 
 
 @bp.post("/profil/einstellungen")

@@ -1152,6 +1152,47 @@ class SecurityTest(unittest.TestCase):
             c.execute("UPDATE team SET pw_hash=NULL WHERE key=?", (key,))
         c.commit()
 
+    def test_device_remembers_last_person(self):
+        from app.main import _sessions
+        client = app.test_client()
+        csrf = lambda: client.get("/login", follow_redirects=True).get_data(as_text=True) \
+            .split('name="csrf-token" content="')[1].split('"')[0]
+        c = leaddb.connect(os.path.join(TMP, "mailer.db"))
+        self.addCleanup(lambda: (c.execute("UPDATE team SET pw_hash=NULL"), c.execute("DELETE FROM remember_tokens"),
+                                 c.commit()))
+        team.set_password(c, "finn", "finn-passwort-1")
+        team.set_password(c, "hamza", "hamza-pass-1")
+        login = lambda member, pw="": client.post("/login", data={"member": member, "password": pw},
+                                                  headers={"X-CSRF-Token": csrf()})
+        self.assertEqual(login("finn").status_code, 401)  # noch nichts gemerkt: Passwort nötig
+        self.assertEqual(login("finn", "finn-passwort-1").status_code, 302)
+        cookie = client.get_cookie("ylva_geraet")
+        self.assertTrue(cookie and cookie.http_only)
+        self.assertNotIn(cookie.value, json.dumps([list(r) for r in c.execute("SELECT * FROM remember_tokens")]))
+        # Sitzung weg (Neustart, abgelaufen): weiter angemeldet, ohne Login
+        _sessions.clear()
+        self.assertEqual(client.get("/crm").status_code, 200)
+        client.post("/logout", headers={"X-CSRF-Token": csrf()})
+        html = client.get("/login").get_data(as_text=True)
+        self.assertIn("Weiter als Finn Adams", html)
+        self.assertEqual(login("finn").status_code, 302)  # ohne Passwort
+        client.post("/logout", headers={"X-CSRF-Token": csrf()})
+        self.assertEqual(login("hamza").status_code, 401)  # jemand anderes: Passwort nötig
+        self.assertEqual(login("hamza", "hamza-pass-1").status_code, 302)
+        client.post("/logout", headers={"X-CSRF-Token": csrf()})
+        self.assertEqual(login("finn").status_code, 401)  # Finn ist jetzt vergessen
+        self.assertEqual(login("hamza").status_code, 302)
+        # neues Passwort (von woanders gesetzt): gemerkte Geräte gelten nicht mehr
+        team.set_password(c, "hamza", "hamza-pass-2")
+        _sessions.clear()
+        self.assertEqual(client.get("/crm").status_code, 302)
+        self.assertEqual(login("hamza").status_code, 401)
+        # Gerät vergessen
+        self.assertEqual(login("hamza", "hamza-pass-2").status_code, 302)
+        client.post("/login/vergessen", headers={"X-CSRF-Token": csrf()})
+        self.assertIsNone(client.get_cookie("ylva_geraet"))
+        self.assertEqual(c.execute("SELECT COUNT(*) FROM remember_tokens").fetchone()[0], 0)
+
     def test_login_redirect_stays_in_app(self):
         from app.main import safe_next
         self.assertEqual(safe_next("/leads/suche?x=1"), "/leads/suche?x=1")

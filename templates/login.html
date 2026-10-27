@@ -8,13 +8,15 @@
     <span class="label">Ylva Labs</span>
     <h1>Anmelden.</h1>
     {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="alert">{{ m }}</p>{% endfor %}{% endwith %}
-    <form method="post" class="team-login" {{ 'hidden' if mode != 'team' }} id="teamLogin">
+    <form method="post" class="team-login" {{ 'hidden' if mode != 'team' }} id="teamLogin" data-known="{{ known.key if known else '' }}" data-known-name="{{ known.name if known else '' }}">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <fieldset class="who-pick"><legend class="label">Wer bist du?</legend>
-        {% for p in people %}<label><input type="radio" name="member" value="{{ p.key }}" {{ 'checked' if member == p.key or (not member and loop.first) }} required><span>{{ p.name }}</span></label>{% endfor %}
+        {% for p in people %}<label><input type="radio" name="member" value="{{ p.key }}" {{ 'checked' if member == p.key or (not member and loop.first) }} required><span>{{ p.name }}{% if known and known.key == p.key %} <em class="muted small">· zuletzt hier</em>{% endif %}</span></label>{% endfor %}
       </fieldset>
-      <label><span class="label">Passwort</span><input name="password" type="password" autocomplete="current-password" required></label>
-      <button class="btn primary" type="submit">Anmelden</button>
+      {% set skip = known and member == known.key %}
+      <label id="teamPw" {{ 'hidden' if skip }}><span class="label">Passwort</span><input name="password" type="password" autocomplete="current-password" {{ '' if skip else 'required' }}></label>
+      <button class="btn primary" type="submit" id="teamGo">{{ 'Weiter als ' ~ known.name if skip else 'Anmelden' }}</button>
+      {% if known %}<p class="muted small">Auf diesem Gerät bleibst du als {{ known.name }} angemeldet. Für jemand anderen braucht es das Passwort.</p>{% endif %}
       <p class="muted small">Noch kein Passwort? Einmal <a href="#" data-mode="postfach">mit dem E-Mail-Postfach anmelden</a> und dann unter „Mein Profil“ festlegen.</p>
     </form>
     <form method="post" {{ 'hidden' if mode == 'team' }} id="boxLogin">
@@ -25,6 +27,12 @@
       <button class="btn primary" type="submit">Anmelden</button>
       {% if people|selectattr('has_password')|list %}<p class="muted small"><a href="#" data-mode="team">Mit Name und Passwort anmelden</a></p>{% endif %}
     </form>
+    {% if known %}
+    <form method="post" action="{{ url_for('forget_device') }}" class="forget-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="link-btn small" type="submit">Auf diesem Gerät niemanden merken</button>
+    </form>
+    {% endif %}
     {% if demo_enabled %}
     <form method="post" action="{{ url_for('demo_login') }}" class="demo-form">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">

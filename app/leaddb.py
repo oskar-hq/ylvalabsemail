@@ -103,6 +103,9 @@ CREATE TABLE IF NOT EXISTS team (
     key TEXT PRIMARY KEY, name TEXT NOT NULL, pw_hash TEXT, pw_set_at TEXT, settings TEXT NOT NULL DEFAULT '{}',
     sort INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS remember_tokens (
+    token_hash TEXT PRIMARY KEY, member TEXT NOT NULL, created_at TEXT NOT NULL, last_used REAL NOT NULL
+);
 INSERT OR IGNORE INTO team (key, name, sort) VALUES ('finn', 'Finn Adams', 1);
 INSERT OR IGNORE INTO team (key, name, sort) VALUES ('hamza', 'Hamza Al-Shebli', 2);
 INSERT OR IGNORE INTO team (key, name, sort) VALUES ('oskar', 'Oskar Jacobsen', 3);

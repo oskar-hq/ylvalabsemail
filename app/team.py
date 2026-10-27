@@ -58,6 +58,7 @@ def set_password(c, key, password):
     if password.strip() != password:
         raise TeamError("Bitte ohne Leerzeichen am Anfang oder Ende.")
     c.execute("UPDATE team SET pw_hash=?, pw_set_at=? WHERE key=?", (generate_password_hash(password), leaddb.now(), key))
+    c.execute("DELETE FROM remember_tokens WHERE member=?", (key,))  # neues Passwort: gemerkte Geräte vergessen
     c.commit()
 
 

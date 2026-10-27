@@ -1,4 +1,5 @@
 """Ylva Labs Mailer – Web-Oberfläche zum Versenden gestalteter HTML-E-Mails."""
+import hashlib
 import imaplib
 import json
 import os
@@ -177,10 +178,76 @@ def current_account():
     return acc
 
 
+# ---------------------------------------------------------------- Gerät merken
+# Wer sich mit Name und Passwort anmeldet, bleibt auf diesem Gerät angemeldet: Das Cookie enthält ein zufälliges
+# Token, in der Datenbank steht nur sein Hash. Pro Gerät gilt das für die zuletzt angemeldete Person; wer zu jemand
+# anderem wechselt, braucht dessen Passwort, und danach ist die bisherige Person auf dem Gerät vergessen.
+REMEMBER_COOKIE = "ylva_geraet"
+REMEMBER_DAYS = 90
+
+
+def _token_hash(token):
+    return hashlib.sha256(token.encode()).hexdigest()
+
+
+def remembered_member():
+    """Die Person, die auf diesem Gerät zuletzt angemeldet war (oder None)."""
+    token = request.cookies.get(REMEMBER_COOKIE, "")
+    if not token or len(token) > 100:
+        return None
+    c = leaddb.connect(DB_PATH)
+    try:
+        row = c.execute("SELECT member, last_used FROM remember_tokens WHERE token_hash=?",
+                        (_token_hash(token),)).fetchone()
+        if not row or time.time() - row["last_used"] > REMEMBER_DAYS * 86400:
+            return None
+        member = c.execute("SELECT key, name FROM team WHERE key=?", (row["member"],)).fetchone()
+        if not member:
+            return None
+        c.execute("UPDATE remember_tokens SET last_used=? WHERE token_hash=?", (time.time(), _token_hash(token)))
+        c.commit()
+        return dict(member)
+    finally:
+        c.close()
+
+
+def remember_member(resp, key):
+    """Dieses Gerät merkt sich die Person (ersetzt, was es sich vorher gemerkt hat)."""
+    old = request.cookies.get(REMEMBER_COOKIE, "")
+    token = secrets.token_urlsafe(32)
+    c = leaddb.connect(DB_PATH)
+    try:
+        if old:
+            c.execute("DELETE FROM remember_tokens WHERE token_hash=?", (_token_hash(old),))
+        c.execute("DELETE FROM remember_tokens WHERE last_used < ?", (time.time() - REMEMBER_DAYS * 86400,))
+        c.execute("INSERT INTO remember_tokens (token_hash, member, created_at, last_used) VALUES (?, ?, ?, ?)",
+                  (_token_hash(token), key, leaddb.now(), time.time()))
+        c.commit()
+    finally:
+        c.close()
+    resp.set_cookie(REMEMBER_COOKIE, token, max_age=REMEMBER_DAYS * 86400, httponly=True, samesite="Lax",
+                    secure=app.config["SESSION_COOKIE_SECURE"])
+    return resp
+
+
+def _resume_remembered():
+    """Keine Sitzung (abgelaufen, Neustart), aber das Gerät kennt die Person: einfach weiter angemeldet."""
+    member = remembered_member()
+    if not member:
+        return None
+    sid = secrets.token_urlsafe(32)
+    acc = {"user": member["key"], "team": member["key"], "name": member["name"], "password": "", "address": "",
+           "since": time.time()}
+    with _sessions_lock:
+        _sessions[sid] = acc
+    session["sid"] = sid  # CSRF-Token in der Sitzung bleibt, damit ein gerade abgeschicktes Formular noch durchgeht
+    return acc
+
+
 def login_required(view):
     @wraps(view)
     def wrapper(*args, **kwargs):
-        g.account = current_account()
+        g.account = current_account() or _resume_remembered()
         if not g.account:
             if request.method == "POST" or request.path.startswith(("/preview", "/send", "/upload")):
                 return jsonify(error="Sitzung abgelaufen. Bitte neu anmelden."), 401
@@ -259,8 +326,10 @@ def _login_page(status=200, **kw):
         people = team.members(c)
     finally:
         c.close()
-    mode = kw.pop("mode", None) or ("team" if any(m["has_password"] for m in people) else "postfach")
-    return render_template("login.html", people=people, mode=mode, **kw), status
+    known = remembered_member()
+    mode = kw.pop("mode", None) or ("team" if known or any(m["has_password"] for m in people) else "postfach")
+    kw.setdefault("member", known["key"] if known else None)
+    return render_template("login.html", people=people, mode=mode, known=known, **kw), status
 
 
 def _team_login():
@@ -272,6 +341,10 @@ def _team_login():
     if any(len(recent_fails(k)) >= LOCK_RULES[k.split(":", 1)[0]][0] for k in keys):
         flash("Zu viele Fehlversuche. Bitte in einigen Minuten erneut versuchen.")
         return _login_page(429, member=key, mode="team")
+    known = remembered_member()
+    if known and known["key"] == key and not password:  # zuletzt auf diesem Gerät: ohne Passwort weiter
+        _start_session({"user": key, "team": key, "name": known["name"], "password": "", "address": ""})
+        return remember_member(redirect(safe_next(request.args.get("next", "")) or url_for("index")), key)
     c = leaddb.connect(DB_PATH)
     try:
         member = team.get(c, key)
@@ -291,7 +364,7 @@ def _team_login():
         for k in keys:
             _failed_logins.pop(k, None)
     _start_session({"user": key, "team": key, "name": member["name"], "password": "", "address": ""})
-    return redirect(safe_next(request.args.get("next", "")) or url_for("index"))
+    return remember_member(redirect(safe_next(request.args.get("next", "")) or url_for("index")), key)
 
 
 def _start_session(acc):
@@ -375,6 +448,25 @@ def demo_login():
     session.clear()
     session["sid"] = sid
     return redirect(url_for("index"))
+
+
+@app.post("/login/vergessen")
+def forget_device():
+    """Dieses Gerät soll sich niemanden mehr merken."""
+    token = request.cookies.get(REMEMBER_COOKIE, "")
+    if token:
+        c = leaddb.connect(DB_PATH)
+        try:
+            c.execute("DELETE FROM remember_tokens WHERE token_hash=?", (_token_hash(token),))
+            c.commit()
+        finally:
+            c.close()
+    with _sessions_lock:
+        _sessions.pop(session.get("sid"), None)
+    session.clear()
+    resp = redirect(url_for("login"))
+    resp.delete_cookie(REMEMBER_COOKIE, samesite="Lax", secure=app.config["SESSION_COOKIE_SECURE"])
+    return resp
 
 
 @app.post("/logout")
