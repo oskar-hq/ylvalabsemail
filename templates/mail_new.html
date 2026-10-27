@@ -5,8 +5,10 @@
   <a class="back" href="{{ url_for('crm.inbox') }}">‹ Postfach</a>
   <h1 class="title">Neue Mail</h1>
   {% if ready %}<p class="note warn small">{{ ready }} <a href="{{ url_for('settings.page', gid='postfach', pid='zugang') }}">Einstellungen → Akquise-Postfach</a></p>{% endif %}
-  <p class="muted small">Geht als schlichte Mail von <b>{{ sender_name }} &lt;{{ sender or 'Akquise-Postfach' }}&gt;</b> raus, mit Gruß und Unterschrift. Antworten landen hier im Postfach.{% if account.demo %} Demo: wird nicht verschickt.{% endif %}</p>
+  <p class="muted small">Geht als schlichte Mail über <b>{{ sender or 'das Akquise-Postfach' }}</b> raus, mit deinem Namen, Gruß und deiner Unterschrift. Antworten landen hier im Postfach.{% if account.demo %} Demo: wird nicht verschickt.{% endif %}</p>
   <form class="mail-new" id="mailNew" autocomplete="off">
+    <label class="field"><span class="sub">Von</span>
+      <select name="von">{% for p in senders %}<option value="{{ p.key }}" {{ 'selected' if p.key == sender_key }}>{{ p.name }} | {{ org }}</option>{% endfor %}</select></label>
     <label class="field"><span class="sub">An</span><input type="email" name="to" required value="{{ lead.email if lead and lead.email else '' }}" placeholder="name@firma.de" inputmode="email"></label>
     <label class="field"><span class="sub">Name <em class="muted">(optional, für neue Kontakte)</em></span><input type="text" name="name" value="{{ lead.contact_name or lead.name if lead else '' }}"></label>
     <label class="field"><span class="sub">Betreff</span><input type="text" name="subject" required></label>

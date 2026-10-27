@@ -41,20 +41,28 @@ def last_incoming(c, lead_id):
     return dict(row) if row else None
 
 
-def conversations(c):
-    """Alle Betriebe, die geantwortet haben, neueste Antwort zuerst, mit Anzahl ungelesener Nachrichten."""
-    rows = c.execute("""
+def _owner(me):
+    return ("AND (l.owner = ? OR l.owner IS NULL)", [me]) if me else ("", [])
+
+
+def conversations(c, me=None):
+    """Alle Gespräche mit mindestens einer Nachricht von außen, neueste zuerst, mit Anzahl ungelesener Nachrichten.
+    `me`: nur die eigenen und die noch niemandem zugeordneten."""
+    where, args = _owner(me)
+    rows = c.execute(f"""
         SELECT l.*, MAX(m.at) AS last_at, SUM(m.direction='in' AND m.read=0) AS unread_msgs,
                (SELECT text FROM messages x WHERE x.lead_id=l.id ORDER BY x.at DESC, x.id DESC LIMIT 1) AS last_text,
                (SELECT direction FROM messages x WHERE x.lead_id=l.id ORDER BY x.at DESC, x.id DESC LIMIT 1) AS last_dir
-        FROM leads l JOIN messages m ON m.lead_id = l.id
+        FROM leads l JOIN messages m ON m.lead_id = l.id WHERE 1 {where}
         GROUP BY l.id HAVING SUM(m.direction='in') > 0
-        ORDER BY unread_msgs > 0 DESC, last_at DESC""").fetchall()
+        ORDER BY unread_msgs > 0 DESC, last_at DESC""", args).fetchall()
     return [dict(r) for r in rows]
 
 
-def unread_count(c):
-    return c.execute("SELECT COUNT(DISTINCT lead_id) FROM messages WHERE direction='in' AND read=0").fetchone()[0]
+def unread_count(c, me=None):
+    where, args = _owner(me)
+    return c.execute(f"SELECT COUNT(DISTINCT m.lead_id) FROM messages m JOIN leads l ON l.id = m.lead_id "
+                     f"WHERE m.direction='in' AND m.read=0 {where}", args).fetchone()[0]
 
 
 def mark_read(c, lead_id):
@@ -96,10 +104,10 @@ def mood(lead, last_in):
     return "neutral", "automatisch: keine eindeutigen Stichworte"
 
 
-def grouped(c):
+def grouped(c, me=None):
     """Nach Kunden: offen zum Antworten (letzte Nachricht kam von ihnen) und gesendet (wartet auf ihre Antwort)."""
     groups = {"offen": [], "gesendet": []}
-    for conv in conversations(c):
+    for conv in conversations(c, me):
         last_in = last_incoming(c, conv["id"])
         conv["mood"], conv["mood_why"] = mood(conv, last_in)
         conv["last_in"] = last_in

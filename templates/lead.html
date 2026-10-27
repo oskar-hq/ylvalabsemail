@@ -140,6 +140,13 @@
             {% for key, label, _ in stages %}<option value="{{ key }}" {{ 'selected' if lead.stage == key }}>{{ label }}</option>{% endfor %}
           </select>
         </div>
+        <label class="sub" for="ownerSelect">Zuständig</label>
+        <div class="row stage-row">
+          <select id="ownerSelect" aria-label="Zuständig">
+            <option value="" {{ 'selected' if not lead.owner }}>Noch niemand</option>
+            {% for k, n in people.items() %}<option value="{{ k }}" {{ 'selected' if lead.owner == k }}>{{ n }}</option>{% endfor %}
+          </select>
+        </div>
         <form id="dealForm" class="deal-form">
           <label class="sub" for="dealEur">Auftragswert</label>
           <div class="row"><span class="unit"><input id="dealEur" type="text" name="deal_eur" inputmode="decimal" value="{{ ('%.0f'|format(lead.deal_eur)) if lead.deal_eur else '' }}" placeholder="z. B. 4500"><em>€</em></span>

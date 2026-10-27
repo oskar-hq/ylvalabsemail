@@ -4,8 +4,8 @@ from datetime import date
 
 from flask import Blueprint, Response, abort, g, jsonify, render_template, request
 
-from . import agent, crm, leaddb, mailbox, regions
-from .leads_views import db, lead_or_404, status_payload, who
+from . import agent, crm, leaddb, mailbox, regions, team
+from .leads_views import db, lead_or_404, me, status_payload, who
 from .main import SETTINGS, login_required
 
 bp = Blueprint("crm", __name__)
@@ -13,20 +13,28 @@ bp = Blueprint("crm", __name__)
 
 @bp.app_context_processor
 def _crm_globals():
-    return {"crm_due": lambda: crm.due_count(db()) + mailbox.unread_count(db()),
-            "inbox_unread": lambda: mailbox.unread_count(db())}
+    return {"crm_due": lambda: crm.due_count(db(), me()) + mailbox.unread_count(db(), me()),
+            "inbox_unread": lambda: mailbox.unread_count(db(), me())}
 
 
 @bp.get("/crm")
 @login_required
 def board():
     today = date.today().isoformat()
-    columns = crm.board(db())
+    wer = _wer()
+    columns = crm.board(db(), wer, me())
     view = "tabelle" if request.args.get("ansicht") == "tabelle" else "board"
     return render_template("crm.html", account=g.account, columns=columns, today=today, view=view,
-                           total_cards=sum(len(col[3]) for col in columns),
-                           due=crm.open_tasks(db(), until=today), upcoming=crm.open_tasks(db())[:40],
+                           total_cards=sum(len(col[3]) for col in columns), wer=wer, people=team.names(db()),
+                           due=crm.open_tasks(db(), until=today, who=wer, me=me()),
+                           upcoming=crm.open_tasks(db(), who=wer, me=me())[:40],
                            st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+
+
+def _wer():
+    """Welches CRM: „meine“ (Standard, wenn man als Person angemeldet ist), „alle“ oder eine Person."""
+    wer = request.args.get("wer") or ("meine" if me() else "alle")
+    return wer if wer in ("meine", "alle") or wer in team.names(db()) else "alle"
 
 
 @bp.post("/crm/<int:lead_id>/stufe")
@@ -37,7 +45,19 @@ def set_stage(lead_id):
     if stage not in crm.STAGE_KEYS:
         abort(400)
     crm.set_stage(db(), lead_id, stage, author=who(), note=request.form.get("note", "").strip())
+    crm.claim(db(), lead_id, me())
     return jsonify(ok=True, label=crm.STAGE_LABELS[stage])
+
+
+@bp.post("/crm/<int:lead_id>/zustaendig")
+@login_required
+def set_owner(lead_id):
+    lead_or_404(lead_id)
+    key = request.form.get("owner", "")
+    if key and key not in team.names(db()):
+        abort(400)
+    crm.set_owner(db(), lead_id, key or None, who())
+    return jsonify(ok=True, name=team.names(db()).get(key, "niemand"))
 
 
 @bp.post("/crm/<int:lead_id>/kontakt")
@@ -80,6 +100,7 @@ def add_task(lead_id):
         crm.add_task(db(), lead_id, due, text, who())
     except ValueError:
         return jsonify(error="Bitte ein Datum wählen."), 400
+    crm.claim(db(), lead_id, me())
     return jsonify(ok=True)
 
 
@@ -99,6 +120,7 @@ def create():
     lead_id, reason = crm.create_lead(db(), data, who())
     if not lead_id:
         return jsonify(error=f"Nicht angelegt: {reason}."), 400
+    crm.claim(db(), lead_id, me())
     return jsonify(ok=True, lead_id=lead_id)
 
 
@@ -181,7 +203,9 @@ def load_borders():
 @bp.get("/crm/postfach")
 @login_required
 def inbox():
-    return render_template("inbox.html", account=g.account, groups=mailbox.grouped(db()), moods=mailbox.MOODS,
+    wer = "alle" if request.args.get("wer") == "alle" or not me() else "meine"
+    return render_template("inbox.html", account=g.account, groups=mailbox.grouped(db(), me() if wer == "meine" else None),
+                           moods=mailbox.MOODS, wer=wer, people=team.names(db()),
                            inbox_status=leaddb.kv_get(db(), "inbox_status"), ready=_mail_ready(),
                            st=status_payload(), demo=SETTINGS["DEMO_MODE"])
 
@@ -202,9 +226,9 @@ def inbox_news():
     c = db()
     items = [{"name": cv["name"], "n": cv["unread_msgs"], "at": cv["last_at"],
               "text": (cv["last_text"] or "").replace("\n", " ")[:120],
-              "url": f"/crm/postfach/{cv['id']}"} for cv in mailbox.conversations(c) if cv["unread_msgs"]][:8]
+              "url": f"/crm/postfach/{cv['id']}"} for cv in mailbox.conversations(c, me()) if cv["unread_msgs"]][:8]
     status = leaddb.kv_get(c, "inbox_status") or {}
-    return jsonify(count=mailbox.unread_count(c), items=items,
+    return jsonify(count=mailbox.unread_count(c, me()), items=items,
                    error=None if status.get("ok", True) else status.get("error"), checked=status.get("at"))
 
 
@@ -233,6 +257,7 @@ def compose_mail():
         if request.args.get("lead", "").isdigit():
             lead = lead_or_404(int(request.args["lead"]))
         return render_template("mail_new.html", account=g.account, lead=lead, ready=_mail_ready(),
+                               senders=team.members(db()), sender_key=_default_sender(lead), org=SETTINGS["ORG_NAME"],
                                sender=agent.outreach_address(), sender_name=SETTINGS["LEADS_SENDER_NAME"] or SETTINGS["ORG_NAME"],
                                st=status_payload(), demo=SETTINGS["DEMO_MODE"])
     to = request.form.get("to", "").strip().lower()
@@ -260,11 +285,14 @@ def compose_mail():
         lead = leaddb.get_lead(c, lead_id)
     if lead["status"] == "gesperrt":
         return jsonify(error="Diese Adresse möchte keine Nachrichten mehr bekommen."), 400
+    sender = _sender_from_form()
     if g.account.get("demo"):
-        agent.record_reply(c, lead, text, who(), subject, to, note=" Demo: nicht verschickt.", what="Neue Mail aus dem Postfach")
+        agent.record_reply(c, lead, text, team.names(c).get(sender) or who(), subject, to, note=" Demo: nicht verschickt.",
+                           what="Neue Mail aus dem Postfach")
+        crm.claim(c, lead["id"], sender)
         return jsonify(ok=True, url=f"/crm/postfach/{lead['id']}")
     try:
-        agent.send_new(c, lead, to, subject, text, who())
+        agent.send_new(c, lead, to, subject, text, who(), sender=sender)
     except Exception as exc:
         return jsonify(error=str(exc)), 502
     return jsonify(ok=True, url=f"/crm/postfach/{lead['id']}")
@@ -282,9 +310,19 @@ def conversation(lead_id):
     mood, why = mailbox.mood(lead, last_in)
     can_send = agent.outreach_configured() or g.account.get("demo")
     return render_template("conversation.html", account=g.account, lead=lead, items=items, mood=mood, mood_why=why,
+                           senders=team.members(db()), sender=_default_sender(lead), people=team.names(db()),
                            moods=mailbox.MOODS, last_in=last_in, can_send=can_send,
                            subject=mailbox.reply_subject((last_in or {}).get("subject") or lead["subject"] or lead["name"]),
                            st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+
+
+def _default_sender(lead=None):
+    return me() or (lead or {}).get("owner") or "oskar"
+
+
+def _sender_from_form():
+    key = request.form.get("von", "")
+    return key if key in team.names(db()) else me()
 
 
 @bp.post("/crm/postfach/<int:lead_id>/antwort")
@@ -301,13 +339,15 @@ def reply(lead_id):
         ok, why = crm.may_email(lead, SETTINGS["OUTREACH_EMAIL"])  # noch keine Antwort: Erstkontakt-Regel gilt
         if not ok:
             return jsonify(error=why), 400
+    sender = _sender_from_form()
     if g.account.get("demo"):
         last = mailbox.last_incoming(db(), lead_id)
-        agent.record_reply(db(), lead, text, who(), subject or "Re: …", (last or {}).get("from_addr") or lead["email"] or "",
-                           note=" Demo: nicht verschickt.")
+        agent.record_reply(db(), lead, text, team.names(db()).get(sender) or who(), subject or "Re: …",
+                           (last or {}).get("from_addr") or lead["email"] or "", note=" Demo: nicht verschickt.")
+        crm.claim(db(), lead_id, sender)
         return jsonify(ok=True)
     try:
-        agent.send_reply(db(), lead, text, who(), subject)
+        agent.send_reply(db(), lead, text, who(), subject, sender=sender)
     except Exception as exc:
         return jsonify(error=str(exc)), 502
     return jsonify(ok=True)

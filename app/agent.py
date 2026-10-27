@@ -27,7 +27,7 @@ from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid, parseaddr, parsedate_to_datetime
 from urllib.parse import urlparse
 
-from . import ai, crm, emailbuild, finder, leaddb, mailbox, niches, regions, schedule, scoring, webpush
+from . import ai, crm, emailbuild, finder, leaddb, mailbox, niches, regions, schedule, scoring, team, webpush
 
 log = logging.getLogger("ylva.leads")
 
@@ -400,15 +400,25 @@ def upgrade_template(c):
     return leaddb.save_brain(c, replaced, "Update", "Neue, persönlichere Vorlage (ohne KI)")
 
 
-def template_draft(c, lead_id):
-    """Entwurf aus der Vorlage im Gehirn (Abschnitt „Vorlage (ohne KI)“), kostenlos. Platzhalter:
-    {firma}, {anrede}, {zeitfresser}, {kategorie}, {ort}, {absender}, {aufhaenger}, {verstaendnis}, {beispiel}.
-    Ein Absatz, dessen Platzhalter leer bleibt (z. B. {aufhaenger} ohne Recherche), fällt weg."""
+def template_text(c, member=None):
+    """Die Vorlage als Text („Betreff: …“, „Anrede: …“, Leerzeile, Text): die eigene der Person, sonst die aus
+    dem Gehirn (Abschnitt „Vorlage (ohne KI)“)."""
     upgrade_template(c)
-    lead = leaddb.get_lead(c, lead_id)
+    own = (team.settings(c, member)["vorlage"] if member else "") or ""
+    if own.strip():
+        return own.strip()
     section = leaddb.brain_sections(leaddb.brain(c), [TEMPLATE_HEADING]).strip() \
         or leaddb.brain_sections(leaddb.BRAIN_SEED.read_text(encoding="utf-8"), [TEMPLATE_HEADING]).strip()
-    lines = section.splitlines()[1:]  # Überschrift weg
+    text = "\n".join(section.splitlines()[1:]).strip()  # Überschrift weg
+    # Die gemeinsame Vorlage stellt die Person vor, die schreibt (früher fest „Oskar Jacobsen“)
+    return text.replace("Ich bin Oskar Jacobsen von", "Ich bin {absender} von")
+
+
+def fill_template(lead, text, absender):
+    """Vorlage für einen Betrieb ausfüllen. Platzhalter: {firma}, {anrede}, {zeitfresser}, {kategorie}, {ort},
+    {absender}, {aufhaenger}, {verstaendnis}, {beispiel}. Ein Absatz, dessen Platzhalter leer bleibt (z. B.
+    {aufhaenger} ohne Recherche), fällt weg."""
+    lines = (text or "").splitlines()
     subject = greeting = ""
     while lines and (not lines[0].strip() or re.match(r"(?i)^(betreff|anrede):", lines[0])):
         m = re.match(r"(?i)^(betreff|anrede):\s*(.*)$", lines.pop(0))
@@ -416,28 +426,37 @@ def template_draft(c, lead_id):
             subject = m.group(2)
         elif m:
             greeting = m.group(2)
-    imported = lead["research"].get("import") or {}
-    fresser = (lead["research"].get("zeitfresser") or ["Papierkram und wiederkehrende Anfragen"])[:3]
-    if lead["branche"] in VERSTAENDNIS:  # was der Branchen-Satz schon sagt, nicht noch einmal aufzählen
+    research = lead.get("research") or {}
+    imported = research.get("import") or {}
+    fresser = (research.get("zeitfresser") or ["Papierkram und wiederkehrende Anfragen"])[:3]
+    if lead.get("branche") in VERSTAENDNIS:  # was der Branchen-Satz schon sagt, nicht noch einmal aufzählen
         fresser = [f for f in fresser if f != scoring.BRANCHE_ZEITFRESSER.get(lead["branche"])]
     fresser = fresser[:2]
-    values = {"firma": lead["name"], "kategorie": lead["category_label"] or "Betrieb",
+    values = {"firma": lead["name"], "kategorie": lead.get("category_label") or "Betrieb",
               "anrede": imported.get("anrede") or (f"Guten Tag {lead['contact_name']},"
-                                                   if lead["contact_name"] else "Guten Tag,"),
-              "zeitfresser": " und ".join(fresser), "ort": lead["city"] or "Ihrer Region",
-              "absender": S("LEADS_SENDER_NAME"), "aufhaenger": imported.get("aufhaenger", ""),
-              "verstaendnis": VERSTAENDNIS.get(lead["branche"], VERSTAENDNIS_SONST),
-              "beispiel": BEISPIEL.get(lead["branche"], BEISPIEL_SONST)}
+                                                   if lead.get("contact_name") else "Guten Tag,"),
+              "zeitfresser": " und ".join(fresser), "ort": lead.get("city") or "Ihrer Region",
+              "absender": absender, "aufhaenger": imported.get("aufhaenger", ""),
+              "verstaendnis": VERSTAENDNIS.get(lead.get("branche"), VERSTAENDNIS_SONST),
+              "beispiel": BEISPIEL.get(lead.get("branche"), BEISPIEL_SONST)}
 
-    def fill(text):
-        return re.sub(r"\{(\w+)\}", lambda m: values.get(m.group(1), m.group(0)), text).strip()
+    def fill(t):
+        return re.sub(r"\{(\w+)\}", lambda m: values.get(m.group(1), m.group(0)), t).strip()
 
-    def fill_body(text):
-        keep = [p for p in re.split(r"\n\s*\n", text)
+    def fill_body(t):
+        keep = [p for p in re.split(r"\n\s*\n", t)
                 if not any(values.get(k) == "" for k in re.findall(r"\{(\w+)\}", p))]
         return fill("\n\n".join(keep))
-    fields = {"subject": fill(subject), "greeting": fill(greeting) or values["anrede"],
-              "body": fill_body("\n".join(lines))}
+    return {"subject": fill(subject), "greeting": fill(greeting) or values["anrede"],
+            "body": fill_body("\n".join(lines))}
+
+
+def template_draft(c, lead_id, member=None):
+    """Entwurf aus der Vorlage (der eigenen der Person, sonst der aus dem Gehirn), kostenlos."""
+    lead = leaddb.get_lead(c, lead_id)
+    member = member or lead.get("owner")
+    absender = (team.get(c, member) or {}).get("name") or S("LEADS_SENDER_NAME")
+    fields = fill_template(lead, template_text(c, member), absender)
     leaddb.update_lead(c, lead_id, status="entwurf", **fields)
     leaddb.add_event(c, lead_id, "draft", "Entwurf aus der Vorlage erstellt (ohne KI).", author="Vorlage")
     return fields
@@ -652,14 +671,16 @@ def design_of(lead):
     return {**DESIGN_DEFAULT, **{k: v for k, v in stored.items() if k in DESIGN_DEFAULT}}
 
 
-def lead_form(lead):
-    """Die Felder für den Mail-Baukasten des Mailers, im gewählten Design."""
+def lead_form(lead, snd=None):
+    """Die Felder für den Mail-Baukasten des Mailers, im gewählten Design. `snd`: Absender aus team.sender."""
     d = design_of(lead)
+    snd = snd or {}
     return {
         "template": d["template"], "graphic": d["graphic"], "icon": d["icon"], "band_seed": str(d["band_seed"]),
         "subject": lead["subject"] or "", "preheader": "", "headline": "",
         "greeting": lead["greeting"] or "", "body": lead["body"] or "", "body2": "",
-        "closing": "Viele Grüße", "sender_name": S("LEADS_SENDER_NAME"),
+        "closing": snd.get("gruss") or "Viele Grüße", "sender_name": snd.get("name") or S("LEADS_SENDER_NAME"),
+        "from_name": snd.get("display") or "",
         "footer": S("DEFAULT_FOOTER"), "info_label": [], "info_value": [], "cta_text": "", "cta_url": "",
     }
 
@@ -696,7 +717,7 @@ def followup_form(lead):
             "body": lead["followup_body"] or ""}
 
 
-def send_outreach(c, lead, sent_by, followup=False):
+def send_outreach(c, lead, sent_by, followup=False, sender=None):
     if not (S("OUTREACH_EMAIL") and outreach_configured()):
         raise RuntimeError("Der Versand per Mail ist ausgeschaltet (OUTREACH_EMAIL).")
     if not lead["email"]:
@@ -704,7 +725,9 @@ def send_outreach(c, lead, sent_by, followup=False):
     if followup and not lead["followup_body"]:
         raise RuntimeError("Es gibt noch keinen Text für die Erinnerung.")
     rcpt = {"name": lead["contact_name"] or "", "first": "", "email": lead["email"]}
-    form = followup_form(lead) if followup else lead_form(lead)
+    snd = team.sender(c, sender or lead.get("owner"), S("ORG_NAME")) if (sender or lead.get("owner")) else None
+    form = {**(followup_form(lead) if followup else lead_form(lead)), **({} if not snd else {
+        "closing": snd["gruss"], "sender_name": snd["name"], "from_name": snd["display"]})}
     msg = emailbuild.build_message(form, rcpt, CFG["settings"], outreach_address())
     if followup and lead["message_id"]:  # im selben Gesprächsverlauf wie die erste Mail
         msg["In-Reply-To"] = lead["message_id"]
@@ -941,7 +964,7 @@ def handle_reply(c, lead_id, msg, message_id=None):
     return True
 
 
-def send_reply(c, lead, text, sent_by, subject=None):
+def send_reply(c, lead, text, sent_by, subject=None, sender=None):
     """Im Postfach antworten: schlichte, persönliche Mail im selben Gesprächsverlauf (In-Reply-To), mit Zitat.
     Erlaubt, weil der Betrieb uns zuerst geschrieben hat; braucht nur das Akquise-Postfach."""
     if not outreach_configured():
@@ -950,8 +973,9 @@ def send_reply(c, lead, text, sent_by, subject=None):
     to = (last or {}).get("from_addr") or lead["email"]
     if not to:
         raise RuntimeError("Keine E-Mail-Adresse bekannt.")
+    snd = _sender(c, sender)
     msg = EmailMessage()
-    msg["From"] = formataddr((S("LEADS_SENDER_NAME") or S("ORG_NAME"), outreach_address()))
+    msg["From"] = formataddr((snd["display"], outreach_address()))
     msg["To"] = formataddr(((last or {}).get("from_name") or lead["contact_name"] or "", to))
     msg["Subject"] = subject or mailbox.reply_subject((last or {}).get("subject") or lead["subject"] or lead["name"])
     msg["Date"] = formatdate(localtime=True)
@@ -960,11 +984,26 @@ def send_reply(c, lead, text, sent_by, subject=None):
     if refs:
         msg["In-Reply-To"] = refs[0]
         msg["References"] = " ".join(dict.fromkeys(reversed(refs)))
-    signature = "\n".join(x for x in ("Viele Grüße", S("LEADS_SENDER_NAME"), S("DEFAULT_FOOTER")) if x)
-    msg.set_content(f"{text.strip()}\n\n{signature}{mailbox.quote(last)}")
+    msg.set_content(f"{text.strip()}\n\n{team.signature(snd)}{mailbox.quote(last)}")
     _deliver(msg)
-    record_reply(c, lead, text, sent_by, msg["Subject"], to, msg["Message-ID"], refs[0] if refs else None)
+    record_reply(c, lead, text, snd["name"] or sent_by, msg["Subject"], to, msg["Message-ID"], refs[0] if refs else None)
+    _claim(c, lead, snd["key"])
     return msg
+
+
+def _sender(c, key):
+    """Absender aus dem Team; ohne Person der Name aus den Einstellungen (wie bisher)."""
+    if key and team.get(c, key):
+        return team.sender(c, key, S("ORG_NAME"))
+    name = S("LEADS_SENDER_NAME") or S("ORG_NAME")
+    return {"key": None, "name": name, "display": name, "gruss": "Viele Grüße",
+            "signatur": "\n".join(x for x in (S("LEADS_SENDER_NAME"), S("DEFAULT_FOOTER")) if x)}
+
+
+def _claim(c, lead, key):
+    """Wer zuerst etwas mit einem Betrieb macht, ist zuständig (solange noch niemand zuständig ist)."""
+    if key:
+        crm.claim(c, lead["id"], key)
 
 
 def _deliver(msg):
@@ -991,20 +1030,21 @@ def _deliver(msg):
             log.warning("Ablage im Ordner „Gesendet“ fehlgeschlagen: %s", exc)
 
 
-def send_new(c, lead, to, subject, text, sent_by):
+def send_new(c, lead, to, subject, text, sent_by, sender=None):
     """Neue Mail aus dem Postfach (nicht als Antwort): schlicht, mit Unterschrift, unter dem Namen von Ylva Labs."""
     if not outreach_configured():
         raise RuntimeError("Das Akquise-Postfach ist nicht eingerichtet (Einstellungen → Postfach und Versand).")
+    snd = _sender(c, sender)
     msg = EmailMessage()
-    msg["From"] = formataddr((S("LEADS_SENDER_NAME") or S("ORG_NAME"), outreach_address()))
+    msg["From"] = formataddr((snd["display"], outreach_address()))
     msg["To"] = formataddr((lead.get("contact_name") or "", to))
     msg["Subject"] = subject
     msg["Date"] = formatdate(localtime=True)
     msg["Message-ID"] = make_msgid(domain=_domain(outreach_address()) or None)
-    signature = "\n".join(x for x in ("Viele Grüße", S("LEADS_SENDER_NAME"), S("DEFAULT_FOOTER")) if x)
-    msg.set_content(f"{text.strip()}\n\n{signature}")
+    msg.set_content(f"{text.strip()}\n\n{team.signature(snd)}")
     _deliver(msg)
-    record_reply(c, lead, text, sent_by, subject, to, msg["Message-ID"], what="Neue Mail aus dem Postfach")
+    record_reply(c, lead, text, snd["name"] or sent_by, subject, to, msg["Message-ID"], what="Neue Mail aus dem Postfach")
+    _claim(c, lead, snd["key"])
     return msg
 
 

@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Meine Vorlage · Ylva Labs{% endblock %}
+{% block content %}
+<main class="page tpl-page" id="tplEditor">
+  <div class="tpl-head">
+    <div><h1 class="title">Meine Vorlage</h1>
+      <p class="muted small">{{ 'Deine eigene Vorlage.' if own else 'Noch die gemeinsame Vorlage aus dem Gehirn. Sobald du speicherst, ist es deine eigene.' }} Rechts siehst du sofort, wie die Mail aussieht.</p></div>
+    <span class="segmented tpl-switch" role="tablist" aria-label="Ansicht"><button type="button" class="on" data-pane="edit">Bearbeiten</button><button type="button" data-pane="preview">Vorschau</button></span>
+  </div>
+  {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note small">{{ m }}</p>{% endfor %}{% endwith %}
+  <form class="tpl-grid" id="tplForm" autocomplete="off">
+    <section class="tpl-edit pane" data-pane="edit">
+      <label class="field"><span class="sub">Betreff</span><input type="text" id="tplSubject" placeholder="Eine Idee für {firma}"></label>
+      <label class="field"><span class="sub">Anrede</span><input type="text" id="tplGreeting" placeholder="{anrede}"></label>
+      <label class="field"><span class="sub">Text <em>Absätze mit Leerzeile trennen. Ein Absatz, dessen Platzhalter leer bleibt, fällt weg.</em></span>
+        <textarea id="tplBody" rows="14"></textarea></label>
+      <div class="ph-chips" aria-label="Platzhalter einfügen"><span class="sub">Einfügen:</span>
+        {% for ph, label in placeholders %}<button type="button" class="chip" data-ph="{{ ph }}" title="{{ ph }}">{{ label }}</button>{% endfor %}</div>
+      <label class="field"><span class="sub">Gruß</span><input type="text" name="gruss" value="{{ settings.gruss }}"></label>
+      <p class="muted small">Unterschrift: {{ settings.signatur|replace('\n', ' · ') }} · <a href="{{ url_for('team.profile') }}">ändern</a></p>
+      <div class="mail-design">
+        <span class="sub">Design</span>
+        <div class="design-row">
+          <span class="segmented small" role="group" aria-label="Vorlage">{% for k, v in templates.items() %}<button type="button" data-tpl="{{ k }}" class="{{ 'on' if design.template == k }}">{{ v }}</button>{% endfor %}</span>
+          <select name="graphic" id="tplGraphic" aria-label="Grafik">{% for k, v in graphics.items() %}<option value="{{ k }}" {{ 'selected' if design.graphic == k }}>{{ v }}</option>{% endfor %}</select>
+          <select name="icon" id="tplIcon" aria-label="Symbol" {{ 'hidden' if design.graphic != 'icon' }}>{% for k, v in icons.items() %}<option value="{{ k }}" {{ 'selected' if design.icon == k }}>{{ v }}</option>{% endfor %}</select>
+          <button type="button" class="btn small" id="tplSeed" {{ 'hidden' if design.graphic != 'band' }}>↻ Variante</button>
+        </div>
+        <input type="hidden" name="template" id="tplTemplate" value="{{ design.template }}">
+        <input type="hidden" name="band_seed" id="tplSeedInput" value="{{ design.band_seed }}">
+      </div>
+      <textarea name="text" id="tplText" hidden>{{ text }}</textarea>
+    </section>
+    <section class="tpl-preview pane" data-pane="preview">
+      <div class="tpl-preview-head">
+        <label class="small"><span class="muted">Beispiel:</span>
+          <select name="beispiel" id="tplExample"><option value="">Tischlerei Hansen (Beispiel)</option>{% for e in examples %}<option value="{{ e.id }}">{{ e.name }} · {{ e.category_label }}</option>{% endfor %}</select></label>
+        <span class="muted small" id="tplSubjectOut"></span>
+      </div>
+      <iframe id="tplFrame" title="Vorschau der Mail" sandbox=""></iframe>
+    </section>
+  </form>
+  <div class="tpl-actions">
+    {% if own %}<form method="post" action="{{ url_for('team.template_save') }}" id="tplReset"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="link-btn small" name="zuruecksetzen" value="1">Zurück zur gemeinsamen Vorlage</button></form>{% endif %}
+    <span class="muted small" id="tplMsg" aria-live="polite"></span>
+    <button class="btn primary" type="button" id="tplSave">Speichern</button>
+  </div>
+</main>
+{% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='template_editor.js') }}"></script>{% endblock %}

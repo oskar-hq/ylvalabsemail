@@ -23,7 +23,7 @@ from cryptography.hazmat.primitives import serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import ec  # noqa: E402
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: E402
 
-from app import agent, ai, claude_research, crm, finder, leaddb, niches, regions, schedule, scoring, webpush  # noqa: E402
+from app import agent, ai, claude_research, crm, finder, leaddb, niches, regions, schedule, scoring, team, webpush  # noqa: E402
 from app.main import app  # noqa: E402
 
 
@@ -876,7 +876,110 @@ class ScheduleTest(unittest.TestCase):
         self.assertIn("Tagesgrenze", leaddb.kv_get(self.c, "schedule_state")["ki"]["note"])
 
 
+class TeamTest(unittest.TestCase):
+    def setUp(self):
+        self.c = leaddb.connect(os.path.join(tempfile.mkdtemp(), "team.db"))
+
+    def lead(self, name, **kw):
+        fields = dict(source_id=f"t:{name}", created_at=leaddb.now(), updated_at=leaddb.now(), name=name,
+                      branche="handwerk", category_label="Tischlerei", status="passt", email=f"{name}@x.example")
+        fields.update(kw)
+        cur = self.c.execute(f"INSERT INTO leads ({','.join(fields)}) VALUES ({','.join('?' * len(fields))})",
+                             list(fields.values()))
+        self.c.commit()
+        return cur.lastrowid
+
+    def test_members_and_passwords(self):
+        self.assertEqual([m["name"] for m in team.members(self.c)], ["Finn Adams", "Hamza Al-Shebli", "Oskar Jacobsen"])
+        self.assertFalse(team.check_password(self.c, "finn", ""))  # ohne Passwort keine Anmeldung
+        with self.assertRaises(team.TeamError):
+            team.set_password(self.c, "finn", "kurz")
+        team.set_password(self.c, "finn", "geheim-123")
+        self.assertTrue(team.check_password(self.c, "finn", "geheim-123"))
+        self.assertFalse(team.check_password(self.c, "finn", "geheim-124"))
+        self.assertTrue(team.get(self.c, "finn")["pw_hash"].startswith("scrypt:"))  # nie im Klartext
+        self.assertFalse(team.check_password(self.c, "niemand", "geheim-123"))
+
+    def test_sender_signature_and_template(self):
+        snd = team.sender(self.c, "hamza", "Ylva Labs")
+        self.assertEqual(snd["display"], "Hamza Al-Shebli | Ylva Labs")
+        self.assertEqual(team.signature(snd), "Viele Grüße\nHamza Al-Shebli\nYlva Labs")
+        team.save_settings(self.c, "hamza", gruss="Beste Grüße", signatur="Hamza Al-Shebli\nTel. 0151 000",
+                           vorlage="Betreff: Hallo {firma}\nAnrede: Moin,\n\nIch bin {absender}.\n\n{aufhaenger}")
+        lead_id = self.lead("Hansen")
+        fields = agent.template_draft(self.c, lead_id, "hamza")
+        self.assertEqual(fields, {"subject": "Hallo Hansen", "greeting": "Moin,", "body": "Ich bin Hamza Al-Shebli."})
+        other = agent.template_draft(self.c, lead_id, "finn")  # Finn hat keine eigene: die aus dem Gehirn
+        self.assertIn("Hansen", other["subject"])
+        sent = []
+        smtp = mock.Mock(send_message=lambda m: sent.append(m))
+        settings = dict(agent.CFG["settings"], OUTREACH_USER="k@ylvalabs.de", OUTREACH_PASSWORD="x", IMAP_HOST="")
+        with mock.patch.dict(agent.CFG, {"settings": settings, "smtp_connect": lambda u, p: smtp,
+                                         "db_path": ":memory:"}):
+            agent.send_new(self.c, leaddb.get_lead(self.c, lead_id), "hansen@x.example", "Hallo", "Text", "x", sender="hamza")
+        self.assertEqual(str(sent[0]["From"]), "Hamza Al-Shebli | Ylva Labs <k@ylvalabs.de>")
+        self.assertIn("Beste Grüße\nHamza Al-Shebli\nTel. 0151 000", sent[0].get_content())
+        self.assertEqual(leaddb.get_lead(self.c, lead_id)["owner"], "hamza")  # wer schreibt, ist zuständig
+        self.assertEqual(self.c.execute("SELECT sent_by FROM messages").fetchone()[0], "Hamza Al-Shebli")
+
+    def test_own_crm_and_stats(self):
+        a = self.lead("A", stage="neu", owner="finn")
+        b = self.lead("B", stage="kontaktiert", owner="oskar", sent_at=leaddb.now())
+        free = self.lead("C", stage="neu")
+        self.lead("D", stage="kunde", owner="oskar", sent_at=leaddb.now(), replied_at=leaddb.now(), deal_eur=5000)
+        ids = lambda cols: {c["id"] for col in cols for c in col[3]}
+        self.assertEqual(ids(crm.board(self.c, "meine", "finn")), {a, free})  # eigene und noch niemandem zugeordnete
+        self.assertEqual(len(ids(crm.board(self.c, "alle", "finn"))), 4)
+        self.assertNotIn(free, ids(crm.board(self.c, "oskar", "finn")))
+        crm.claim(self.c, free, "hamza")
+        crm.claim(self.c, b, "hamza")  # schon zugeordnet: bleibt bei Oskar
+        self.assertEqual(leaddb.get_lead(self.c, free)["owner"], "hamza")
+        self.assertEqual(leaddb.get_lead(self.c, b)["owner"], "oskar")
+        people, total = team.stats(self.c)
+        oskar = next(p for p in people if p["key"] == "oskar")
+        self.assertEqual((oskar["im_crm"], oskar["angeschrieben"], oskar["antworten"], oskar["kunden"], oskar["umsatz"]),
+                         (2, 2, 1, 1, 5000))
+        self.assertEqual(oskar["quote"], 50)
+        self.assertEqual(total["im_crm"], 4)
+
+
 class SecurityTest(unittest.TestCase):
+    def test_team_login(self):
+        client = app.test_client()
+        csrf = client.get("/login").get_data(as_text=True).split('name="csrf-token" content="')[1].split('"')[0]
+        c = leaddb.connect(os.path.join(TMP, "mailer.db"))
+        team.set_password(c, "finn", "finn-passwort-1")
+        r = client.post("/login", data={"member": "finn", "password": "falsch"}, headers={"X-CSRF-Token": csrf})
+        self.assertEqual(r.status_code, 401)
+        r = client.post("/login", data={"member": "hamza", "password": "irgendwas"}, headers={"X-CSRF-Token": csrf})
+        self.assertIn("noch kein Passwort", r.get_data(as_text=True))  # ohne Passwort keine Anmeldung
+        r = client.post("/login?next=/team", data={"member": "finn", "password": "finn-passwort-1"},
+                        headers={"X-CSRF-Token": csrf})
+        self.assertEqual(r.headers["Location"], "/team")
+        html = client.get("/crm").get_data(as_text=True)
+        self.assertIn("Finn Adams", html)
+        self.assertIn('class="on">Meine', html)  # eigenes CRM zuerst
+        csrf = html.split('name="csrf-token" content="')[1].split('"')[0]
+        # eigenes Passwort ändern nur mit dem bisherigen
+        r = client.post("/profil/passwort", data={"current": "falsch", "new": "neu-passwort-2", "again": "neu-passwort-2"},
+                        headers={"X-CSRF-Token": csrf})
+        self.assertFalse(team.check_password(c, "finn", "neu-passwort-2"))
+        client.post("/profil/passwort", data={"current": "finn-passwort-1", "new": "neu-passwort-2",
+                                              "again": "neu-passwort-2"}, headers={"X-CSRF-Token": csrf})
+        self.assertTrue(team.check_password(c, "finn", "neu-passwort-2"))
+        # erstes Passwort für jemanden ohne Passwort: erlaubt; bestehendes fremdes nur als Admin
+        client.post("/profil/passwort", data={"member": "hamza", "new": "hamza-pass-1", "again": "hamza-pass-1"},
+                    headers={"X-CSRF-Token": csrf})
+        self.assertTrue(team.check_password(c, "hamza", "hamza-pass-1"))
+        with mock.patch.dict("app.main.SETTINGS", {"ADMIN_USERS": ["oskar"]}):
+            r = client.post("/profil/passwort", data={"member": "hamza", "new": "boese-pass-1", "again": "boese-pass-1"},
+                            headers={"X-CSRF-Token": csrf})
+        self.assertEqual(r.status_code, 403)
+        self.assertTrue(team.check_password(c, "hamza", "hamza-pass-1"))
+        for key in ("finn", "hamza"):
+            c.execute("UPDATE team SET pw_hash=NULL WHERE key=?", (key,))
+        c.commit()
+
     def test_login_redirect_stays_in_app(self):
         from app.main import safe_next
         self.assertEqual(safe_next("/leads/suche?x=1"), "/leads/suche?x=1")
@@ -1110,6 +1213,21 @@ class ViewsTest(unittest.TestCase):
         self.assertIn('id="bellBtn"', self.client.get("/crm/postfach").get_data(as_text=True))
         self.assertEqual(self.client.get("/crm/postfach/schreiben").status_code, 200)
         self.assertTrue(self.client.post("/crm/postfach/abrufen", headers={"X-CSRF-Token": self.csrf}).get_json()["ok"])
+        # Team: Demo arbeitet als Oskar; Vorlage mit Vorschau, Team-Zahlen, eigenes CRM
+        self.assertIn("Meine Vorlage", self.client.get("/vorlage").get_data(as_text=True))
+        r = self.client.post("/vorlage/vorschau", data={"text": "Betreff: Test {firma}\nAnrede: Moin,\n\nHallo von {absender}.",
+                                                        "template": "brief", "graphic": "none"},
+                             headers={"X-CSRF-Token": self.csrf})
+        self.assertIn("Hallo von Oskar Jacobsen.", r.get_data(as_text=True))
+        r = self.client.post("/vorlage", data={"text": "Betreff: Mein Betreff {firma}\n\nMein Text.", "template": "brief",
+                                               "graphic": "none", "gruss": "Bis bald"}, headers={"X-CSRF-Token": self.csrf})
+        self.assertTrue(r.get_json()["ok"])
+        self.assertEqual(team.settings(c, "oskar")["gruss"], "Bis bald")
+        self.assertIn("Team und Zahlen", self.client.get("/team").get_data(as_text=True))
+        self.assertIn("owner-filter", self.client.get("/crm?wer=alle").get_data(as_text=True))
+        self.assertEqual(self.client.post("/profil/passwort", data={"new": "abcdefgh1", "again": "abcdefgh1"},
+                                          headers={"X-CSRF-Token": self.csrf}).status_code, 403)  # Demo: nicht ändern
+        team.save_settings(c, "oskar", vorlage="", gruss="Viele Grüße")
         r = self.client.post("/push/subscribe", data={"subscription": json.dumps(
             {"endpoint": "https://192.168.1.1:8006/x", "keys": {"p256dh": "a", "auth": "b"}})},
             headers={"X-CSRF-Token": self.csrf})

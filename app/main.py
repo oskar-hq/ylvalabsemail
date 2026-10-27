@@ -252,15 +252,85 @@ def safe_next(nxt):
     return nxt
 
 
+def _login_page(status=200, **kw):
+    from . import team
+    c = leaddb.connect(DB_PATH)
+    try:
+        people = team.members(c)
+    finally:
+        c.close()
+    mode = kw.pop("mode", None) or ("team" if any(m["has_password"] for m in people) else "postfach")
+    return render_template("login.html", people=people, mode=mode, **kw), status
+
+
+def _team_login():
+    """Anmelden mit Name und eigenem Passwort (Finn, Hamza, Oskar). Gleiche Sperre nach Fehlversuchen."""
+    from . import team
+    key = request.form.get("member", "")
+    password = request.form.get("password", "")
+    keys = [f"ip:{client_ip()}", f"user:team:{key}"]
+    if any(len(recent_fails(k)) >= LOCK_RULES[k.split(":", 1)[0]][0] for k in keys):
+        flash("Zu viele Fehlversuche. Bitte in einigen Minuten erneut versuchen.")
+        return _login_page(429, member=key, mode="team")
+    c = leaddb.connect(DB_PATH)
+    try:
+        member = team.get(c, key)
+        ok = bool(member) and team.check_password(c, key, password)
+        no_password = bool(member) and not member["pw_hash"]
+    finally:
+        c.close()
+    if not ok:
+        with _sessions_lock:
+            for k in keys:
+                _failed_logins.setdefault(k, []).append(time.time())
+        app.logger.warning("Fehlgeschlagene Anmeldung für %r von %s", key, client_ip())
+        flash("Für diese Person ist noch kein Passwort festgelegt. Bitte einmal mit dem Postfach anmelden und unter "
+              "„Mein Profil“ ein Passwort festlegen." if no_password else "Anmeldung fehlgeschlagen: Passwort falsch.")
+        return _login_page(401, member=key, mode="team")
+    with _sessions_lock:
+        for k in keys:
+            _failed_logins.pop(k, None)
+    _start_session({"user": key, "team": key, "name": member["name"], "password": "", "address": ""})
+    return redirect(safe_next(request.args.get("next", "")) or url_for("index"))
+
+
+def _start_session(acc):
+    sid = secrets.token_urlsafe(32)
+    with _sessions_lock:
+        _sessions[sid] = {**acc, "since": time.time()}
+    session.clear()
+    session["sid"] = sid
+
+
+def update_session(**values):
+    """Angaben der laufenden Anmeldung ändern (z. B. wer man im Team ist)."""
+    with _sessions_lock:
+        acc = _sessions.get(session.get("sid"))
+        if acc:
+            acc.update(values)
+            g.account = acc
+
+
+def mail_creds(account):
+    """Womit der Mailer verschickt: mit dem eigenen Postfach (Anmeldung per Postfach) oder, bei Anmeldung mit
+    Name und Passwort, über das gemeinsame Akquise-Postfach."""
+    if account.get("password") or account.get("demo"):
+        return account["user"], account["password"], account["address"]
+    user = SETTINGS["OUTREACH_USER"]
+    return user, SETTINGS["OUTREACH_PASSWORD"], user if "@" in user else SETTINGS["FROM_ADDRESS"]
+
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
+        if request.form.get("member"):
+            return _team_login()
         user = request.form.get("user", "").strip()
         password = request.form.get("password", "")
         keys = [f"ip:{client_ip()}", f"user:{user.lower()}"]
         if any(len(recent_fails(k)) >= LOCK_RULES[k.split(":", 1)[0]][0] for k in keys):
             flash("Zu viele Fehlversuche. Bitte in einigen Minuten erneut versuchen.")
-            return render_template("login.html", user=user), 429
+            return _login_page(429, user=user, mode="postfach")
         count_fail = True
         if not login_allowed(user):
             error = "Dieses Konto ist für den Mailer nicht freigegeben."
@@ -280,20 +350,17 @@ def login():
             app.logger.warning("Fehlgeschlagene Anmeldung für %r von %s", user, client_ip())
         if error:
             flash(error)
-            return render_template("login.html", user=user), 401
+            return _login_page(401, user=user, mode="postfach")
         with _sessions_lock:
             for k in keys:
                 _failed_logins.pop(k, None)
-        sid = secrets.token_urlsafe(32)
-        with _sessions_lock:
-            _sessions[sid] = {"user": user, "password": password, "since": time.time(),
-                              "address": user if "@" in user else SETTINGS["FROM_ADDRESS"]}
-        session.clear()
-        session["sid"] = sid
-        return redirect(safe_next(request.args.get("next", "")) or url_for("index"))
+        _start_session({"user": user, "password": password, "team": None,
+                        "address": user if "@" in user else SETTINGS["FROM_ADDRESS"]})
+        nxt = safe_next(request.args.get("next", "")) or url_for("index")
+        return redirect(url_for("team.who_am_i", next=nxt))
     if current_account():
         return redirect(url_for("index"))
-    return render_template("login.html")
+    return _login_page()
 
 
 @app.post("/demo")
@@ -303,8 +370,8 @@ def demo_login():
         abort(404)
     sid = secrets.token_urlsafe(32)
     with _sessions_lock:
-        _sessions[sid] = {"user": "demo", "password": "", "since": time.time(),
-                          "address": "demo@ylvalabs.de", "demo": True}
+        _sessions[sid] = {"user": "demo", "password": "", "since": time.time(), "team": "oskar",
+                          "name": "Oskar Jacobsen", "address": "demo@ylvalabs.de", "demo": True}
     session.clear()
     session["sid"] = sid
     return redirect(url_for("index"))
@@ -386,6 +453,8 @@ def lead_fields(lead):
 @login_required
 def compose():
     fields, from_history, lead = defaults(), False, None
+    if g.account.get("name"):
+        fields["sender_name"] = g.account["name"]
     if request.args.get("from"):
         row = db().execute("SELECT fields FROM mails WHERE id=? AND user=?",
                            (request.args["from"], g.account["user"])).fetchone()
@@ -485,9 +554,12 @@ def save_to_sent(account, messages):
 @app.post("/send")
 @login_required
 def send():
-    account = g.account
+    m_user, m_password, m_address = mail_creds(g.account)
+    account = {**g.account, "address": m_address}
     form = form_data()
     test = form.get("mode") == "test"
+    if not m_password and not g.account.get("demo"):
+        return jsonify(error="Zum Senden fehlt das Akquise-Postfach (Einstellungen → Postfach und Versand)."), 400
     if not account["address"]:
         return jsonify(error="Keine Absenderadresse bekannt. Bitte FROM_ADDRESS in der Konfiguration setzen."), 400
     if test:
@@ -537,7 +609,7 @@ def send():
                         headers={"Content-Disposition": f'attachment; filename="{name}.eml"'})
     sent, failed, sent_msgs = [], [], []
     try:
-        smtp = smtp_connect(account["user"], account["password"])
+        smtp = smtp_connect(m_user, m_password)
     except Exception as exc:
         return jsonify(error=f"Verbindung zum Mailserver fehlgeschlagen: {exc}"), 502
     try:
@@ -553,7 +625,7 @@ def send():
                 sent.append(rcpt["email"])
                 sent_msgs.append(msg)
             except smtplib.SMTPServerDisconnected:
-                smtp = smtp_connect(account["user"], account["password"])
+                smtp = smtp_connect(m_user, m_password)
                 smtp.send_message(msg)
                 sent.append(rcpt["email"])
                 sent_msgs.append(msg)
@@ -571,12 +643,12 @@ def send():
     if lead_id and sent_msgs and not test:
         c = leaddb.connect(DB_PATH)
         try:
-            crm.record_mail(c, lead_id, sent_msgs[0], account["address"])
+            crm.record_mail(c, lead_id, sent_msgs[0], g.account.get("name") or account["address"])
         finally:
             c.close()
     if sent_msgs and not test and SETTINGS["IMAP_HOST"] and form.get("save_sent"):
         try:
-            save_to_sent(account, sent_msgs)
+            save_to_sent({"user": m_user, "password": m_password}, sent_msgs)
         except Exception as exc:
             warning = f"Gesendet, aber Ablage im Ordner „Gesendet“ fehlgeschlagen: {exc}"
 
@@ -628,6 +700,7 @@ def healthz():
 from . import agent, crm, leaddb  # noqa: E402
 from .crm_views import bp as crm_bp  # noqa: E402
 from .leads_views import bp as leads_bp  # noqa: E402
+from .team_views import bp as team_bp  # noqa: E402
 from .palette import bp as palette_bp  # noqa: E402
 from .settings_views import bp as settings_bp  # noqa: E402
 
@@ -635,4 +708,5 @@ app.register_blueprint(leads_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(crm_bp)
 app.register_blueprint(palette_bp)
+app.register_blueprint(team_bp)
 agent.init(SETTINGS, smtp_connect, imap_sent_folder, DB_PATH, SETTINGS["DATA_DIR"])

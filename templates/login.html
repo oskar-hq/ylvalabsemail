@@ -1,24 +1,34 @@
 {% extends "base.html" %}
-{% block title %}Anmelden · Ylva Labs Mailer{% endblock %}
+{% block title %}Anmelden · Ylva Labs{% endblock %}
 {% block body_class %}login-page{% endblock %}
 {% block content %}
 <main class="login">
   <div class="login-card">
     <span class="mark big" aria-hidden="true"><i class="d"></i><i class="d"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i class="d"></i><i class="d"></i></span>
-    <span class="label">Ylva Labs · Mailer</span>
+    <span class="label">Ylva Labs</span>
     <h1>Anmelden.</h1>
-    <p class="muted">Mit den Zugangsdaten deines E-Mail-Postfachs. Darüber werden die Mails auch verschickt.</p>
     {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="alert">{{ m }}</p>{% endfor %}{% endwith %}
-    <form method="post">
+    <form method="post" class="team-login" {{ 'hidden' if mode != 'team' }} id="teamLogin">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-      <label><span class="label">E-Mail / Benutzer</span><input name="user" type="text" autocomplete="username" value="{{ user or '' }}" required autofocus></label>
+      <fieldset class="who-pick"><legend class="label">Wer bist du?</legend>
+        {% for p in people %}<label><input type="radio" name="member" value="{{ p.key }}" {{ 'checked' if member == p.key or (not member and loop.first) }} required><span>{{ p.name }}</span></label>{% endfor %}
+      </fieldset>
       <label><span class="label">Passwort</span><input name="password" type="password" autocomplete="current-password" required></label>
       <button class="btn primary" type="submit">Anmelden</button>
+      <p class="muted small">Noch kein Passwort? Einmal <a href="#" data-mode="postfach">mit dem E-Mail-Postfach anmelden</a> und dann unter „Mein Profil“ festlegen.</p>
+    </form>
+    <form method="post" {{ 'hidden' if mode == 'team' }} id="boxLogin">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <p class="muted">Mit den Zugangsdaten eines E-Mail-Postfachs von Ylva Labs.</p>
+      <label><span class="label">E-Mail</span><input name="user" type="text" autocomplete="username" value="{{ user or '' }}" required></label>
+      <label><span class="label">Passwort</span><input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn primary" type="submit">Anmelden</button>
+      {% if people|selectattr('has_password')|list %}<p class="muted small"><a href="#" data-mode="team">Mit Name und Passwort anmelden</a></p>{% endif %}
     </form>
     {% if demo_enabled %}
     <form method="post" action="{{ url_for('demo_login') }}" class="demo-form">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-      <p class="muted small">Noch kein Postfach? Im Demo-Modus kannst du alles ausprobieren. Verschickt wird dabei nichts.</p>
+      <p class="muted small">Im Demo-Modus kannst du alles ausprobieren. Verschickt wird dabei nichts.</p>
       <button class="btn" type="submit">Demo ansehen</button>
     </form>
     {% endif %}
@@ -26,3 +36,4 @@
   <div class="band" aria-hidden="true" style="--band:url('{{ url_for('static', filename='band.svg') }}')"></div>
 </main>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='login.js') }}"></script>{% endblock %}

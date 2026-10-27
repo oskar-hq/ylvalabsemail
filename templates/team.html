@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Team und Zahlen · Ylva Labs{% endblock %}
+{% macro euro(v) %}{{ '{:,.0f}'.format(v or 0).replace(',', '.') }} €{% endmacro %}
+{% macro card(p, total=false) %}
+<article class="stat-card {{ 'total' if total }} {{ 'mine' if p.key and p.key == me }}">
+  <header><span class="avatar">{{ p.name[:1] }}</span><b>{{ p.name }}</b>{% if p.key and p.key == me %}<span class="pill">du</span>{% endif %}</header>
+  <dl>
+    <div><dt>Im CRM</dt><dd>{{ p.im_crm }}</dd></div>
+    <div><dt>Angeschrieben</dt><dd>{{ p.angeschrieben }}</dd></div>
+    <div><dt>Antworten</dt><dd>{{ p.antworten }}{% if p.quote is not none %} <small>{{ p.quote }} %</small>{% endif %}</dd></div>
+    <div><dt>Interesse</dt><dd>{{ p.interesse }}</dd></div>
+    <div><dt>Gespräche</dt><dd>{{ p.gespraeche }}</dd></div>
+    <div><dt>Kunden</dt><dd>{{ p.kunden }}{% if p.umsatz %} <small>{{ euro(p.umsatz) }}</small>{% endif %}</dd></div>
+    <div><dt>Mails geschrieben</dt><dd>{{ p.mails }}</dd></div>
+  </dl>
+  <a class="btn small" href="{{ url_for('crm.board', wer=p.key or 'alle') }}">{{ 'Gesamt-CRM ansehen' if total else 'CRM ansehen' }}</a>
+</article>
+{% endmacro %}
+{% block content %}
+<main class="page">
+  <h1 class="title">Team und Zahlen</h1>
+  <p class="muted">Alles, was jede Person bisher gemacht hat. Zuständig für einen Betrieb wird, wer ihn zuerst bearbeitet. Ändern kannst du das in der Akte.</p>
+  <div class="stat-grid">
+    {{ card(total, true) }}
+    {% for p in people %}{{ card(p) }}{% endfor %}
+  </div>
+  {% if total.ohne %}<p class="muted small">{{ total.ohne }} Betriebe im CRM sind noch niemandem zugeordnet.</p>{% endif %}
+</main>
+{% endblock %}

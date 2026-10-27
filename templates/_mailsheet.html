@@ -5,6 +5,7 @@
     <button type="button" class="btn small" data-close aria-label="Schließen">✕</button>
   </div>
   <p class="note small" id="mailNote" hidden></p>
+  <label class="field from-field"><span class="sub">Von</span><select name="von" id="mailFrom"></select></label>
   <label class="field"><span class="sub">Betreff</span><input type="text" name="subject" id="mailSubject"></label>
   <label class="field"><span class="sub">Anrede</span><input type="text" name="greeting" id="mailGreeting"></label>
   <label class="field"><span class="sub">Text <em>Gruß und Unterschrift kommen automatisch dazu</em></span><textarea name="body" id="mailBody" rows="9"></textarea></label>
@@ -19,11 +20,12 @@
     <input type="hidden" name="template" id="mailTemplateInput">
     <input type="hidden" name="band_seed" id="mailSeedInput">
   </div>
-  <details class="mail-preview" id="mailPreviewBox"><summary class="small">Vorschau der Mail</summary>
+  <details class="mail-preview" id="mailPreviewBox" open><summary class="small">Vorschau der Mail</summary>
     <iframe id="mailFrame" title="Vorschau der Mail" sandbox=""></iframe>
   </details>
   <div class="mail-tools small">
     <button type="button" class="link" id="mailTemplate">Vorlage neu einsetzen</button>
+    <a id="mailTplEdit" href="/vorlage">Meine Vorlage bearbeiten</a>
     <a id="mailDetail">Akte öffnen</a>
   </div>
   <div class="mail-actions">

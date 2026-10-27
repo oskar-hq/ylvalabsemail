@@ -22,7 +22,9 @@ def is_admin(account):
     if account.get("demo"):
         return False
     admins = SETTINGS["ADMIN_USERS"]
-    return not admins or (account.get("address") or account.get("user", "")).lower() in admins
+    # Postfach-Anmeldung: die Adresse; Anmeldung mit Name: der Kurzname (finn) oder der volle Name aus ADMIN_USERS
+    names = {(account.get(k) or "").lower() for k in ("address", "user", "team", "name")} - {""}
+    return not admins or bool(names & set(admins))
 
 
 def require_admin():

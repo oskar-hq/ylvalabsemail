@@ -513,6 +513,10 @@
     try { const r = await post(`/crm/${page.dataset.lead}/stufe`, { stage: ev.target.value }); toast(`Stufe: ${r.label}`); setTimeout(reload, 700); }
     catch (e) { toast(e.message, true); }
   });
+  $('#ownerSelect')?.addEventListener('change', async (ev) => {
+    try { const r = await post(`/crm/${page.dataset.lead}/zustaendig`, { owner: ev.target.value }); toast(`Zuständig: ${r.name}`); }
+    catch (e) { toast(e.message, true); }
+  });
   $('#dealForm')?.addEventListener('submit', async (ev) => {
     ev.preventDefault();
     try { const r = await post(`/crm/${page.dataset.lead}/kontakt`, new FormData(ev.target)); toast(r.changed ? 'Gespeichert.' : 'Keine Änderung.'); }
