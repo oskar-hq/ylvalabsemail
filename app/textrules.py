@@ -19,6 +19,10 @@ Recherche:
 - Reicht die Information nicht, lieber neutral als erfunden persönlich. Erwähne keine Recherche, die nicht
   stattgefunden hat.
 
+Die Mail stellt zuerst Ylva Labs vor. Danach folgt der Aufhänger, deshalb klingt er wie eine Begründung, z. B.
+„Ich schreibe Ihnen, weil ich auf Ihrer Webseite gesehen habe, dass …“. Nicht so tun, als wüssten wir schon, wie es
+im Betrieb läuft.
+
 Aufhänger (warum gerade dieser Betrieb), höchstens zwei Sätze, in dieser Reihenfolge:
 1. eine konkrete Stellenanzeige mit Bezug zu Büro, Verwaltung, Kundenservice oder operativen Abläufen,
 2. ein konkretes Angebot, eine Leistung oder ein erkennbarer Ablauf im Betrieb,

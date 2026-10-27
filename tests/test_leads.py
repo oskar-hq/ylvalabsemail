@@ -237,10 +237,13 @@ class AgentTest(unittest.TestCase):
         fields = agent.template_draft(self.c, lead_id)
         self.assertIn("Tischlerei A", fields["subject"])
         self.assertEqual(fields["greeting"], "Guten Tag Jens Hansen,")
-        self.assertIn("Tagsüber sind Sie und Ihr Team bei den Kunden", fields["body"])  # Branche Handwerk
+        self.assertTrue(fields["body"].startswith("ich bin "))  # erst vorstellen, nicht „Ich kann mir vorstellen …“
+        self.assertIn("Angebote und Aufmaß direkt beim Kunden", fields["body"])  # typische Aufgaben im Handwerk
+        self.assertIn("Ein kleines Rechenbeispiel:", fields["body"])
+        self.assertNotIn("Ich kann mir gut vorstellen", fields["body"])
         self.assertNotIn("Angebote, Aufmaß und Nachkalkulation", fields["body"])  # steckt schon im Branchen-Satz
         self.assertNotIn("Bei Betrieben wie", fields["body"])
-        self.assertIn("Sprachnotiz", fields["body"])
+        self.assertIn("Sie sprechen beim Kunden kurz ein", fields["body"])  # Beispiel zur Branche
         self.assertNotIn("{", fields["body"])
         self.assertEqual(leaddb.get_lead(self.c, lead_id)["status"], "entwurf")
         with mock.patch.object(ai, "write_draft", return_value={"betreff": "B", "anrede": "Moin,", "text": "T"}) as w:
@@ -773,7 +776,7 @@ class ClaudeResearchTest(unittest.TestCase):
         fields = agent.template_draft(self.c, lead["id"])
         self.assertEqual(fields["greeting"], "Guten Tag Herr Hansen,")
         self.assertIn("dass Sie eine Bürokraft suchen", fields["body"])
-        self.assertIn("Dazu kommt bei Ihnen vermutlich noch: Aufmaß und Angebote und Tourenplanung.", fields["body"])
+        self.assertIn("helfen können: Aufmaß und Angebote und Tourenplanung.", fields["body"])  # recherchiert
 
     def test_codeblock_and_missing_header(self):
         text = "```csv\nFirma,Webseite,Ort,Branche,Kategorie\nHof B,hof-b.example,Süderbrarup,landwirtschaft,Hof\n```"
@@ -783,19 +786,42 @@ class ClaudeResearchTest(unittest.TestCase):
 
 
 class TemplateUpgradeTest(unittest.TestCase):
+    V2 = """## Vorlage (ohne KI)
+
+Betreff: Eine Idee für {firma}
+Anrede: {anrede}
+
+{aufhaenger}
+
+{verstaendnis}
+
+Dazu kommt bei Ihnen vermutlich noch: {zeitfresser}.
+
+{beispiel}
+
+Ich bin Oskar Jacobsen von Ylva Labs aus Kappeln. Wir bauen solche Werkzeuge gemeinsam mit Betrieben.
+
+Hätten Sie Lust auf ein Gespräch von 30 Minuten? Gern bei Ihnen vor Ort oder am Telefon, ganz wie es Ihnen passt.
+"""
+
     def test_old_template_is_replaced_once_custom_stays(self):
         c = leaddb.connect(os.path.join(tempfile.mkdtemp(), "t.db"))
         seed = leaddb.BRAIN_SEED.read_text(encoding="utf-8")
-        old = seed.replace("Dazu kommt bei Ihnen vermutlich noch", agent.OLD_TEMPLATE_MARK)
-        leaddb.save_brain(c, old.replace("## Über uns", "## Über uns\n\n- Eigene Zeile"), "t", "alt")
+        new_section = leaddb.brain_sections(seed, [agent.TEMPLATE_HEADING]).strip()
+        old = seed.replace(new_section, self.V2.strip()).replace("## Über uns", "## Über uns\n\n- Eigene Zeile")
+        leaddb.save_brain(c, old, "t", "alt")
+        team.save_settings(c, "finn", vorlage=self.V2.split("\n", 2)[2])  # Finns Kopie der alten Standard-Vorlage
+        team.save_settings(c, "hamza", vorlage="Betreff: Meins\n\nMein eigener Text.")
         self.assertTrue(agent.upgrade_template(c))
         brain = leaddb.brain(c)
-        self.assertNotIn(agent.OLD_TEMPLATE_MARK, brain)
-        self.assertIn("{verstaendnis}", brain)
+        self.assertNotIn("Dazu kommt bei Ihnen vermutlich noch", brain)
+        self.assertIn("{rechenbeispiel}", brain)
         self.assertIn("- Eigene Zeile", brain)  # der Rest des Gehirns bleibt
+        self.assertEqual(team.settings(c, "finn")["vorlage"], "")  # alte Standard-Kopie: wieder gemeinsam
+        self.assertIn("Mein eigener Text.", team.settings(c, "hamza")["vorlage"])  # eigene bleibt
         self.assertFalse(agent.upgrade_template(c))  # nur einmal
         c2 = leaddb.connect(os.path.join(tempfile.mkdtemp(), "t.db"))
-        leaddb.save_brain(c2, seed.replace("{beispiel}", "Unser eigener Text."), "t", "eigen")
+        leaddb.save_brain(c2, old.replace("{beispiel}", "Unser eigener Text.").replace("{verstaendnis}", ""), "t", "e")
         self.assertFalse(agent.upgrade_template(c2))  # selbst geänderte Vorlage bleibt
         self.assertIn("Unser eigener Text.", leaddb.brain(c2))
 
@@ -1042,8 +1068,7 @@ class KnownTest(unittest.TestCase):
         lead_id = self.c.execute("SELECT id FROM leads WHERE name='Bau Jensen'").fetchone()[0]
         body = agent.template_draft(self.c, lead_id)["body"]
         self.assertIn("Sie suchen gerade eine Bürokraft", body)
-        self.assertIn("Rückfragen oft übers Telefon ins Büro", body)  # recherchiert statt Branchen-Satz
-        self.assertIn("vermutlich noch: die Übertragung von Angaben aus Anrufen in Auftragsunterlagen.", body)
+        self.assertIn("helfen können: die Übertragung von Angaben aus Anrufen in Auftragsunterlagen.", body)
         self.assertIn("Sprachnotiz von der Baustelle", body)
         self.assertNotIn("Tagsüber sind Sie und Ihr Team", body)
         prompt = claude_research.build_prompt(leaddb.brain(self.c), {"LEADS_REGION": "DE-SH"}, 10)

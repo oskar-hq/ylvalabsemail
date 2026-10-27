@@ -59,7 +59,9 @@ COLUMNS = [
 ]
 HEADERS = [c[0] for c in COLUMNS]
 # Platzhalter, die die App ohne Recherche selbst füllt
-OWN_PLACEHOLDERS = {"{absender}": "Name der Person, die schreibt (Finn, Hamza oder Oskar)"}
+OWN_PLACEHOLDERS = {"{absender}": "Name der Person, die schreibt (Finn, Hamza oder Oskar)",
+                    "{probleme}": "Typische Aufgaben der Branche (oder der recherchierte Zeitfresser)",
+                    "{rechenbeispiel}": "Kleines Rechenbeispiel zur Branche, als Annahme formuliert"}
 
 
 class CsvError(ValueError):
