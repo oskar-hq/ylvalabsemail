@@ -12,7 +12,7 @@ import io
 import json
 import re
 
-from . import crm, finder, known, leaddb, niches
+from . import crm, finder, known, leaddb, niches, textrules
 
 FILENAME = "ylva-recherche.csv"
 BRANCHEN = tuple(k for k, _ in niches.GROUPS)
@@ -40,12 +40,18 @@ COLUMNS = [
      "Privatkunden im Raum Schleswig“)", ""),
     ("Mitarbeitende", "groesse", False, "Nur eine Zahl, wenn sie irgendwo genannt wird (Webseite, Stellenanzeige, "
      "Presse). Sonst leer lassen, nicht schätzen", ""),
-    ("Zeitfresser", "zeitfresser", False, "Ein bis zwei konkrete Abläufe, die bei genau diesem Betrieb vermutlich "
-     "viel Zeit kosten, kurz und passend zum Satz „Bei Betrieben wie … kostet oft das hier viel Zeit: …“. Mehrere "
-     "mit | trennen, z. B. „Angebote und Aufmaß|Tourenplanung“", "{zeitfresser}"),
-    ("Aufhänger", "aufhaenger", False, "Ein ganzer Satz über etwas Konkretes, das ihr bei genau diesem Betrieb "
-     "gesehen habt, in Sie-Form, z. B. „Auf Ihrer Webseite habe ich gesehen, dass Sie gerade eine Bürokraft für die "
-     "Disposition suchen.“ Nur Belegtes, nichts erfinden", "{aufhaenger}"),
+    ("Aufhänger", "aufhaenger", False, "Höchstens zwei ganze Sätze in Sie-Form, warum gerade dieser Betrieb (Regeln "
+     "unten), z. B. „Auf Ihrer Webseite habe ich gesehen, dass Sie gerade eine Bürokraft für die Disposition "
+     "suchen.“ Nur Belegtes; leer lassen, wenn nichts Konkretes zu finden ist", "{aufhaenger}"),
+    ("Verständnis", "verstaendnis", False, "Höchstens zwei Sätze zu genau einer Herausforderung im Arbeitsalltag, "
+     "die sich aus dem Geschäftsmodell ergibt (Regeln unten). Leer lassen, wenn unklar: dann setzt die App einen "
+     "Satz zur Branche ein", "{verstaendnis}"),
+    ("Zeitfresser", "zeitfresser", False, "Genau ein Arbeitsablauf als Satzteil ohne Punkt, er steht in „Dazu kommt "
+     "bei Ihnen vermutlich noch: …“, z. B. „die Übertragung von Angaben aus Kundenanrufen in Angebote und "
+     "Auftragsunterlagen“. Wiederholt nichts aus dem Verständnis", "{zeitfresser}"),
+    ("Beispiel", "beispiel", False, "Ein bis zwei Sätze: ein Szenario, wie Ylva Labs genau diesen Zeitfresser "
+     "vereinfachen könnte, Eingabe → Verarbeitung → Ergebnis, als mögliches gemeinsames Vorhaben (z. B. „Denkbar wäre "
+     "zum Beispiel, dass …“). Leer lassen, wenn unklar: dann setzt die App ein Beispiel zur Branche ein", "{beispiel}"),
     ("Begründung", "begruendung", False, "Ein Satz, warum der Betrieb passt (Größe, Druck, Abläufe)", ""),
     ("Quelle", "quelle", False, "Adresse der Seite, auf der die wichtigsten Angaben stehen (z. B. Impressum)", ""),
     ("Breite", "lat", False, "Geografische Breite, z. B. 54.6614, wenn bekannt", ""),
@@ -53,9 +59,7 @@ COLUMNS = [
 ]
 HEADERS = [c[0] for c in COLUMNS]
 # Platzhalter, die die App ohne Recherche selbst füllt
-OWN_PLACEHOLDERS = {"{absender}": "Name aus den Einstellungen (Unterschrift unter Akquise-Nachrichten)",
-                    "{verstaendnis}": "Satz zum Alltag der Branche (setzt die App ein)",
-                    "{beispiel}": "Konkretes Beispiel, was wir bauen könnten (setzt die App ein)"}
+OWN_PLACEHOLDERS = {"{absender}": "Name der Person, die schreibt (Finn, Hamza oder Oskar)"}
 
 
 class CsvError(ValueError):
@@ -131,6 +135,8 @@ eine Zeile pro Betrieb) mit genau dieser Kopfzeile:
 
 Die Spalten:
 {chr(10).join(lines)}
+
+{textrules.RULES}
 
 Wenn du Dateien anlegen kannst (Claude Code), speichere die Datei als „{FILENAME}“. Sonst gib den kompletten Inhalt \
 in einem einzigen Codeblock aus, ohne weiteren Text darin. Danach kurz: wie viele Betriebe, und wo du unsicher warst.
@@ -217,6 +223,8 @@ def import_csv(conn, raw, author, center):
             "anrede": d.get("anrede", ""),
             "zeitfresser": [z.strip() for z in re.split(r"\|", d.get("zeitfresser", "")) if z.strip()][:3],
             "aufhaenger": d.get("aufhaenger", ""),
+            "verstaendnis": d.get("verstaendnis", ""),
+            "beispiel": d.get("beispiel", ""),
             "groesse": int(size) if size and 0 < size < 100000 else None,
             "begruendung": d.get("begruendung", ""),
             "taetigkeit": d.get("taetigkeit", ""),

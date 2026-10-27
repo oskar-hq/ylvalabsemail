@@ -434,8 +434,9 @@ def fill_template(lead, text, absender):
             greeting = m.group(2)
     research = lead.get("research") or {}
     imported = research.get("import") or {}
-    fresser = (research.get("zeitfresser") or ["Papierkram und wiederkehrende Anfragen"])[:3]
-    if lead.get("branche") in VERSTAENDNIS:  # was der Branchen-Satz schon sagt, nicht noch einmal aufzählen
+    fresser = (imported.get("zeitfresser") or research.get("zeitfresser")
+               or ["Papierkram und wiederkehrende Anfragen"])[:3]  # recherchiert geht vor den Regeln
+    if lead.get("branche") in VERSTAENDNIS and not imported.get("verstaendnis"):  # nicht doppelt zum Branchen-Satz
         fresser = [f for f in fresser if f != scoring.BRANCHE_ZEITFRESSER.get(lead["branche"])]
     fresser = fresser[:2]
     values = {"firma": lead["name"], "kategorie": lead.get("category_label") or "Betrieb",
@@ -443,8 +444,8 @@ def fill_template(lead, text, absender):
                                                    if lead.get("contact_name") else "Guten Tag,"),
               "zeitfresser": " und ".join(fresser), "ort": lead.get("city") or "Ihrer Region",
               "absender": absender, "aufhaenger": imported.get("aufhaenger", ""),
-              "verstaendnis": VERSTAENDNIS.get(lead.get("branche"), VERSTAENDNIS_SONST),
-              "beispiel": BEISPIEL.get(lead.get("branche"), BEISPIEL_SONST)}
+              "verstaendnis": imported.get("verstaendnis") or VERSTAENDNIS.get(lead.get("branche"), VERSTAENDNIS_SONST),
+              "beispiel": imported.get("beispiel") or BEISPIEL.get(lead.get("branche"), BEISPIEL_SONST)}
 
     def fill(t):
         return re.sub(r"\{(\w+)\}", lambda m: values.get(m.group(1), m.group(0)), t).strip()
