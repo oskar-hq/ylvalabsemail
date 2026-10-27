@@ -689,3 +689,10 @@ dialog.find{width:min(100% - 24px,600px);margin:12vh auto auto;padding:0;overflo
 .prefs-form{display:grid !important;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px 16px;align-items:end}
 .prefs-form > p,.prefs-form > button{grid-column:1 / -1;justify-self:start}
 .owner-filter .you{font-style:normal;font-weight:500;font-size:11px;color:var(--muted);margin-left:4px}
+.mail-test{margin-top:28px;padding:16px 18px;border-radius:14px;background:var(--s1)}
+.mail-test h2{margin:0 0 6px;font:600 16px/1.3 var(--sans)}
+.mail-test-results{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.mail-test-results li{display:flex;flex-direction:column;gap:2px;font-size:13.5px}
+.mail-test-results li.ok b{color:var(--good)}
+.mail-test-results li.bad b{color:var(--err)}
+.mail-test-results li span{color:var(--body)}

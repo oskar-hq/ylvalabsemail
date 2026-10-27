@@ -39,5 +39,14 @@
     <p class="hint">Danach startet die App kurz neu. Passwörter werden verschlüsselt gespeichert und nie wieder angezeigt.</p>
     {% endif %}
   </form>
+  {% if grp.id == 'postfach' %}
+  <section class="mail-test" id="mailTest">
+    <h2>Verbindung testen</h2>
+    <p class="muted small">Meldet sich mit den gespeicherten Daten bei Strato an. Es wird nichts verschickt. Nach dem Sichern startet die App kurz neu, danach hier testen.</p>
+    <button class="btn" type="button" id="mailTestBtn">Verbindung testen</button>
+    <ul class="mail-test-results" id="mailTestOut"></ul>
+  </section>
+  {% endif %}
 </main>
 {% endblock %}
+{% block scripts %}{% if grp.id == 'postfach' %}<script src="{{ url_for('static', filename='mailtest.js') }}"></script>{% endif %}{% endblock %}

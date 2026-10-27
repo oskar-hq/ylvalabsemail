@@ -8,8 +8,8 @@ from datetime import datetime
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from . import agent, backups, config_store, updater
-from .main import SETTINGS, login_required
+from . import agent, backups, config_store, leaddb, updater
+from .main import DB_PATH, SETTINGS, login_required
 
 bp = Blueprint("settings", __name__)
 
@@ -94,6 +94,17 @@ def settings():
             flash("Keine Änderung.")
             return redirect(back)
         config_store.save(data_dir, changes, removals)
+        mailbox_keys = {"OUTREACH_USER", "OUTREACH_PASSWORD", "SMTP_HOST", "SMTP_PORT", "SMTP_SECURITY", "IMAP_HOST",
+                        "IMAP_PORT", "FROM_ADDRESS"}
+        if mailbox_keys & {*changes, *removals}:
+            # alte Fehlermeldung weg, nach dem Neustart gleich neu abrufen statt erst in zehn Minuten
+            c = leaddb.connect(DB_PATH)
+            try:
+                leaddb.kv_set(c, "inbox_status", None)
+                leaddb.kv_set(c, "last_inbox", 0)
+                leaddb.kv_set(c, "request:inbox", True)
+            finally:
+                c.close()
         names = ", ".join(config_store.FIELDS[k]["label"] for k in [*changes, *removals])
         agent.log.info("Einstellungen geändert von %s: %s", who(), ", ".join([*changes, *removals]))
         if restart_soon(request.environ):
@@ -110,6 +121,15 @@ def _group(gid):
     if not group:
         abort(404)
     return group
+
+
+@bp.post("/einstellungen/postfach/test")
+@login_required
+def mailbox_test():
+    """„Verbindung testen“: meldet sich mit den gespeicherten Daten an, verschickt nichts."""
+    if g.account.get("demo"):
+        return jsonify(results=[{"name": "Demo", "ok": True, "text": "Im Demo-Modus wird kein Postfach geprüft."}])
+    return jsonify(results=[{"name": n, "ok": ok, "text": t} for n, ok, t in agent.test_mailbox()])
 
 
 @bp.get("/einstellungen/zugang")
