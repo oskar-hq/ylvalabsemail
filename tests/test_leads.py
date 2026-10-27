@@ -995,6 +995,25 @@ class KnownTest(unittest.TestCase):
             "LEADS_CENTER": (54.6, 9.9), "LEADS_RADIUS_KM": 50}, 10, "", set()))
         self.assertIn("pflege-sonne.de", claude_research.known_hosts(self.c))
 
+    def test_researched_sentences_fill_template(self):
+        csv_text = ("Firma;Webseite;Ort;Branche;Aufhänger;Verständnis;Zeitfresser;Beispiel\n"
+                    "Bau Jensen;https://bau-jensen.example;Husum;handwerk;Sie suchen gerade eine Bürokraft für die "
+                    "Auftragsannahme.;Bei vielen Baustellen gleichzeitig laufen Rückfragen oft übers Telefon ins Büro.;"
+                    "die Übertragung von Angaben aus Anrufen in Auftragsunterlagen;Denkbar wäre zum Beispiel, dass "
+                    "eine Sprachnotiz von der Baustelle als fertiger Auftragseintrag im Büro ankommt.\n")
+        claude_research.import_csv(self.c, csv_text.encode(), "Finn Adams", (54.6, 9.9))
+        lead_id = self.c.execute("SELECT id FROM leads WHERE name='Bau Jensen'").fetchone()[0]
+        body = agent.template_draft(self.c, lead_id)["body"]
+        self.assertIn("Sie suchen gerade eine Bürokraft", body)
+        self.assertIn("Rückfragen oft übers Telefon ins Büro", body)  # recherchiert statt Branchen-Satz
+        self.assertIn("vermutlich noch: die Übertragung von Angaben aus Anrufen in Auftragsunterlagen.", body)
+        self.assertIn("Sprachnotiz von der Baustelle", body)
+        self.assertNotIn("Tagsüber sind Sie und Ihr Team", body)
+        prompt = claude_research.build_prompt(leaddb.brain(self.c), {"LEADS_REGION": "DE-SH"}, 10)
+        self.assertIn("Verständnis;Zeitfresser;Beispiel", prompt)
+        self.assertIn("Eingabe → Verarbeitung → Ergebnis", prompt)
+        self.assertIn("Erfinde keine Probleme", prompt)
+
     def test_backfill_existing_leads(self):
         self.c.execute("INSERT INTO leads (source_id, created_at, updated_at, name, city, website, status) "
                        "VALUES ('osm:node/5', '2026-01-01T10:00:00', '2026-01-01T10:00:00', 'Alt GmbH', 'Kiel', "

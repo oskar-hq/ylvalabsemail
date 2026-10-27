@@ -12,6 +12,8 @@ import os
 
 import anthropic
 
+from . import textrules
+
 
 def _env(key, default):
     return os.environ.get(key, "").strip() or default
@@ -193,7 +195,9 @@ Vermutete Zeitfresser: {"; ".join(analysis.get("zeitfresser", [])) or "–"}
 </auszug_startseite>
 
 Suche dir aus dem Auszug ein bis zwei konkrete Beobachtungen für den ersten Satz. Stütze dich nur auf diese Angaben
-und das Gehirn. Ist keine Ansprechperson bekannt, wähle eine neutrale Anrede."""
+und das Gehirn. Ist keine Ansprechperson bekannt, wähle eine neutrale Anrede.
+
+{textrules.RULES}"""
     rec = analysis.get("recherche")
     if rec:
         prompt += f"""
