@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}Schon gefunden · Leads{% endblock %}
+{% block content %}
+<main class="page">
+  <a class="back" href="{{ url_for('leads.search') }}">‹ Neue Betriebe finden</a>
+  <h1 class="title">Schon gefunden <span class="muted" style="font-size:.45em;font-weight:500">{{ total }}</span></h1>
+  <p class="muted">Jeder Betrieb, den einer von euch je gefunden hat, steht hier und bleibt hier, auch wenn er aussortiert wurde. Die Suche, die Claude-Recherche und das Anlegen von Hand prüfen gegen diese Liste: Gleiche Webseite, gleiche E-Mail-Adresse, gleicher Karteneintrag oder gleicher Name im gleichen Ort gilt als doppelt und kommt nicht noch einmal.</p>
+  <form class="known-tools" method="get">
+    <input type="search" name="q" value="{{ q }}" placeholder="Firma, Ort, Webseite oder E-Mail" aria-label="Suchen">
+    <button class="btn small">Suchen</button>
+    <a class="btn small" href="{{ url_for('leads.known_list', q=q, format='csv') }}">Als CSV</a>
+  </form>
+  {% if rows %}
+  <div class="table-wrap">
+    <table class="crm-table known-table">
+      <thead><tr><th>Betrieb</th><th>Ort</th><th>Webseite / E-Mail</th><th>Zuerst gefunden</th><th>Stand heute</th></tr></thead>
+      <tbody>
+      {% for r in rows %}<tr>
+        <td class="t-name">{% if r.lead_id and r.status is not none %}<a href="{{ url_for('leads.detail', lead_id=r.lead_id) }}">{{ r.name }}</a>{% else %}{{ r.name }}{% endif %}</td>
+        <td>{{ r.city or '–' }}</td>
+        <td class="t-contact">{{ r.host or '' }}{% if r.host and r.email %}<br>{% endif %}{{ r.email or '' }}{% if not r.host and not r.email %}–{% endif %}</td>
+        <td>{{ r.first_seen_at|kurzdatum }}<span class="t-sub">{{ sources.get(r.source, r.source or '') }}{% if r.found_by %} · {{ r.found_by }}{% endif %}</span></td>
+        <td>{{ r.state }}{% if r.owner and r.owner in people %}<span class="t-sub">{{ people[r.owner] }}</span>{% endif %}</td>
+      </tr>{% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% if rows|length >= 300 %}<p class="muted small">Die neuesten 300. Mit der Suche findest du auch ältere, die CSV enthält alle.</p>{% endif %}
+  {% else %}<p class="note small">{{ 'Nichts gefunden.' if q else 'Noch keine Betriebe gefunden.' }}</p>{% endif %}
+</main>
+{% endblock %}

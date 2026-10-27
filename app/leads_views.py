@@ -1,4 +1,6 @@
 """Oberfläche der Akquise: Übersicht, Firma im Detail (Akte) mit Chat, Regeln, Gehirn, Web-App und Push."""
+import csv
+import io
 import json
 import re
 import time
@@ -6,7 +8,7 @@ from datetime import datetime
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from . import agent, ai, claude_research, crm, emailbuild, leaddb, mailbox, niches, pixel, schedule, scoring, team, webpush
+from . import agent, ai, claude_research, crm, emailbuild, known, leaddb, mailbox, niches, pixel, schedule, scoring, team, webpush
 from .main import DB_PATH, ROOT, SETTINGS, login_required
 
 bp = Blueprint("leads", __name__)
@@ -182,8 +184,39 @@ def search():
     """Neue Betriebe finden: Lauf starten (Kartensuche und Bewertung) oder mit Claude recherchieren."""
     weights = niches.load(db())
     return render_template("search.html", account=g.account, st=status_payload(), rd=run_defaults(),
-                           sched=schedule_view(), niche_weights=weights, niche_info=niches.NICHES,
+                           sched=schedule_view(), niche_weights=weights, niche_info=niches.NICHES, known_total=known.count(db()),
                            niche_summary=niches.describe(weights), demo=SETTINGS["DEMO_MODE"])
+
+
+@bp.get("/leads/schon-gefunden")
+@login_required
+def known_list():
+    """Merkliste: alle jemals gefundenen Betriebe, auch aussortierte. Neue Funde mit gleicher Webseite, E-Mail,
+    gleichem Karteneintrag oder gleichem Namen im gleichen Ort kommen nicht noch einmal."""
+    q = request.args.get("q", "").strip()[:80]
+    c = db()
+    if request.args.get("format") == "csv":
+        out = io.StringIO()
+        w = csv.writer(out, delimiter=";")
+        w.writerow(["Firma", "Ort", "Webseite", "E-Mail", "Zuerst gefunden", "Quelle", "Von", "Stand heute"])
+        for r in known.listing(c, q, limit=100000):
+            w.writerow([crm._cell(x) for x in (r["name"], r["city"], r["host"], r["email"], r["first_seen_at"][:10],
+                        known.SOURCES.get(r["source"], r["source"]), r["found_by"], _known_state(r))])
+        return Response("\ufeff" + out.getvalue(), mimetype="text/csv",
+                        headers={"Content-Disposition": 'attachment; filename="schon-gefunden.csv"'})
+    rows = known.listing(c, q)
+    for r in rows:
+        r["state"] = _known_state(r)
+    return render_template("known.html", account=g.account, rows=rows, q=q, total=known.count(c),
+                           sources=known.SOURCES, people=team.names(c), st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+
+
+def _known_state(r):
+    if r.get("status") is None:
+        return "nicht mehr in der App"
+    if r.get("stage"):
+        return "im CRM · " + crm.STAGE_LABELS.get(r["stage"], r["stage"])
+    return leaddb.STATUS_LABELS.get(r["status"], r["status"])
 
 
 def _profile():

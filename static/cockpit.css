@@ -675,3 +675,14 @@ dialog.find{width:min(100% - 24px,600px);margin:12vh auto auto;padding:0;overflo
   .mail-dlg > .mail-preview iframe{height:calc(100vh - 150px);margin-top:0}
   .mail-dlg > .mail-actions{grid-column:1 / -1}
 }
+.known-tools{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin:16px 0}
+.known-tools input[type=search]{flex:1 1 240px;min-width:0;height:38px;padding:0 12px}
+.known-table td{vertical-align:top}
+@media (max-width:700px){
+  .known-table thead{display:none}
+  .known-table,.known-table tbody,.known-table tr,.known-table td{display:block;width:100%}
+  .known-table tr{padding:10px 0;border-bottom:1px solid var(--line)}
+  .known-table td,.known-table tr:nth-child(odd) td{padding:2px 0;border:0;font-size:13px;color:var(--body);background:none}
+  .known-table td.t-name{font-size:15px;color:var(--ink)}
+  .known-table td:empty{display:none}
+}

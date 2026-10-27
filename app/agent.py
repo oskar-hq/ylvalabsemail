@@ -27,7 +27,7 @@ from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid, parseaddr, parsedate_to_datetime
 from urllib.parse import urlparse
 
-from . import ai, crm, emailbuild, finder, leaddb, mailbox, niches, regions, schedule, scoring, team, webpush
+from . import ai, crm, emailbuild, finder, known, leaddb, mailbox, niches, regions, schedule, scoring, team, webpush
 
 log = logging.getLogger("ylva.leads")
 
@@ -148,8 +148,11 @@ def run_search(c):
     except Exception as exc:
         raise SearchError(f"Die Kartensuche (OpenStreetMap) ist gerade nicht erreichbar ({exc}). "
                           "Bitte später erneut starten; es sind keine Kosten entstanden.") from exc
-    new = filtered = 0
+    new = filtered = duplicates = 0
     for f in found:
+        if known.find(c, f["name"], f["city"], f["website"], f["email"], f["source_id"]):
+            duplicates += 1  # schon einmal gefunden (von wem auch immer, auch wenn er inzwischen weg ist)
+            continue
         reason = f.get("filter_reason")
         cur = c.execute(
             "INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, category_label,"
@@ -162,10 +165,13 @@ def run_search(c):
              f"Grobfilter: {reason}" if reason else None))
         new += cur.rowcount
         filtered += cur.rowcount if reason else 0
+        if cur.rowcount:
+            known.remember(c, f["name"], f["city"], f["website"], f["email"], f["source_id"], "osm",
+                           RUN.get("by") or "Suche", cur.lastrowid, commit=False)
     c.commit()
     niches.backfill(c)  # schon bekannte Betriebe, die jetzt in eine gewählte Nische fallen
     leaddb.kv_set(c, "last_search", {"at": leaddb.now(), "found": len(found), "new": new, "filtered": filtered,
-                                     "niches": keys})
+                                     "known": duplicates, "niches": keys})
     return new, filtered
 
 
@@ -567,7 +573,7 @@ def execute_run(c, run_id):
     top = int(p.get("top", S("LEADS_RUN_TOP")))
     counts = {"neu_gefunden": 0, "grobfilter": 0, "bewertet": 0, "passen": 0, "ins_crm": 0, "entwuerfe": 0,
               "erinnerungen": 0}
-    RUN.update(id=run_id, cancel=False)
+    RUN.update(id=run_id, cancel=False, by=run["started_by"])
     _local.run_id = run_id
     c.execute("UPDATE runs SET status='laeuft' WHERE id=?", (run_id,))
     c.commit()

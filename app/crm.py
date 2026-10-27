@@ -12,7 +12,7 @@ import re
 from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
 
-from . import finder, leaddb, regions
+from . import finder, known, leaddb, regions
 
 STAGES = [
     ("neu", "Neu", "Passt, noch nicht kontaktiert."),
@@ -225,6 +225,10 @@ def create_lead(conn, data, author, source="hand"):
     dup = find_duplicate(conn, name, email, website)
     if dup:
         return None, f"gibt es schon („{dup['name']}“)"
+    seen = known.find(conn, name, data.get("city", ""), website, email)
+    if seen:
+        return None, (f"wurde schon am {seen['first_seen_at'][:10]} gefunden"
+                      f"{' von ' + seen['found_by'] if seen.get('found_by') else ''} (steht auf der Merkliste)")
     now = leaddb.now()
     source_id = f"{source}:" + hashlib.sha1(f"{name}|{email}|{website}".lower().encode()).hexdigest()[:16]
     city = (data.get("city") or "").strip()
@@ -238,8 +242,9 @@ def create_lead(conn, data, author, source="hand"):
          website or None, email or None, (data.get("phone") or "").strip() or None,
          (data.get("contact_name") or "").strip() or None, "passt", "neu", now,
          "Von Hand angelegt." if source == "hand" else "Importiert."))
-    conn.commit()
     lead_id = cur.lastrowid
+    known.remember(conn, name, city, website, email, source_id, source, author, lead_id, commit=False)
+    conn.commit()
     leaddb.add_event(conn, lead_id, "status", "Von Hand angelegt." if source == "hand" else "Aus CSV importiert.",
                      author=author)
     if (data.get("note") or "").strip():

@@ -33,7 +33,7 @@
   <div class="agent-line">
     <span class="dot {{ 'busy' if st.run or st.activity != 'Wartet' }}" aria-hidden="true"></span>
     <span><b>Suche:</b> <span id="activity">{{ st.activity if st.activity != 'Wartet' else ('Bereit.' if not st.run else 'Startet gleich …') }}</span></span>
-    <span class="muted small">· {{ st.counts.kandidaten }} Betriebe warten auf die Bewertung{% if st.counts.grobfilter %} · {{ st.counts.grobfilter }} vom Grobfilter aussortiert{% endif %}{% if st.last_search %} · letzte Suche {{ st.last_search.at|kurzdatum }}{% endif %}</span>
+    <span class="muted small">· {{ st.counts.kandidaten }} Betriebe warten auf die Bewertung{% if st.counts.grobfilter %} · {{ st.counts.grobfilter }} vom Grobfilter aussortiert{% endif %}{% if st.last_search %} · letzte Suche {{ st.last_search.at|kurzdatum }}{% if st.last_search.known %}, {{ st.last_search.known }} schon bekannt{% endif %}{% endif %}</span>
     <button class="btn small push-btn" type="button" id="pushBtn" hidden>Benachrichtigungen an</button>
   </div>
 
