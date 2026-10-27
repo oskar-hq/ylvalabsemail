@@ -84,6 +84,12 @@ class acting_as:
         _local.person, _local.prefs = None, {}
 
 
+def writer_name(c, lead=None):
+    """Name der Person, die gerade schreibt (sonst die zuständige Person, sonst der Name aus den Einstellungen)."""
+    key = getattr(_local, "person", None) or (lead or {}).get("owner")
+    return (team.get(c, key) or {}).get("name") or S("LEADS_SENDER_NAME")
+
+
 def person_month_eur(c, key):
     return ai.eur(leaddb._sum(c, "person = ? AND at >= ?", (key, datetime.now().strftime("%Y-%m-01")))["usd"])
 
@@ -360,7 +366,7 @@ def _analysis(lead):
 def stage_write(c, lead_id, brain):
     """Den Entwurf von der KI schreiben lassen (stärkstes Modell). Nur auf Wunsch."""
     lead = leaddb.get_lead(c, lead_id)
-    result = ai.write_draft(brain, lead, _analysis(lead))
+    result = ai.write_draft(brain, lead, _analysis(lead), writer_name(c, lead))
     leaddb.update_lead(c, lead_id, status="entwurf", unread=1, subject=result["betreff"], greeting=result["anrede"],
                        body=result["text"])
     leaddb.add_event(c, lead_id, "draft", f"Entwurf geschrieben ({ai.MODELS['entwurf']}).")
@@ -555,7 +561,7 @@ def fill_template(lead, text, absender):
 def template_draft(c, lead_id, member=None):
     """Entwurf aus der Vorlage (der eigenen der Person, sonst der aus dem Gehirn), kostenlos."""
     lead = leaddb.get_lead(c, lead_id)
-    member = member or lead.get("owner")
+    member = member or getattr(_local, "person", None) or lead.get("owner")
     absender = (team.get(c, member) or {}).get("name") or S("LEADS_SENDER_NAME")
     fields = fill_template(lead, template_text(c, member), absender)
     leaddb.update_lead(c, lead_id, status="entwurf", **fields)
@@ -798,7 +804,7 @@ def lead_form(lead, snd=None):
 def write_followup(c, lead_id):
     """Erinnerung schreiben (kostet eine kleine KI-Anfrage). Verschickt wird sie erst nach Freigabe."""
     lead = leaddb.get_lead(c, lead_id)
-    result = ai.write_followup(leaddb.brain(c), lead, leaddb.FOLLOWUP_DAYS)
+    result = ai.write_followup(leaddb.brain(c), lead, leaddb.FOLLOWUP_DAYS, writer_name(c, lead))
     leaddb.update_lead(c, lead_id, followup_subject=result["betreff"], followup_greeting=result["anrede"],
                        followup_body=result["text"], unread=1)
     leaddb.add_event(c, lead_id, "draft", f"Erinnerung geschrieben ({ai.MODELS['erinnerung']}).")

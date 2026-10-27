@@ -558,7 +558,7 @@ def chat(lead_id):
         with agent.acting_as(db(), me()):
             result = ai.revise(leaddb.brain(db()), lead,
                                {"subject": lead["subject"] or "", "greeting": lead["greeting"] or "", "body": lead["body"] or ""},
-                               chat_events[:-1], text)
+                               chat_events[:-1], text, agent.writer_name(db(), lead))
     except ai.AIError as exc:
         return jsonify(error=str(exc)), 502
     leaddb.update_lead(db(), lead_id, subject=result["betreff"], greeting=result["anrede"], body=result["text"])
@@ -773,7 +773,7 @@ def draft_template(lead_id):
     if lead["status"] not in ("passt", "entwurf", "aussortiert", "fehler") or lead["interest"]:
         return jsonify(error="Für diesen Betrieb wird kein neuer Erstkontakt geschrieben."), 400
     try:
-        agent.template_draft(db(), lead_id)
+        agent.template_draft(db(), lead_id, _sender_key(lead))
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
     return jsonify(ok=True)

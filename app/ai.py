@@ -172,10 +172,18 @@ def _lead_block(lead):
     return "\n".join(f"{k}: {v}" for k, v in fields if v)
 
 
+def _writer(name):
+    """Wer im Team schreibt; sonst nimmt die KI womöglich einen Namen aus dem Gehirn."""
+    if not name:
+        return ""
+    return (f"\n\nEs schreibt {name} von Ylva Labs. Stellt sich die Nachricht vor, dann mit diesem Namen. "
+            "Steht im Text ein anderer Name aus dem Team als Absender, ersetze ihn.")
+
+
 # ---------------------------------------------------------------- Entwurf (stark)
 
 
-def write_draft(brain, lead, analysis):
+def write_draft(brain, lead, analysis, writer=None):
     """Den Entwurf schreiben. Bekommt die Regel-Bewertung und einen Auszug der Startseite (nicht die ganze Webseite)."""
     prompt = f"""Schreibe die erste Nachricht an diesen Betrieb nach „Stil der Nachrichten“.
 
@@ -197,7 +205,7 @@ Vermutete Zeitfresser: {"; ".join(analysis.get("zeitfresser", [])) or "–"}
 Suche dir aus dem Auszug ein bis zwei konkrete Beobachtungen für den ersten Satz. Stütze dich nur auf diese Angaben
 und das Gehirn. Ist keine Ansprechperson bekannt, wähle eine neutrale Anrede.
 
-{textrules.RULES}"""
+{textrules.RULES}{_writer(writer)}"""
     rec = analysis.get("recherche")
     if rec:
         prompt += f"""
@@ -211,7 +219,7 @@ Diese Angaben kommen aus einer Recherche vorab und dürfen genauso verwendet wer
     return _call("entwurf", brain, prompt, schema, lead.get("id"))
 
 
-def revise(brain, lead, draft, chat, feedback):
+def revise(brain, lead, draft, chat, feedback, writer=None):
     """Entwurf nach Rückmeldung des Teams überarbeiten."""
     history = "\n".join(f"{e['author']}: {e['text']}" for e in chat[-12:])
     prompt = f"""Das Team gibt dir Rückmeldung zu einem Entwurf. Überarbeite ihn entsprechend.
@@ -239,12 +247,12 @@ Betreff: {draft["subject"]}
 Liefere den vollständigen neuen Entwurf. In „antwort“ sagst du dem Team in ein bis zwei Sätzen, was du
 geändert hast (oder stellst eine Rückfrage, wenn die Rückmeldung unklar ist; dann bleibt der Entwurf gleich).
 In „lernpunkt“ formulierst du, was man aus dieser Rückmeldung allgemein für künftige Nachrichten oder die
-Auswahl der Betriebe lernen kann. Leer, wenn es nur diesen einen Betrieb betrifft."""
+Auswahl der Betriebe lernen kann. Leer, wenn es nur diesen einen Betrieb betrifft.{_writer(writer)}"""
     schema = _obj({"antwort": STR, **DRAFT_FIELDS, "lernpunkt": STR})
     return _call("chat", brain, prompt, schema, lead.get("id"))
 
 
-def write_followup(brain, lead, days):
+def write_followup(brain, lead, days, writer=None):
     """Kurze, freundliche Erinnerung, wenn nach einer Woche keine Antwort kam."""
     channel = {"brief": "per Brief", "telefon": "am Telefon", "email": "per Mail"}.get(lead.get("channel"), "per Mail")
     prompt = f"""Wir haben diesen Betrieb vor {days} Tagen {channel} kontaktiert und keine Antwort bekommen.
@@ -268,7 +276,7 @@ Regeln:
 - Nicht drängeln, kein schlechtes Gewissen machen („Sie haben wohl übersehen …“ ist tabu).
 - Einen neuen, kleinen Gedanken oder ein konkretes Beispiel bringen, nicht die erste Nachricht wiederholen.
 - Ausdrücklich sagen, dass wir uns danach nicht mehr melden, wenn kein Interesse besteht.
-- „betreff“: „Re: “ plus der ursprüngliche Betreff."""
+- „betreff“: „Re: “ plus der ursprüngliche Betreff.{_writer(writer)}"""
     return _call("erinnerung", brain, prompt, _obj(dict(DRAFT_FIELDS)), lead.get("id"))
 
 

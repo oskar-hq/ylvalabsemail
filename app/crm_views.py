@@ -260,7 +260,7 @@ def compose_mail():
             lead = lead_or_404(int(request.args["lead"]))
         return render_template("mail_new.html", account=g.account, lead=lead, ready=_mail_ready(),
                                senders=team.members(db()), sender_key=_default_sender(lead), org=SETTINGS["ORG_NAME"],
-                               sender=agent.outreach_address(), sender_name=SETTINGS["LEADS_SENDER_NAME"] or SETTINGS["ORG_NAME"],
+                               sender=agent.outreach_address(),
                                st=status_payload(), demo=SETTINGS["DEMO_MODE"])
     to = request.form.get("to", "").strip().lower()
     subject = request.form.get("subject", "").strip()

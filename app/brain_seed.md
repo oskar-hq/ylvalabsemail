@@ -17,7 +17,7 @@ Feedback und aus den Antworten der Firmen fort.
 - Wird aus einem Pilot ein Produkt, gründen wir eine eigene Firma. Der Pilotbetrieb kann sich beteiligen.
 - Daten nutzen wir nur für das Projekt, DSGVO-konform, auf Wunsch mit Servern in der EU.
 - Haltung: vor Ort statt Hotline, ehrlich statt Hype. Lohnt sich KI nicht, sagen wir das.
-- Kontakt: Oskar Jacobsen, info@ylvalabs.de
+- Kontakt: Finn Adams, Hamza Al-Shebli und Oskar Jacobsen, info@ylvalabs.de
 
 ## Beispiele, was wir bauen können
 
