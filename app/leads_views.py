@@ -95,7 +95,7 @@ def status_payload():
         "counts": leaddb.tab_counts(c),
         "unread": c.execute("SELECT COUNT(*) FROM leads WHERE unread=1").fetchone()[0],
         "due_tasks": crm.due_count(c),
-        "stages": {k: n for k, n in c.execute("SELECT stage, COUNT(*) FROM leads WHERE stage IS NOT NULL GROUP BY stage")}, "rule_min": SETTINGS["LEADS_RULE_MIN"], "today": crm.today(),
+        "stages": {k: n for k, n in c.execute("SELECT stage, COUNT(*) FROM leads WHERE stage IS NOT NULL GROUP BY stage")}, "rule_min": my("LEADS_RULE_MIN"), "today": crm.today(),
         "last_search": leaddb.kv_get(c, "last_search"),
         "run": dict(run, params=json.loads(run["params"])) if run else None,
         "run_eur": money(run_cost["usd"]) if run_cost else 0, "run_tokens": (run_cost["tin"] + run_cost["tout"]) if run_cost else 0,
@@ -105,10 +105,21 @@ def status_payload():
     }
 
 
+def _own_budget_gone():
+    left = agent.person_budget_left_eur(db(), me())
+    return left is not None and left <= 0
+
+
+def my(key):
+    """Einstellung für die angemeldete Person: ihr eigener Wert (Mein Profil), sonst der Team-Standard."""
+    return team.prefs(db(), me()).get(key, SETTINGS[key])
+
+
 def run_defaults():
-    est = agent.estimate(db(), SETTINGS["LEADS_RUN_DRAFTS"] if ai.available() else 0, followups=False)
-    return {"check": SETTINGS["LEADS_RUN_CHECK"], "top": SETTINGS["LEADS_RUN_TOP"], "drafts": SETTINGS["LEADS_RUN_DRAFTS"],
-            "budget": SETTINGS["LEADS_RUN_BUDGET_EUR"], "estimate": est, "models": ai.MODELS}
+    est = agent.estimate(db(), my("LEADS_RUN_DRAFTS") if ai.available() else 0, followups=False)
+    return {"check": my("LEADS_RUN_CHECK"), "top": my("LEADS_RUN_TOP"), "drafts": my("LEADS_RUN_DRAFTS"),
+            "budget": my("LEADS_RUN_BUDGET_EUR"), "estimate": est, "models": ai.MODELS,
+            "own_left": agent.person_budget_left_eur(db(), me())}
 
 # ---------------------------------------------------------------- Heute (Startseite)
 
@@ -328,13 +339,16 @@ def status_json():
 def run():
     try:
         params = {"bewerten": max(0, min(1000, int(request.form.get("bewerten", 0)))),
-                  "top": max(0, min(200, int(request.form.get("top", SETTINGS["LEADS_RUN_TOP"])))),
+                  "top": max(0, min(200, int(request.form.get("top", my("LEADS_RUN_TOP"))))),
                   "entwuerfe": max(0, min(50, int(request.form.get("entwuerfe", 0)))),
                   "budget_eur": max(0.0, min(100.0, float(request.form.get("budget_eur", "0").replace(",", ".") or 0))),
                   "suchen": request.form.get("suchen") == "1",
-                  "erinnerungen": request.form.get("erinnerungen") == "1"}
+                  "erinnerungen": request.form.get("erinnerungen") == "1", "person": me()}
     except ValueError:
         return jsonify(error="Bitte Zahlen eingeben."), 400
+    own = agent.person_budget_left_eur(db(), me())
+    if params["entwuerfe"] and own is not None and own <= 0:
+        return jsonify(error="Dein eigenes KI-Budget für diesen Monat ist aufgebraucht (Mein Profil)."), 400
     run_id, error = agent.start_run(params, who())
     if error:
         return jsonify(error=error), 400
@@ -537,11 +551,14 @@ def chat(lead_id):
         return jsonify(reply=reply, subject=lead["subject"], greeting=lead["greeting"], body=lead["body"])
     chat_events = [dict(e) for e in db().execute(
         "SELECT author, text FROM lead_events WHERE lead_id=? AND kind IN ('feedback','ai') ORDER BY id", (lead_id,))]
+    if _own_budget_gone():
+        return jsonify(error="Dein eigenes KI-Budget für diesen Monat ist aufgebraucht (Mein Profil)."), 400
     before = leaddb._sum(db(), "lead_id = ? AND stage = 'chat'", (lead_id,))["usd"]
     try:
-        result = ai.revise(leaddb.brain(db()), lead,
-                           {"subject": lead["subject"] or "", "greeting": lead["greeting"] or "", "body": lead["body"] or ""},
-                           chat_events[:-1], text)
+        with agent.acting_as(db(), me()):
+            result = ai.revise(leaddb.brain(db()), lead,
+                               {"subject": lead["subject"] or "", "greeting": lead["greeting"] or "", "body": lead["body"] or ""},
+                               chat_events[:-1], text)
     except ai.AIError as exc:
         return jsonify(error=str(exc)), 502
     leaddb.update_lead(db(), lead_id, subject=result["betreff"], greeting=result["anrede"], body=result["text"])
@@ -736,9 +753,12 @@ def draft_ai(lead_id):
     left = agent.month_budget_left_eur(db())
     if left is not None and left <= 0:
         return jsonify(error="Das Monatsbudget ist aufgebraucht."), 400
+    if _own_budget_gone():
+        return jsonify(error="Dein eigenes KI-Budget für diesen Monat ist aufgebraucht (Mein Profil)."), 400
     before = leaddb._sum(db(), "lead_id = ? AND stage = 'entwurf'", (lead_id,))["usd"]
     try:
-        agent.stage_write(db(), lead_id, leaddb.brain(db()))
+        with agent.acting_as(db(), me()):
+            agent.stage_write(db(), lead_id, leaddb.brain(db()))
     except ai.AIError as exc:
         return jsonify(error=str(exc)), 502
     spent = leaddb._sum(db(), "lead_id = ? AND stage = 'entwurf'", (lead_id,))["usd"] - before
@@ -763,8 +783,8 @@ def draft_template(lead_id):
 @login_required
 def rules():
     return render_template("rules.html", account=g.account, rules=scoring.rules_table(), ko_rules=scoring.KO_RULES,
-                           base=scoring.BASE, top=SETTINGS["LEADS_RUN_TOP"],
-                           threshold=SETTINGS["LEADS_RULE_MIN"], st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+                           base=scoring.BASE, top=my("LEADS_RUN_TOP"),
+                           threshold=my("LEADS_RULE_MIN"), st=status_payload(), demo=SETTINGS["DEMO_MODE"])
 
 # ---------------------------------------------------------------- Recherche mit Claude (ohne API-Tokens)
 
@@ -841,9 +861,12 @@ def followup_write(lead_id):
     left = agent.month_budget_left_eur(db())
     if left is not None and left <= 0:
         return jsonify(error="Das Monatsbudget ist aufgebraucht."), 400
+    if _own_budget_gone():
+        return jsonify(error="Dein eigenes KI-Budget für diesen Monat ist aufgebraucht (Mein Profil)."), 400
     before = leaddb._sum(db(), "lead_id = ? AND stage = 'erinnerung'", (lead_id,))["usd"]
     try:
-        agent.write_followup(db(), lead["id"])
+        with agent.acting_as(db(), me()):
+            agent.write_followup(db(), lead["id"])
     except ai.AIError as exc:
         return jsonify(error=str(exc)), 502
     spent = leaddb._sum(db(), "lead_id = ? AND stage = 'erinnerung'", (lead_id,))["usd"] - before

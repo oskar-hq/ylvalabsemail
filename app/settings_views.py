@@ -136,7 +136,9 @@ def page(gid, pid):
     pg = next((pg for pg in grp["pages"] if pg["id"] == pid), None)
     if not pg:
         abort(404)
+    from . import team
     return render_template("settings_page.html", account=g.account, grp=grp, pg=pg, admin=is_admin(g.account),
+                           personal_keys=team.PERSONAL_KEYS,
                            single=len(grp["pages"]) == 1, demo=SETTINGS["DEMO_MODE"])
 
 

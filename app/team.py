@@ -11,7 +11,18 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from . import leaddb
 
 MIN_PASSWORD = 8
-DEFAULTS = {"gruss": "Viele Grüße", "signatur": "", "vorlage": "", "design": None}
+DEFAULTS = {"gruss": "Viele Grüße", "signatur": "", "vorlage": "", "design": None, "einstellungen": {}}
+# Was jede Person für sich anders einstellen kann (leer = Team-Standard aus den Einstellungen).
+# (Schlüssel, Bezeichnung, Typ, kleinster Wert, größter Wert)
+PERSONAL = [
+    ("LEADS_RULE_MIN", "Mindestpunktzahl, ab der ein Betrieb passt", int, 0, 100),
+    ("LEADS_RUN_CHECK", "Betriebe pro Lauf bewerten", int, 0, 1000),
+    ("LEADS_RUN_TOP", "Davon die besten ins CRM", int, 0, 200),
+    ("LEADS_RUN_DRAFTS", "KI-Entwürfe pro Lauf", int, 0, 50),
+    ("LEADS_RUN_BUDGET_EUR", "KI-Budget pro Lauf (€)", float, 0, 100),
+    ("MY_MONTHLY_BUDGET_EUR", "Mein KI-Budget pro Monat (€)", float, 0, 1000),
+]
+PERSONAL_KEYS = {k for k, *_ in PERSONAL}
 
 
 class TeamError(ValueError):
@@ -73,6 +84,38 @@ def save_settings(c, key, **values):
     stored.update({k: v for k, v in values.items() if k in DEFAULTS})
     c.execute("UPDATE team SET settings=? WHERE key=?", (json.dumps(stored, ensure_ascii=False), key))
     c.commit()
+
+
+def prefs(c, key):
+    """Eigene Werte der Person (nur die gesetzten), passend getypt."""
+    raw = settings(c, key).get("einstellungen") or {} if key else {}
+    out = {}
+    for k, _label, typ, lo, hi in PERSONAL:
+        if k in raw:
+            try:
+                v = typ(raw[k])
+            except (TypeError, ValueError):
+                continue
+            if lo <= v <= hi:
+                out[k] = v
+    return out
+
+
+def parse_prefs(form):
+    """Formular → eigene Werte. Leeres Feld = Team-Standard."""
+    out = {}
+    for k, label, typ, lo, hi in PERSONAL:
+        value = (form.get(k) or "").strip().replace(",", ".")
+        if not value:
+            continue
+        try:
+            v = typ(float(value)) if typ is int and float(value).is_integer() else typ(value)
+        except ValueError as exc:
+            raise TeamError(f"{label}: bitte eine Zahl.") from exc
+        if not lo <= v <= hi:
+            raise TeamError(f"{label}: zwischen {lo} und {hi}.")
+        out[k] = v
+    return out
 
 
 def sender(c, key, org_name="Ylva Labs"):

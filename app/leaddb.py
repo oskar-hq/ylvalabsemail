@@ -133,6 +133,8 @@ MIGRATIONS = [
     "ALTER TABLE leads ADD COLUMN niche TEXT",
     # Wer im Team zuständig ist (Schlüssel aus team), NULL = noch niemand
     "ALTER TABLE leads ADD COLUMN owner TEXT",
+    # Wer die KI-Kosten verursacht hat (Schlüssel aus team), für das eigene Monatsbudget
+    "ALTER TABLE ai_usage ADD COLUMN person TEXT",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.
@@ -356,11 +358,11 @@ def brain_sections(text, names):
 # ---------------------------------------------------------------- Kosten
 
 
-def record_usage(conn, stage, model, tokens, cost_usd, run_id=None, lead_id=None):
+def record_usage(conn, stage, model, tokens, cost_usd, run_id=None, lead_id=None, person=None):
     conn.execute("INSERT INTO ai_usage (at, run_id, lead_id, stage, model, input_tokens, output_tokens,"
-                 " cache_write_tokens, cache_read_tokens, cost_usd) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                 " cache_write_tokens, cache_read_tokens, cost_usd, person) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                  (now(), run_id, lead_id, stage, model, tokens["input"], tokens["output"],
-                  tokens["cache_write"], tokens["cache_read"], cost_usd))
+                  tokens["cache_write"], tokens["cache_read"], cost_usd, person))
     conn.commit()
 
 

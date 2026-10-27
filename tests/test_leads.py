@@ -922,6 +922,25 @@ class TeamTest(unittest.TestCase):
         self.assertEqual(leaddb.get_lead(self.c, lead_id)["owner"], "hamza")  # wer schreibt, ist zuständig
         self.assertEqual(self.c.execute("SELECT sent_by FROM messages").fetchone()[0], "Hamza Al-Shebli")
 
+    def test_personal_settings(self):
+        with self.assertRaises(team.TeamError):
+            team.parse_prefs({"LEADS_RULE_MIN": "120"})
+        values = team.parse_prefs({"LEADS_RULE_MIN": "65", "LEADS_RUN_BUDGET_EUR": "1,5", "LEADS_RUN_CHECK": "",
+                                   "MY_MONTHLY_BUDGET_EUR": "2"})
+        self.assertEqual(values, {"LEADS_RULE_MIN": 65, "LEADS_RUN_BUDGET_EUR": 1.5, "MY_MONTHLY_BUDGET_EUR": 2.0})
+        team.save_settings(self.c, "finn", einstellungen=values)
+        base = agent.CFG["settings"]["LEADS_RULE_MIN"]
+        with agent.acting_as(self.c, "finn"):
+            self.assertEqual(agent.S("LEADS_RULE_MIN"), 65)  # Finns eigener Wert
+            self.assertEqual(agent.S("LEADS_RUN_CHECK"), agent.CFG["settings"]["LEADS_RUN_CHECK"])  # Team-Standard
+        with agent.acting_as(self.c, "hamza"):
+            self.assertEqual(agent.S("LEADS_RULE_MIN"), base)  # Hamza hat nichts eigenes
+        self.assertEqual(agent.S("LEADS_RULE_MIN"), base)  # danach wieder für alle
+        tokens = {"input": 1000, "output": 100, "cache_write": 0, "cache_read": 0}
+        leaddb.record_usage(self.c, "entwurf", "m", tokens, 2.0, person="finn")
+        self.assertLess(agent.person_budget_left_eur(self.c, "finn"), 2.0)  # 2 US-Dollar gezählt, in Euro umgerechnet
+        self.assertIsNone(agent.person_budget_left_eur(self.c, "hamza"))  # kein eigenes Limit
+
     def test_own_crm_and_stats(self):
         a = self.lead("A", stage="neu", owner="finn")
         b = self.lead("B", stage="kontaktiert", owner="oskar", sent_at=leaddb.now())
@@ -1308,6 +1327,12 @@ class ViewsTest(unittest.TestCase):
         self.assertIn("owner-filter", self.client.get("/crm?wer=alle").get_data(as_text=True))
         self.assertEqual(self.client.post("/profil/passwort", data={"new": "abcdefgh1", "again": "abcdefgh1"},
                                           headers={"X-CSRF-Token": self.csrf}).status_code, 403)  # Demo: nicht ändern
+        r = self.client.post("/profil/meine-einstellungen", data={"LEADS_RUN_CHECK": "33", "LEADS_RULE_MIN": ""},
+                             headers={"X-CSRF-Token": self.csrf})
+        self.assertIn('value="33"', self.client.get("/leads/suche").get_data(as_text=True))  # eigener Vorschlag
+        self.assertIn("Meine Einstellungen", self.client.get("/profil").get_data(as_text=True))
+        self.assertIn("Team-Standards", self.client.get("/einstellungen/suche/bewertung").get_data(as_text=True))
+        team.save_settings(c, "oskar", einstellungen={})
         team.save_settings(c, "oskar", vorlage="", gruss="Viele Grüße")
         html = self.client.get("/leads/schon-gefunden").get_data(as_text=True)
         self.assertIn("Schon gefunden", html)
