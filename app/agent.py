@@ -1133,8 +1133,15 @@ def mail_error(exc):
     text = str(exc)
     if isinstance(exc, smtplib.SMTPAuthenticationError) or "AUTHENTICATIONFAILED" in text or \
             "Password required" in text or "authentication failed" in text.lower():
-        return ("Strato lehnt die Anmeldung ab: Benutzer oder Passwort des Akquise-Postfachs stimmen nicht. "
-                "Bitte unter Einstellungen → Postfach und Versand → Akquise-Postfach neu eintragen.")
+        user = S("OUTREACH_USER") or ""
+        hint = (f" Als Benutzer steht „{user}“ da; Strato braucht die volle E-Mail-Adresse, z. B. info@ylvalabs.de."
+                if user and "@" not in user else
+                f" Benutzer: {user}. Das Passwort muss das des Postfachs sein (Strato → E-Mail → Verwaltung), nicht "
+                "das des Strato-Kundenkontos. Ist die Adresse nur eine Weiterleitung, gibt es keine Anmeldung.")
+        raw = getattr(exc, "smtp_error", b"")
+        raw = raw.decode("utf-8", "ignore") if isinstance(raw, bytes) else str(raw or text)
+        return ("Strato lehnt die Anmeldung ab: Benutzer oder Passwort des Akquise-Postfachs stimmen nicht." + hint
+                + f" (Antwort von Strato: {raw.strip()[:160]})")
     if isinstance(exc, (socket.timeout, TimeoutError, ConnectionError, socket.gaierror, ssl.SSLError)):
         return f"Der Mailserver ist nicht erreichbar ({exc.__class__.__name__}). Server und Port in den Einstellungen prüfen."
     if isinstance(exc, smtplib.SMTPRecipientsRefused):
