@@ -445,7 +445,8 @@ def lead_fields(lead):
     rcpt = emailbuild.formataddr((lead["contact_name"] or "", lead["email"])) if lead["email"] else ""
     return {"template": "brief", "graphic": "none", "recipients": rcpt, "subject": lead["subject"] or "",
             "greeting": lead["greeting"] or ("Guten Tag {name}," if lead["contact_name"] else "Guten Tag,"),
-            "body": lead["body"] or "", "closing": "Viele Grüße", "sender_name": SETTINGS["LEADS_SENDER_NAME"],
+            "body": lead["body"] or "", "closing": "Viele Grüße",
+            "sender_name": g.account.get("name") or SETTINGS["LEADS_SENDER_NAME"],
             "reply_to": agent.outreach_address() if agent.outreach_configured() else "", "lead_id": str(lead["id"])}
 
 

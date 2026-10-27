@@ -942,6 +942,17 @@ class TeamTest(unittest.TestCase):
         self.assertTrue(team.get(self.c, "finn")["pw_hash"].startswith("scrypt:"))  # nie im Klartext
         self.assertFalse(team.check_password(self.c, "niemand", "geheim-123"))
 
+    def test_writer_is_acting_person(self):
+        from app import agent, ai
+        lead_id = self.lead("Petersen")
+        with agent.acting_as(self.c, "finn"):
+            self.assertEqual(agent.writer_name(self.c, {"owner": "oskar"}), "Finn Adams")
+            fields = agent.template_draft(self.c, lead_id)
+        self.assertIn("Finn Adams", fields["body"])
+        self.assertNotIn("Oskar", fields["body"])
+        self.assertEqual(agent.writer_name(self.c, {"owner": "hamza"}), "Hamza Al-Shebli")
+        self.assertIn("Es schreibt Finn Adams", ai._writer("Finn Adams"))
+
     def test_sender_signature_and_template(self):
         snd = team.sender(self.c, "hamza", "Ylva Labs")
         self.assertEqual(snd["display"], "Hamza Al-Shebli | Ylva Labs")
