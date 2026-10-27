@@ -62,7 +62,36 @@ def conn():
 
 
 def S(key):
+    """Einstellung; während eines Laufs oder einer Aktion einer Person gelten ihre eigenen Werte (team.PERSONAL)."""
+    own = getattr(_local, "prefs", None)
+    if own and key in own:
+        return own[key]
     return CFG["settings"][key]
+
+
+class acting_as:
+    """Für die Dauer einer Aktion: eigene Einstellungen der Person gelten, KI-Kosten zählen für sie."""
+
+    def __init__(self, c, key):
+        self.c, self.key = c, key
+
+    def __enter__(self):
+        _local.person = self.key
+        _local.prefs = team.prefs(self.c, self.key) if self.key else {}
+        return self
+
+    def __exit__(self, *exc):
+        _local.person, _local.prefs = None, {}
+
+
+def person_month_eur(c, key):
+    return ai.eur(leaddb._sum(c, "person = ? AND at >= ?", (key, datetime.now().strftime("%Y-%m-01")))["usd"])
+
+
+def person_budget_left_eur(c, key):
+    """Was vom eigenen Monatsbudget übrig ist (None = kein eigenes Limit)."""
+    cap = team.prefs(c, key).get("MY_MONTHLY_BUDGET_EUR") if key else None
+    return None if not cap else cap - person_month_eur(c, key)
 
 
 def set_activity(text):
@@ -518,12 +547,16 @@ def check_budget(c, run_id, budget_eur, stage):
     left = month_budget_left_eur(c)
     if left is not None and nxt > left:
         raise BudgetStop(f"Monatsbudget von {S('LEADS_MONTHLY_BUDGET_EUR'):.2f} € erreicht.")
+    own = person_budget_left_eur(c, getattr(_local, "person", None))
+    if own is not None and nxt > own:
+        raise BudgetStop("Dein eigenes KI-Budget für diesen Monat ist erreicht.")
 
 
 def _record_usage(stage, model, tokens, cost, lead_id):
     c = conn()
     try:
-        leaddb.record_usage(c, stage, model, tokens, cost, getattr(_local, "run_id", None), lead_id)
+        leaddb.record_usage(c, stage, model, tokens, cost, getattr(_local, "run_id", None), lead_id,
+                            getattr(_local, "person", None))
     finally:
         c.close()
 
@@ -569,6 +602,11 @@ def _eur(value):
 def execute_run(c, run_id):
     run = c.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
     p = json.loads(run["params"])
+    with acting_as(c, p.get("person")):  # eigene Einstellungen der Person, die den Lauf gestartet hat
+        return _execute_run(c, run_id, run, p)
+
+
+def _execute_run(c, run_id, run, p):
     check, drafts, budget = int(p.get("bewerten", 0)), int(p.get("entwuerfe", 0)), float(p.get("budget_eur", 0))
     use_ai = ai.available()
     top = int(p.get("top", S("LEADS_RUN_TOP")))

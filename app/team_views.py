@@ -43,7 +43,12 @@ def profile():
     key = me()
     if not key:
         return redirect(url_for("team.who_am_i", next=url_for("team.profile")))
-    return render_template("profile.html", account=g.account, member=team.get(db(), key),
+    own = team.prefs(db(), key)
+    fields = [{"key": k, "label": label, "value": own.get(k, ""),
+               "team": SETTINGS.get(k, None), "step": "1" if typ is int else "0.5", "min": lo, "max": hi}
+              for k, label, typ, lo, hi in team.PERSONAL]
+    return render_template("profile.html", account=g.account, member=team.get(db(), key), pref_fields=fields,
+                           month_eur=agent.person_month_eur(db(), key),
                            settings=team.settings(db(), key, SETTINGS["ORG_NAME"]), people=team.members(db()),
                            admin=is_admin(g.account), min_pw=team.MIN_PASSWORD, st=status_payload(),
                            demo=SETTINGS["DEMO_MODE"])
@@ -92,6 +97,25 @@ def save_profile():
     flash("Gruß und Unterschrift gespeichert.")
     return redirect(request.form.get("back") if (request.form.get("back") or "").startswith("/vorlage")
                     else url_for("team.profile"))
+
+
+@bp.post("/profil/meine-einstellungen")
+@login_required
+def save_prefs():
+    """Eigene Werte für Bewertung, Lauf und KI-Budget. Leer = Team-Standard aus den Einstellungen."""
+    key = me()
+    if not key:
+        abort(400)
+    try:
+        values = team.parse_prefs(request.form)
+    except team.TeamError as exc:
+        flash(f"Nicht gespeichert: {exc}")
+        return redirect(url_for("team.profile") + "#meine-einstellungen")
+    team.save_settings(db(), key, einstellungen=values)
+    agent.log.info("Eigene Einstellungen von %s: %s", who(), values)
+    flash("Deine Einstellungen sind gespeichert. Sie gelten für deine Läufe und deine KI-Aktionen."
+          if values else "Für dich gelten wieder überall die Team-Standards.")
+    return redirect(url_for("team.profile") + "#meine-einstellungen")
 
 
 @bp.get("/team")

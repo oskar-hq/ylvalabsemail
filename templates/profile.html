@@ -23,6 +23,21 @@
     </form>
   </section>
 
+  <section class="auto-card" id="meine-einstellungen">
+    <h2>Meine Einstellungen</h2>
+    <p class="muted small">Gelten nur für dich: für Läufe, die du startest, und für KI-Entwürfe, die du schreiben lässt. Leeres Feld = Team-Standard aus den <a href="{{ url_for('settings.settings') }}">Einstellungen</a>. Suchgebiet, Postfach und das Monatsbudget des Teams bleiben für alle gleich.</p>
+    <form method="post" action="{{ url_for('team.save_prefs') }}" class="prefs-form">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      {% for f in pref_fields %}
+      <label class="field"><span class="sub">{{ f.label }}</span>
+        <input type="number" name="{{ f.key }}" value="{{ f.value }}" min="{{ f.min }}" max="{{ f.max }}" step="{{ f.step }}" inputmode="decimal"
+               placeholder="{{ ('Team: ' ~ f.team) if f.team is not none else 'kein eigenes Limit' }}"></label>
+      {% endfor %}
+      <p class="muted small">Diesen Monat hast du KI für {{ '%.2f'|format(month_eur)|replace('.', ',') }} € genutzt.</p>
+      <button class="btn">Speichern</button>
+    </form>
+  </section>
+
   <section class="auto-card">
     <h2>Gruß und Unterschrift</h2>
     <p class="muted small">Steht unter jeder Mail, die du schreibst.</p>

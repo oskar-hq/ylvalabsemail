@@ -686,3 +686,5 @@ dialog.find{width:min(100% - 24px,600px);margin:12vh auto auto;padding:0;overflo
   .known-table td.t-name{font-size:15px;color:var(--ink)}
   .known-table td:empty{display:none}
 }
+.prefs-form{display:grid !important;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px 16px;align-items:end}
+.prefs-form > p,.prefs-form > button{grid-column:1 / -1;justify-self:start}
