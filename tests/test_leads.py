@@ -23,7 +23,7 @@ from cryptography.hazmat.primitives import serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import ec  # noqa: E402
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: E402
 
-from app import agent, ai, claude_research, crm, finder, leaddb, niches, regions, schedule, scoring, team, webpush  # noqa: E402
+from app import agent, ai, claude_research, crm, finder, known, leaddb, niches, regions, schedule, scoring, team, webpush  # noqa: E402
 from app.main import app  # noqa: E402
 
 
@@ -943,6 +943,68 @@ class TeamTest(unittest.TestCase):
         self.assertEqual(total["im_crm"], 4)
 
 
+class KnownTest(unittest.TestCase):
+    def setUp(self):
+        self.path = os.path.join(tempfile.mkdtemp(), "known.db")
+        self.c = leaddb.connect(self.path)
+
+    def test_keys_match_variants(self):
+        known.remember(self.c, "Tischlerei Hansen GmbH & Co. KG", "Kappeln", "https://www.tischlerei-hansen.de/kontakt",
+                       "Info@Hansen.de", "osm:node/1", "osm", "Finn Adams")
+        self.assertTrue(known.find(self.c, website="http://tischlerei-hansen.de"))  # ohne www, anderer Pfad
+        self.assertTrue(known.find(self.c, email="info@hansen.de"))
+        self.assertTrue(known.find(self.c, source_id="osm:node/1"))
+        self.assertTrue(known.find(self.c, name="Tischlerei Hansen", city="kappeln"))  # ohne Rechtsform
+        self.assertIsNone(known.find(self.c, name="Tischlerei Hansen", city="Husum"))  # gleicher Name, anderer Ort
+        self.assertIsNone(known.find(self.c, website="https://andere.de", email="x@andere.de"))
+        self.assertEqual(known.name_key("Müller & Söhne GmbH", "Kiel"), "müller söhne|kiel")
+
+    def test_search_skips_known_even_after_removal(self):
+        found = [{"source_id": "osm:node/7", "name": "Dach Petersen", "branche": "handwerk", "category": "craft=roofer",
+                  "category_label": "Dachdeckerei", "niche": "dach", "address": "", "city": "Schleswig", "lat": 54.5,
+                  "lon": 9.5, "distance_km": 10, "website": "https://dach-petersen.de", "email": "", "phone": "",
+                  "filter_reason": None}]
+        agent.CFG["db_path"] = self.path
+        with mock.patch.object(finder, "search_osm", return_value=found):
+            self.assertEqual(agent.run_search(self.c)[0], 1)
+            lead_id = self.c.execute("SELECT id FROM leads WHERE name='Dach Petersen'").fetchone()[0]
+            self.assertEqual(known.count(self.c), 1)
+            self.c.execute("DELETE FROM leads WHERE id=?", (lead_id,))  # z. B. später entfernt
+            self.c.commit()
+            self.assertEqual(agent.run_search(self.c)[0], 0)  # kommt trotzdem nicht wieder
+            moved = [dict(found[0], source_id="osm:way/99", website="https://www.dach-petersen.de/")]
+            with mock.patch.object(finder, "search_osm", return_value=moved):
+                self.assertEqual(agent.run_search(self.c)[0], 0)  # anderer Karteneintrag, gleiche Webseite
+        self.assertEqual(leaddb.kv_get(self.c, "last_search")["known"], 1)
+        rows = known.listing(self.c)
+        self.assertEqual(rows[0]["name"], "Dach Petersen")
+        self.assertIsNone(rows[0]["status"])  # Betrieb weg, Eintrag bleibt
+
+    def test_import_and_manual_are_checked(self):
+        known.remember(self.c, "Pflegedienst Sonne", "Kiel", "https://pflege-sonne.de", "", "", "osm", "Hamza Al-Shebli")
+        csv_text = ("Firma;Webseite;Ort\nPflegedienst Sonne;https://pflege-sonne.de;Kiel\n"
+                    "Neuer Betrieb;https://neu.example;Kiel\n")
+        r = claude_research.import_csv(self.c, csv_text.encode(), "Oskar Jacobsen", (54.6, 9.9))
+        self.assertEqual(r["neu"], 1)
+        self.assertIn("Hamza Al-Shebli", r["uebersprungen"][0][1])
+        self.assertTrue(known.find(self.c, website="https://neu.example"))  # der neue steht jetzt auch drauf
+        lead_id, why = crm.create_lead(self.c, {"name": "Pflegedienst Sonne GmbH", "city": "Kiel"}, "Finn Adams")
+        self.assertIsNone(lead_id)
+        self.assertIn("Merkliste", why)
+        self.assertNotIn("pflege-sonne.de", claude_research.build_prompt(leaddb.brain(self.c), {"LEADS_REGION": ""} | {
+            "LEADS_CENTER": (54.6, 9.9), "LEADS_RADIUS_KM": 50}, 10, "", set()))
+        self.assertIn("pflege-sonne.de", claude_research.known_hosts(self.c))
+
+    def test_backfill_existing_leads(self):
+        self.c.execute("INSERT INTO leads (source_id, created_at, updated_at, name, city, website, status) "
+                       "VALUES ('osm:node/5', '2026-01-01T10:00:00', '2026-01-01T10:00:00', 'Alt GmbH', 'Kiel', "
+                       "'https://alt.example', 'aussortiert')")
+        self.c.commit()
+        self.assertEqual(known.backfill(self.c), 1)
+        self.assertEqual(known.backfill(self.c), 0)
+        self.assertEqual(known.find(self.c, website="https://alt.example")["first_seen_at"], "2026-01-01T10:00:00")
+
+
 class SecurityTest(unittest.TestCase):
     def test_team_login(self):
         client = app.test_client()
@@ -1228,6 +1290,10 @@ class ViewsTest(unittest.TestCase):
         self.assertEqual(self.client.post("/profil/passwort", data={"new": "abcdefgh1", "again": "abcdefgh1"},
                                           headers={"X-CSRF-Token": self.csrf}).status_code, 403)  # Demo: nicht ändern
         team.save_settings(c, "oskar", vorlage="", gruss="Viele Grüße")
+        html = self.client.get("/leads/schon-gefunden").get_data(as_text=True)
+        self.assertIn("Schon gefunden", html)
+        self.assertIn("Tischlerei Hansen", html)
+        self.assertIn("Firma;Ort", self.client.get("/leads/schon-gefunden?format=csv").get_data(as_text=True))
         r = self.client.post("/push/subscribe", data={"subscription": json.dumps(
             {"endpoint": "https://192.168.1.1:8006/x", "keys": {"p256dh": "a", "auth": "b"}})},
             headers={"X-CSRF-Token": self.csrf})

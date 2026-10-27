@@ -11,9 +11,8 @@ import hashlib
 import io
 import json
 import re
-from urllib.parse import urlparse
 
-from . import crm, finder, leaddb, niches
+from . import crm, finder, known, leaddb, niches
 
 FILENAME = "ylva-recherche.csv"
 BRANCHEN = tuple(k for k, _ in niches.GROUPS)
@@ -139,12 +138,8 @@ in einem einzigen Codeblock aus, ohne weiteren Text darin. Danach kurz: wie viel
 
 
 def known_hosts(conn):
-    hosts = set()
-    for r in conn.execute("SELECT website FROM leads WHERE IFNULL(website,'') != '' ORDER BY id DESC LIMIT 2000"):
-        host = urlparse(r["website"]).netloc.lower().removeprefix("www.")
-        if host:
-            hosts.add(host)
-    return hosts
+    """Webseiten aller jemals gefundenen Betriebe (Merkliste), damit Claude sie nicht noch einmal liefert."""
+    return known.hosts(conn)
 
 
 def _num(value):
@@ -200,6 +195,11 @@ def import_csv(conn, raw, author, center):
         if dup:
             skipped.append((line, f"{name}: gibt es schon („{dup['name']}“)"))
             continue
+        seen = known.find(conn, name, d.get("city", ""), website, email)
+        if seen:
+            skipped.append((line, f"{name}: wurde schon am {seen['first_seen_at'][:10]} gefunden"
+                                  f"{' von ' + seen['found_by'] if seen.get('found_by') else ''}"))
+            continue
         niche = niches.by_label(d.get("niche", ""))
         branche = d.get("branche", "").lower().strip()
         if branche not in BRANCHEN:
@@ -236,6 +236,7 @@ def import_csv(conn, raw, author, center):
         if not cur.rowcount:
             skipped.append((line, f"{name}: gibt es schon"))
             continue
+        known.remember(conn, name, city, website, email, source_id, "claude", author, cur.lastrowid, commit=False)
         conn.commit()
         leaddb.add_event(conn, cur.lastrowid, "status", "Aus der Claude-Recherche übernommen (CSV).", author=author)
         created += 1

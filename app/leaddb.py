@@ -176,6 +176,8 @@ def connect(path):
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(SCHEMA)
+    from . import known
+    conn.executescript(known.SCHEMA)
     for stmt in MIGRATIONS:
         try:
             conn.execute(stmt)
@@ -186,6 +188,7 @@ def connect(path):
         for stmt in DATA_MIGRATIONS[done:]:
             conn.execute(stmt)
         kv_set(conn, "data_version", len(DATA_MIGRATIONS))
+    known.backfill(conn)
     return conn
 
 # ---------------------------------------------------------------- Kleinkram
