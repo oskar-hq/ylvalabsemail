@@ -21,6 +21,12 @@
     </div>
   </div>
 
+  <nav class="segmented owner-filter" aria-label="Wessen CRM">
+    {% if account.team %}<a href="{{ url_for('crm.board', wer='meine', ansicht=request.args.get('ansicht')) }}" class="{{ 'on' if wer == 'meine' }}">Meine</a>{% endif %}
+    <a href="{{ url_for('crm.board', wer='alle', ansicht=request.args.get('ansicht')) }}" class="{{ 'on' if wer == 'alle' }}">Gesamt</a>
+    {% for k, n in people.items() %}<a href="{{ url_for('crm.board', wer=k, ansicht=request.args.get('ansicht')) }}" class="{{ 'on' if wer == k }}">{{ n.split(' ')[0] }}</a>{% endfor %}
+  </nav>
+
   {% if due %}
   <section class="today">
     <p class="label">Heute dran · {{ due|length }}</p>
@@ -62,6 +68,7 @@
               {% if c.next_due %}<span class="{{ 'late' if c.next_due <= today }}" title="Nächste Wiedervorlage">⏰ {{ fmt_day(c.next_due) }}</span>{% endif %}
               {% if c.deal_eur %}<span>{{ euro(c.deal_eur) }}</span>{% endif %}
               {% if c.p.fehlt %}<span class="needs-ai" title="Fehlt: {{ c.p.fehlt|join(', ') }}. Findet die KI- oder Claude-Recherche.">KI nötig</span>{% endif %}
+              {% if c.owner and c.owner in people %}<span class="owner-chip" title="Zuständig: {{ people[c.owner] }}">{{ people[c.owner][:1] }}</span>{% endif %}
             </span>
           </a>
           <button type="button" class="card-mail" data-mail="{{ c.id }}" title="Mail schreiben" aria-label="Mail an {{ c.name }} schreiben">✉</button>
@@ -79,7 +86,7 @@
       <thead><tr>
         <th data-sort="text">Betrieb</th><th data-sort="num">Stufe</th><th data-sort="text">Branche</th>
         <th data-sort="text">Größe</th><th data-sort="text">Ort</th><th data-sort="num">km</th><th data-sort="num">Punkte</th>
-        <th data-sort="text">Ansprechperson</th><th>Kontakt</th><th data-sort="text">Wiedervorlage</th><th data-sort="num">Wert</th><th>Fehlt</th>
+        <th data-sort="text">Ansprechperson</th><th data-sort="text">Zuständig</th><th>Kontakt</th><th data-sort="text">Wiedervorlage</th><th data-sort="num">Wert</th><th>Fehlt</th>
       </tr></thead>
       <tbody>
       {% for key, label, hint, cards, total in columns %}{% for c in cards %}{% set p = c.p %}
@@ -94,6 +101,7 @@
           <td class="num" data-v="{{ p.km if p.km is not none else 9999 }}">{{ p.km|round|int if p.km is not none else '–' }}</td>
           <td class="num" data-v="{{ p.punkte if p.punkte is not none else -1 }}">{{ p.punkte if p.punkte is not none else '–' }}</td>
           <td>{{ p.kontakt or '–' }}</td>
+          <td>{{ people.get(c.owner) or '–' }}</td>
           <td class="t-contact">{% if p.email %}<a href="mailto:{{ p.email }}">{{ p.email }}</a>{% endif %}{% if p.telefon %}<a href="tel:{{ p.telefon|replace(' ', '') }}">{{ p.telefon }}</a>{% endif %}{% if p.web %}<a href="{{ p.website }}" target="_blank" rel="noopener">{{ p.web }}</a>{% endif %}</td>
           <td data-v="{{ c.next_due or '9999' }}" class="{{ 'late' if c.next_due and c.next_due <= today }}">{{ fmt_day(c.next_due) if c.next_due else '–' }}</td>
           <td class="num" data-v="{{ c.deal_eur or 0 }}">{{ euro(c.deal_eur) if c.deal_eur else '–' }}</td>

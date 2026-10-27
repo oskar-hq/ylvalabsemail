@@ -37,6 +37,9 @@
   <p class="note warn small">Zum Antworten das Akquise-Postfach eintragen (Einstellungen → Postfach und Versand → Akquise-Postfach).</p>
   {% else %}
   <form class="reply-form" id="replyForm">
+    <div class="from-pick"><label class="sub" for="replyFrom">Von</label>
+      <select name="von" id="replyFrom">{% for p in senders %}<option value="{{ p.key }}" {{ 'selected' if p.key == sender }}>{{ p.name }}</option>{% endfor %}</select>
+      {% if lead.owner and lead.owner in people %}<span class="muted small">Zuständig: {{ people[lead.owner] }}</span>{% endif %}</div>
     <label class="field"><span class="sub">Betreff</span><input type="text" name="subject" value="{{ subject }}"></label>
     <textarea name="text" rows="5" placeholder="Ihre Antwort an {{ lead.contact_name or lead.name }} …" required></textarea>
     <div class="reply-actions">

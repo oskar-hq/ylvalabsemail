@@ -98,13 +98,35 @@ def profile(lead):
             "branche": lead.get("branche") or "", "fehlt": fehlt}
 
 
-def board(conn):
-    """Alle Betriebe in der Pipeline, gruppiert nach Stufe, mit nächster Wiedervorlage."""
-    rows = conn.execute("""
+def owner_sql(who, me=None):
+    """Filter nach Zuständigkeit: "alle", "meine" (mir zugeordnet oder noch niemandem) oder ein Schlüssel."""
+    if who == "meine" and me:
+        return "(l.owner = ? OR l.owner IS NULL)", [me]
+    if who and who not in ("alle", "meine"):
+        return "l.owner = ?", [who]
+    return "1", []
+
+
+def claim(conn, lead_id, key):
+    """Zuständig wird, wer zuerst etwas tut. Schon zugeordnete Betriebe bleiben, wo sie sind."""
+    if key and conn.execute("UPDATE leads SET owner=? WHERE id=? AND owner IS NULL", (key, lead_id)).rowcount:
+        conn.commit()
+
+
+def set_owner(conn, lead_id, key, author):
+    conn.execute("UPDATE leads SET owner=?, updated_at=? WHERE id=?", (key or None, leaddb.now(), lead_id))
+    conn.commit()
+    leaddb.add_event(conn, lead_id, "status", f"Zuständig: {key or 'niemand'}.", author=author)
+
+
+def board(conn, who="alle", me=None):
+    """Betriebe in der Pipeline, gruppiert nach Stufe, mit nächster Wiedervorlage. `who`: siehe owner_sql."""
+    where, args = owner_sql(who, me)
+    rows = conn.execute(f"""
         SELECT l.*, (SELECT MIN(due) FROM tasks t WHERE t.lead_id = l.id AND t.done_at IS NULL) AS next_due,
                (SELECT COUNT(*) FROM tasks t WHERE t.lead_id = l.id AND t.done_at IS NULL) AS open_tasks
-        FROM leads l WHERE l.stage IS NOT NULL
-        ORDER BY l.unread DESC, IFNULL(l.stage_at, l.updated_at) DESC""").fetchall()
+        FROM leads l WHERE l.stage IS NOT NULL AND {where}
+        ORDER BY l.unread DESC, IFNULL(l.stage_at, l.updated_at) DESC""", args).fetchall()
     columns = {k: [] for k in STAGE_KEYS}
     for r in rows:
         d = dict(r)
@@ -135,8 +157,9 @@ def complete_task(conn, task_id, author):
     return task["lead_id"]
 
 
-def open_tasks(conn, until=None, lead_id=None):
-    where, args = ["t.done_at IS NULL"], []
+def open_tasks(conn, until=None, lead_id=None, who="alle", me=None):
+    owner_where, args = owner_sql(who, me)
+    where = ["t.done_at IS NULL", owner_where]
     if until:
         where.append("t.due <= ?")
         args.append(until)
@@ -148,9 +171,11 @@ def open_tasks(conn, until=None, lead_id=None):
         "ORDER BY t.due, t.id", args)]
 
 
-def due_count(conn):
-    return conn.execute("SELECT COUNT(*) FROM tasks WHERE done_at IS NULL AND due <= ?",
-                        (date.today().isoformat(),)).fetchone()[0]
+def due_count(conn, me=None):
+    where, args = owner_sql("meine", me)
+    return conn.execute(f"SELECT COUNT(*) FROM tasks t JOIN leads l ON l.id = t.lead_id "
+                        f"WHERE t.done_at IS NULL AND t.due <= ? AND {where}",
+                        [date.today().isoformat(), *args]).fetchone()[0]
 
 
 def fmt_day(value):

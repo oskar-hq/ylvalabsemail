@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}Mein Profil · Ylva Labs{% endblock %}
+{% block content %}
+<main class="page narrow">
+  <h1 class="title">{{ member.name }}</h1>
+  {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if m.startswith('Nicht') else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
+  <ul class="menu profile-links">
+    <li><a href="{{ url_for('team.template_editor') }}"><span class="txt"><b>Meine Vorlage</b><span>Text und Design deiner Mails, mit Vorschau</span></span><span class="chev">›</span></a></li>
+    <li><a href="{{ url_for('crm.board', wer='meine') }}"><span class="txt"><b>Mein CRM</b><span>Deine Betriebe und die noch niemandem zugeordneten</span></span><span class="chev">›</span></a></li>
+    <li><a href="{{ url_for('team.overview') }}"><span class="txt"><b>Team und Zahlen</b><span>Wer wie viele angeschrieben hat, Antworten, Kunden</span></span><span class="chev">›</span></a></li>
+  </ul>
+
+  <section class="auto-card">
+    <h2>Passwort</h2>
+    {% if account.demo %}<p class="note warn small">Im Demo-Modus lassen sich Passwörter nicht ändern.</p>{% endif %}
+    <p class="muted small">{% if member.pw_hash %}Zuletzt geändert {{ member.pw_set_at|kurzdatum }}.{% else %}Noch kein Passwort. Lege eins fest, dann meldest du dich mit deinem Namen an.{% endif %} Mindestens {{ min_pw }} Zeichen.</p>
+    <form method="post" action="{{ url_for('team.password') }}" class="pw-form" autocomplete="off">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      {% if member.pw_hash %}<label class="field"><span class="sub">Bisheriges Passwort</span><input type="password" name="current" autocomplete="current-password" required></label>{% endif %}
+      <label class="field"><span class="sub">Neues Passwort</span><input type="password" name="new" minlength="{{ min_pw }}" autocomplete="new-password" required></label>
+      <label class="field"><span class="sub">Noch einmal</span><input type="password" name="again" minlength="{{ min_pw }}" autocomplete="new-password" required></label>
+      <button class="btn primary" {{ 'disabled' if account.demo }}>Passwort speichern</button>
+    </form>
+  </section>
+
+  <section class="auto-card">
+    <h2>Gruß und Unterschrift</h2>
+    <p class="muted small">Steht unter jeder Mail, die du schreibst.</p>
+    <form method="post" action="{{ url_for('team.save_profile') }}">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <label class="field"><span class="sub">Gruß</span><input type="text" name="gruss" value="{{ settings.gruss }}"></label>
+      <label class="field"><span class="sub">Unterschrift</span><textarea name="signatur" rows="4">{{ settings.signatur }}</textarea></label>
+      <button class="btn">Speichern</button>
+    </form>
+  </section>
+
+  {% set others = people|rejectattr('key', 'equalto', member.key)|list %}
+  <section class="auto-card">
+    <h2>Das Team</h2>
+    <ul class="team-list">
+      {% for p in others %}<li><span><b>{{ p.name }}</b> <span class="muted small">· {{ 'hat ein Passwort' if p.has_password else 'noch kein Passwort' }}</span></span>
+        {% if (not p.has_password or admin) and not account.demo %}
+        <details class="pw-other"><summary class="btn small">{{ 'Passwort neu setzen' if p.has_password else 'Erstes Passwort festlegen' }}</summary>
+          <form method="post" action="{{ url_for('team.password') }}" autocomplete="off">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="member" value="{{ p.key }}">
+            <label class="field"><span class="sub">Neues Passwort für {{ p.name }}</span><input type="password" name="new" minlength="{{ min_pw }}" autocomplete="new-password" required></label>
+            <label class="field"><span class="sub">Noch einmal</span><input type="password" name="again" minlength="{{ min_pw }}" autocomplete="new-password" required></label>
+            <button class="btn small primary">Speichern</button>
+          </form>
+        </details>{% endif %}</li>{% endfor %}
+    </ul>
+    <p class="muted small">Ein erstes Passwort für jemanden ohne Passwort kann jede im Team festlegen. Ein bestehendes fremdes Passwort ändern nur Admins.</p>
+  </section>
+</main>
+{% endblock %}

@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block title %}Wer bist du? · Ylva Labs{% endblock %}
+{% block content %}
+<main class="page narrow">
+  <h1 class="title">Wer bist du?</h1>
+  <p class="muted">Danach siehst du dein CRM, deine Vorlage und deine Einstellungen. Mails gehen mit deinem Namen raus.</p>
+  <form method="post" class="who-form">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ nxt }}">
+    <div class="who-cards">
+      {% for p in people %}<button class="who-card" name="member" value="{{ p.key }}">
+        <span class="avatar big">{{ p.name[:1] }}</span><b>{{ p.name }}</b>
+        <span class="muted small">{{ 'Passwort festgelegt' if p.has_password else 'noch kein Passwort' }}</span></button>{% endfor %}
+    </div>
+  </form>
+</main>
+{% endblock %}

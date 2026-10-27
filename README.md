@@ -164,6 +164,22 @@ Gestaltet wie das Outreach Cockpit (ruhig, eine Sache pro Bildschirm). Hell, Dun
 Einstellungen, Verlauf, Kosten und Systemcheck liegen im Konto-Menü (Kreis oben rechts). Die Einstellungen sind wie
 in einer App aufgebaut: Bereich → Unterseite mit wenigen Werten.
 
+## Team: Konten, eigenes CRM, Vorlage, Zahlen
+
+- **Anmelden mit Name und Passwort**: Finn Adams, Hamza Al-Shebli, Oskar Jacobsen. Passwörter liegen nur als
+  scrypt-Hash in der Datenbank, nach Fehlversuchen greift dieselbe Sperre wie beim Postfach-Login.
+- **Erstes Passwort**: einmal mit einem E-Mail-Postfach von Ylva Labs anmelden, „Wer bist du?“ wählen und unter
+  *Mein Profil* ein Passwort festlegen (mindestens 8 Zeichen). Für jemanden ohne Passwort kann das jede im Team
+  tun; ein bestehendes fremdes Passwort ändern nur Admins (`ADMIN_USERS`, z. B. `oskar` oder eine Postfach-Adresse).
+- **Eigenes CRM**: Zuständig wird, wer einen Betrieb zuerst bearbeitet (gut markiert, verschoben, angeschrieben …),
+  in der Akte änderbar. Im CRM oben: *Meine* (eigene und noch niemandem zugeordnete), *Gesamt* oder eine Person.
+- **Absender wählen**: In jedem Mail-Fenster (Mail an Betriebe, Antworten, neue Mail) steht „Von“. Verschickt wird über
+  das Akquise-Postfach mit dem Namen der Person („Finn Adams | Ylva Labs“), Gruß und Unterschrift aus ihrem Profil.
+- **Meine Vorlage**: Text mit Platzhaltern und Design, Vorschau mit einem Beispiel-Betrieb sofort daneben (am Handy
+  per „Bearbeiten | Vorschau“). Ohne eigene Vorlage gilt die gemeinsame aus dem Gehirn.
+- **Team und Zahlen**: je Person und gesamt: im CRM, angeschrieben, Antworten (mit Quote), Interesse, Gespräche,
+  Kunden mit Umsatz, geschriebene Mails.
+
 ## Recherche mit Claude (ohne API-Schlüssel)
 
 Unter **Leads → Mit Claude recherchieren** baut die App einen Prompt aus dem Gehirn („Über uns“, „Wen wir suchen“),

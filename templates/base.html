@@ -22,7 +22,7 @@
 {% set ep = request.endpoint or '' %}
 {% set sec = 'heute' if ep == 'leads.home' else ('leads' if ep.startswith('leads.') else ('crm' if ep.startswith('crm.') else ('mailer' if ep in ('compose', 'history') else ('mehr' if ep.startswith('settings.') else '')))) %}
 {% set n_leads = leads_todo() %}{% set n_crm = crm_due() %}
-{% set who_name = (account.address or account.user or 'Team') %}
+{% set who_name = (account.name or account.address or account.user or 'Team') %}
 <header class="top">
   <a class="brand" href="{{ url_for('index') }}" aria-label="Ylva Labs, Heute">
     <span class="brand-tile"><span class="mark" aria-hidden="true"><i class="d"></i><i class="d"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i class="d"></i><i class="d"></i></span></span>
@@ -52,11 +52,14 @@
     <details class="account">
       <summary class="avatar" aria-label="Konto und Einstellungen">{{ who_name[:1]|upper }}</summary>
       <div class="account-menu">
-        <span class="who-full">{{ 'Demo, es wird nichts verschickt' if account.demo else who_name }}</span>
+        <span class="who-full">{{ who_name ~ (' · Demo, es wird nichts verschickt' if account.demo else '') }}</span>
         <div class="theme-pick" role="group" aria-label="Darstellung">
           <span>Darstellung</span>
           <span class="segmented small">{% for key, label in [('light', 'Hell'), ('dark', 'Dunkel'), ('auto', 'Auto')] %}<button type="button" data-theme-set="{{ key }}" class="{{ 'on' if ui_theme == key }}" aria-pressed="{{ 'true' if ui_theme == key else 'false' }}">{{ label }}</button>{% endfor %}</span>
         </div>
+        {% if account.team %}<a href="{{ url_for('team.profile') }}">Mein Profil und Passwort</a>
+        <a href="{{ url_for('team.template_editor') }}">Meine Vorlage</a>{% else %}<a href="{{ url_for('team.who_am_i') }}">Wer bist du? Person wählen</a>{% endif %}
+        <a href="{{ url_for('team.overview') }}">Team und Zahlen</a>
         <a href="{{ url_for('settings.settings') }}">Einstellungen</a>
         <a href="{{ url_for('history') }}">Verlauf des Mailers</a>
         <a href="{{ url_for('leads.costs') }}">Kosten</a>
@@ -66,6 +69,7 @@
     </details>
   </nav>
 </header>
+{% if not account.team and request.endpoint != 'team.who_am_i' %}<div class="who-banner">Du bist mit dem Postfach angemeldet. <a href="{{ url_for('team.who_am_i', next=request.path) }}">Wähle, wer du bist</a>, dann siehst du dein CRM und deine Vorlage.</div>{% endif %}
 <nav class="tabbar" aria-label="Bereiche">
   <a href="{{ url_for('leads.home') }}" class="{{ 'on' if sec == 'heute' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 2 7l10 5 10-5-10-5Z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/></svg>Heute</a>
   <a href="{{ url_for('leads.overview') }}" class="{{ 'on' if sec == 'leads' }}">{% if n_leads %}<span class="tab-count">{{ n_leads }}</span>{% endif %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="7" r="4"/><path d="M2 21v-1a6 6 0 0 1 9-5.2"/><circle cx="17" cy="16" r="3"/><path d="m21 20-1.8-1.8"/></svg>Leads</a>

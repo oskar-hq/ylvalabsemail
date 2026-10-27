@@ -99,6 +99,13 @@ CREATE TABLE IF NOT EXISTS messages (
 );
 CREATE INDEX IF NOT EXISTS messages_lead ON messages(lead_id, at);
 CREATE INDEX IF NOT EXISTS messages_unread ON messages(read, direction);
+CREATE TABLE IF NOT EXISTS team (
+    key TEXT PRIMARY KEY, name TEXT NOT NULL, pw_hash TEXT, pw_set_at TEXT, settings TEXT NOT NULL DEFAULT '{}',
+    sort INTEGER NOT NULL DEFAULT 0
+);
+INSERT OR IGNORE INTO team (key, name, sort) VALUES ('finn', 'Finn Adams', 1);
+INSERT OR IGNORE INTO team (key, name, sort) VALUES ('hamza', 'Hamza Al-Shebli', 2);
+INSERT OR IGNORE INTO team (key, name, sort) VALUES ('oskar', 'Oskar Jacobsen', 3);
 """
 
 # Spalten, die nach der ersten Version dazugekommen sind
@@ -124,6 +131,8 @@ MIGRATIONS = [
     "ALTER TABLE leads ADD COLUMN mood TEXT",
     # Nische aus der Suche (Schlüssel aus niches.py), danach verteilt ein Lauf die Bewertungen
     "ALTER TABLE leads ADD COLUMN niche TEXT",
+    # Wer im Team zuständig ist (Schlüssel aus team), NULL = noch niemand
+    "ALTER TABLE leads ADD COLUMN owner TEXT",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.

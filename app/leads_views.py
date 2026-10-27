@@ -6,7 +6,7 @@ from datetime import datetime
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from . import agent, ai, claude_research, crm, emailbuild, leaddb, mailbox, niches, pixel, schedule, scoring, webpush
+from . import agent, ai, claude_research, crm, emailbuild, leaddb, mailbox, niches, pixel, schedule, scoring, team, webpush
 from .main import DB_PATH, ROOT, SETTINGS, login_required
 
 bp = Blueprint("leads", __name__)
@@ -26,7 +26,12 @@ def close_db(_exc):
 
 
 def who():
-    return g.account.get("address") or g.account.get("user") or "Team"
+    return g.account.get("name") or g.account.get("address") or g.account.get("user") or "Team"
+
+
+def me():
+    """Schlüssel der angemeldeten Person im Team (finn, hamza, oskar) oder None."""
+    return g.account.get("team")
 
 
 def lead_or_404(lead_id):
@@ -107,6 +112,8 @@ def run_defaults():
 
 
 def _first_name(account):
+    if account.get("name"):
+        return account["name"].split(" ")[0]
     if account.get("demo"):
         return "Team"
     local = (account.get("address") or account.get("user") or "").split("@")[0]
@@ -118,7 +125,8 @@ def _first_name(account):
 def home():
     st = status_payload()
     c = st["counts"]
-    new_replies = mailbox.unread_count(db())
+    new_replies = mailbox.unread_count(db(), me())
+    st["due_tasks"] = crm.due_count(db(), me())  # Heute: eigene Wiedervorlagen und die noch niemandem zugeordneten
     parts = [(new_replies, "neue Antworten" if new_replies != 1 else "neue Antwort", url_for("crm.inbox")),
              (st["due_tasks"], "Wiedervorlagen" if st["due_tasks"] != 1 else "Wiedervorlage", url_for("crm.board")),
              (c["entwurf"], "Freigaben" if c["entwurf"] != 1 else "Freigabe", url_for("leads.overview", tab="entwurf")),
@@ -352,7 +360,8 @@ def detail(lead_id):
                            reminder_ct=ai.eur(agent.avg_cost_usd(db(), "erinnerung")) * 100,
                            draft_ct=ai.eur(agent.avg_cost_usd(db(), "entwurf")) * 100,
                            tasks=crm.open_tasks(db(), lead_id=lead_id), can_mail=can_mail, mail_hint=mail_hint,
-                           tab=leaddb.tab_of(lead), tabs=leaddb.TABS, demo=SETTINGS["DEMO_MODE"])
+                           tab=leaddb.tab_of(lead), tabs=leaddb.TABS, people=team.names(db()),
+                           demo=SETTINGS["DEMO_MODE"])
 
 
 @bp.route("/leads/<int:lead_id>/preview", methods=["GET", "POST"])
@@ -365,7 +374,9 @@ def preview(lead_id):
         if design:
             lead["mail_design"] = json.dumps(design)
     rcpt = {"name": lead["contact_name"] or "", "first": "", "email": lead["email"] or ""}
-    html, _, _ = emailbuild.render(agent.lead_form(lead), rcpt, SETTINGS)
+    key = _sender_key(lead)
+    snd = team.sender(db(), key, SETTINGS["ORG_NAME"]) if key else None
+    html, _, _ = emailbuild.render(agent.lead_form(lead, snd), rcpt, SETTINGS)
     resp = Response(html, mimetype="text/html")
     resp.headers["X-Frame-Options"] = "SAMEORIGIN"
     return resp
@@ -378,15 +389,17 @@ def mail_json(lead_id):
     Gibt es noch keinen Text, wird die Vorlage eingesetzt; POST mit neu=1 setzt sie neu ein."""
     lead = lead_or_404(lead_id)
     open_status = lead["status"] in ("passt", "entwurf", "aussortiert", "fehler") and not lead["interest"]
+    sender = _sender_key(lead)
     if open_status and (not (lead["body"] or "").strip() or request.form.get("neu") == "1"):
-        agent.template_draft(db(), lead_id)
+        agent.template_draft(db(), lead_id, sender)
         lead = lead_or_404(lead_id)
     ok, why = crm.may_email(lead, SETTINGS["OUTREACH_EMAIL"])
     if g.account.get("demo") and lead["email"]:
         ok, why = True, "Demo: Es wird nichts verschickt, nur als versendet markiert."
     sent = lead["status"] in ("versendet", "beantwortet")
-    if not lead.get("mail_design") and leaddb.kv_get(db(), "mail_design_last"):
-        lead = {**lead, "mail_design": json.dumps(leaddb.kv_get(db(), "mail_design_last"))}
+    own_design = team.settings(db(), sender)["design"] if sender else None
+    if not lead.get("mail_design") and (own_design or leaddb.kv_get(db(), "mail_design_last")):
+        lead = {**lead, "mail_design": json.dumps(own_design or leaddb.kv_get(db(), "mail_design_last"))}
     return jsonify(id=lead_id, name=lead["name"], email=lead["email"] or "", contact=lead["contact_name"] or "",
                    design=agent.design_of(lead),
                    templates={k: v["name"] for k, v in emailbuild.TEMPLATES.items()}, graphics=agent.GRAPHICS,
@@ -394,7 +407,17 @@ def mail_json(lead_id):
                    subject=lead["subject"] or "", greeting=lead["greeting"] or "", body=lead["body"] or "",
                    can_email=ok and not sent, why="Diese Nachricht ist schon raus." if sent else why,
                    sent=sent, editable=open_status, letter=url_for("leads.letter", lead_id=lead_id),
-                   detail=url_for("leads.detail", lead_id=lead_id), preview=url_for("leads.preview", lead_id=lead_id))
+                   detail=url_for("leads.detail", lead_id=lead_id), preview=url_for("leads.preview", lead_id=lead_id),
+                   senders=team.names(db()), sender=sender, template_url=url_for("team.template_editor"))
+
+
+def _sender_key(lead=None):
+    """Von wem die Mail kommt: aus dem Formular („von“), sonst die angemeldete Person, sonst die zuständige."""
+    names = team.names(db())
+    key = request.values.get("von", "")
+    if key in names:
+        return key
+    return me() or (lead or {}).get("owner") or None
 
 
 @bp.get("/leads/<int:lead_id>/brief")
@@ -402,8 +425,10 @@ def mail_json(lead_id):
 def letter(lead_id):
     """Druckansicht als Brief (DIN 5008 light), falls der Erstkontakt per Post läuft."""
     lead = lead_or_404(lead_id)
+    key = _sender_key(lead)
     return render_template("letter.html", lead=lead, paragraphs=emailbuild.paragraphs(lead["body"]),
-                           sender_name=SETTINGS["LEADS_SENDER_NAME"], footer=SETTINGS["DEFAULT_FOOTER"],
+                           sender_name=team.names(db()).get(key) or SETTINGS["LEADS_SENDER_NAME"],
+                           footer=SETTINGS["DEFAULT_FOOTER"],
                            org=SETTINGS["ORG_NAME"], today=datetime.now().strftime("%d.%m.%Y"))
 
 
@@ -510,11 +535,14 @@ def send(lead_id):
         leaddb.update_lead(db(), lead_id, status="versendet", channel="email", sent_at=leaddb.now())
         leaddb.add_event(db(), lead_id, "sent", "Demo: als versendet markiert (nichts verschickt).", author=who())
         crm.advance(db(), lead_id, "kontaktiert")
+        crm.claim(db(), lead_id, _sender_key(lead))
         return jsonify(ok=True)
+    sender = _sender_key(lead)
     try:
-        agent.send_outreach(db(), lead, who())
+        agent.send_outreach(db(), lead, who(), sender=sender)
     except Exception as exc:
         return jsonify(error=str(exc)), 502
+    crm.claim(db(), lead_id, sender)
     _approved_signal(lead, "per Mail")
     return jsonify(ok=True)
 
@@ -536,6 +564,7 @@ def mark_sent(lead_id):
     leaddb.update_lead(db(), lead_id, status="versendet", channel=channel, sent_at=leaddb.now(), unread=0)
     leaddb.add_event(db(), lead_id, "sent", f"Kontakt {labels[channel]} aufgenommen.", author=who())
     crm.advance(db(), lead_id, "kontaktiert")
+    crm.claim(db(), lead_id, _sender_key(lead))
     _approved_signal(lead, labels[channel])
     return jsonify(ok=True)
 
@@ -599,6 +628,7 @@ def verdict(lead_id):
         crm.advance(db(), lead_id, "neu", author=who())
         leaddb.update_lead(db(), lead_id, unread=0)
         leaddb.add_event(db(), lead_id, "status", "Beim Prüfen als gut markiert, ins CRM.", author=who())
+        crm.claim(db(), lead_id, me())
         leaddb.add_signal(db(), "gut", f"Das Team findet {lead['name']} ({lead['branche']} / {lead['category_label']}, "
                           f"{lead['fit_score']} Punkte) passend.", lead_id)
     else:

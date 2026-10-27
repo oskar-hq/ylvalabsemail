@@ -17,7 +17,7 @@
   }
   const fields = () => ({ subject: $('mailSubject').value, greeting: $('mailGreeting').value, body: $('mailBody').value,
     template: $('mailTemplateInput').value, graphic: $('mailGraphic').value, icon: $('mailIcon').value,
-    band_seed: $('mailSeedInput').value });
+    band_seed: $('mailSeedInput').value, von: $('mailFrom').value });
 
   // Design: Vorlage (Kurz-Mail / Newsletter), Grafik, Symbol, Variante des Pixel-Bands. Vorschau live.
   function setDesign(d, opts) {
@@ -49,6 +49,7 @@
   $('mailIcon').addEventListener('change', () => setDesign(currentDesign()));
   $('mailSeed').addEventListener('click', () => setDesign({ ...currentDesign(), band_seed: String(1 + Math.floor(Math.random() * 50)) }));
   $('mailPreviewBox').addEventListener('toggle', refreshPreview);
+  $('mailFrom').addEventListener('change', refreshPreview);
   ['mailSubject', 'mailGreeting', 'mailBody'].forEach((id) => $(id).addEventListener('input', refreshPreview));
   function fill(d) {
     lead = d;
@@ -57,6 +58,9 @@
     $('mailSubject').value = d.subject; $('mailGreeting').value = d.greeting; $('mailBody').value = d.body;
     ['mailSubject', 'mailGreeting', 'mailBody'].forEach((id) => { $(id).readOnly = !d.editable; });
     $('mailDetail').href = d.detail;
+    $('mailFrom').innerHTML = '';
+    Object.entries(d.senders || {}).forEach(([k, v]) => $('mailFrom').append(new Option(v, k, false, k === d.sender)));
+    $('mailFrom').closest('.from-field').hidden = !Object.keys(d.senders || {}).length;
     setDesign(d.design, d);
     $('mailSend').disabled = !d.can_email;
     $('mailSend').textContent = d.sent ? 'Schon versendet' : 'Senden';
@@ -86,7 +90,7 @@
   dlg.querySelector('[data-close]').addEventListener('click', () => dlg.close());
   $('mailTemplate').addEventListener('click', async () => {
     if (!confirm('Den Text durch die Vorlage ersetzen?')) return;
-    fill(await call(`/leads/${lead.id}/mail.json`, { neu: '1' }));
+    fill(await call(`/leads/${lead.id}/mail.json`, { neu: '1', von: $('mailFrom').value }));
   });
   $('mailSave').addEventListener('click', async () => {
     await call(`/leads/${lead.id}/save`, fields());
@@ -101,7 +105,7 @@
   });
   $('mailLetter').addEventListener('click', async () => {
     await call(`/leads/${lead.id}/save`, fields());
-    window.open(lead.letter, '_blank');
+    window.open(`${lead.letter}?von=${encodeURIComponent($('mailFrom').value)}`, '_blank');
   });
   dlg.querySelectorAll('[data-mark]').forEach((b) => b.addEventListener('click', async () => {
     await call(`/leads/${lead.id}/mark-sent`, { ...fields(), channel: b.dataset.mark });

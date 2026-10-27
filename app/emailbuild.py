@@ -169,7 +169,8 @@ def build_message(form, rcpt, settings, sender, image_path=None):
 
     msg = EmailMessage()
     msg["Subject"] = subject
-    msg["From"] = formataddr((form.get("sender_name", "").strip() or settings["ORG_NAME"], sender))
+    msg["From"] = formataddr(((form.get("from_name") or form.get("sender_name") or "").strip() or settings["ORG_NAME"],
+                              sender))
     msg["To"] = formataddr((rcpt["name"], rcpt["email"]))
     if form.get("reply_to", "").strip():
         msg["Reply-To"] = form["reply_to"].strip()

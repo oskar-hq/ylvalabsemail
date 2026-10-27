@@ -22,7 +22,7 @@
       e.preventDefault();
       const btn = form.querySelector('button.primary');
       btn.disabled = true; btn.textContent = 'Wird gesendet …';
-      try { await post(`/crm/postfach/${id}/antwort`, { text: form.text.value, subject: form.subject.value }); location.reload(); }
+      try { await post(`/crm/postfach/${id}/antwort`, { text: form.text.value, subject: form.subject.value, von: form.von?.value || '' }); location.reload(); }
       catch (err) { alert(err.message); btn.disabled = false; btn.textContent = 'Antworten'; }
     });
     document.querySelector('.thread li:last-child')?.scrollIntoView({ block: 'end' });

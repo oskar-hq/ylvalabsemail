@@ -11,7 +11,7 @@
     <form method="post" class="brain-form">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <p class="muted small">Das Gehirn bekommt die KI bei jedem Entwurf mit. Oben steht, was ihr vorgebt.
-        Der Abschnitt <b>Vorlage (ohne KI)</b> ist der Text für „Vorlage einsetzen“, mit Platzhaltern wie <code>{firma}</code>, <code>{anrede}</code>, <code>{zeitfresser}</code>, <code>{kategorie}</code>, <code>{ort}</code>.
+        Der Abschnitt <b>Vorlage (ohne KI)</b> ist der Text für „Vorlage einsetzen“, mit Platzhaltern wie <code>{firma}</code>, <code>{anrede}</code>, <code>{zeitfresser}</code>, <code>{kategorie}</code>, <code>{ort}</code>. Jede Person kann sich daraus ihre eigene machen, mit Design und Vorschau: <a href="{{ url_for('team.template_editor') }}">Meine Vorlage</a>.
         Den Abschnitt <b>Gelernt</b> schreibt die KI selbst fort, aus eurem Chat, euren Änderungen, aussortierten Betrieben und den Antworten der Firmen.
         Welche Betriebe passen, entscheidet nicht die KI, sondern die <a href="{{ url_for('leads.rules') }}">Regeln</a>.
         Ihr dürft ihn aber jederzeit korrigieren.</p>

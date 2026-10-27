@@ -57,7 +57,7 @@ Feedback und aus den Antworten der Firmen fort.
 - Kurz: höchstens 140 Wörter im Text. Keine Floskeln, kein Tech-Englisch, keine Hype-Wörter.
 - Genau eine Bitte am Ende: ein kostenloses Gespräch von 30 Minuten, am Telefon oder vor Ort.
 - Ehrlich: keine erfundenen Zahlen, keine Versprechen, keine Referenzkunden, die es nicht gibt.
-- Absender ist Oskar Jacobsen von Ylva Labs aus Kappeln.
+- Absender ist die Person aus dem Team, die schreibt (Finn Adams, Hamza Al-Shebli oder Oskar Jacobsen), von Ylva Labs aus Kappeln.
 
 ## Vorlage (ohne KI)
 
@@ -72,7 +72,7 @@ Dazu kommt bei Ihnen vermutlich noch: {zeitfresser}.
 
 {beispiel}
 
-Ich bin Oskar Jacobsen von Ylva Labs aus Kappeln. Wir bauen solche Werkzeuge gemeinsam mit Betrieben aus der Region, passend zu Ihren Abläufen und mit dem Entwicklungsrisiko bei uns. Lohnt es sich für Sie nicht, sagen wir das ehrlich.
+Ich bin {absender} von Ylva Labs aus Kappeln. Wir bauen solche Werkzeuge gemeinsam mit Betrieben aus der Region, passend zu Ihren Abläufen und mit dem Entwicklungsrisiko bei uns. Lohnt es sich für Sie nicht, sagen wir das ehrlich.
 
 Hätten Sie Lust auf ein Gespräch von 30 Minuten? Gern bei Ihnen vor Ort oder am Telefon, ganz wie es Ihnen passt.
 
