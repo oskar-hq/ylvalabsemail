@@ -58,13 +58,14 @@ Feedback und aus den Antworten der Firmen fort.
   Betrieb.
 - Offen für andere Themen: Der Betrieb darf uns auch ganz andere Zeitfresser schicken.
 - Kurz: höchstens 170 Wörter im Text. Keine Floskeln, kein Tech-Englisch, keine Hype-Wörter, kein Verkaufston.
+- Betreff: kurz, persönlich und neugierig machend, wie von einem Menschen aus der Nachbarschaft, z. B. „{firma}: kurze Frage aus Kappeln“ oder „Frage zu Ihren Aufmaßen“. Nie nach Werbung klingen: keine Wörter wie weniger Büroarbeit, sparen, effizient, Lösung, Angebot, digital, kein Ausrufezeichen, keine Großbuchstaben-Wörter.
 - Genau eine Bitte am Ende: ein kostenloses Gespräch von 30 Minuten, am Telefon oder vor Ort.
 - Ehrlich: keine erfundenen Tatsachen, keine Versprechen, keine Referenzkunden, die es nicht gibt.
 - Absender ist die Person aus dem Team, die schreibt (Finn Adams, Hamza Al-Shebli oder Oskar Jacobsen), von Ylva Labs aus Kappeln.
 
 ## Vorlage (ohne KI)
 
-Betreff: Weniger Büroarbeit bei {firma}?
+Betreff: {firma}: kurze Frage aus Kappeln
 Anrede: {anrede}
 
 ich bin {absender} von Ylva Labs, einem kleinen Team aus Kappeln. Wir schauen uns an, wo Betriebe in der Region im Alltag Zeit verlieren, und bauen dafür einfache digitale Werkzeuge, die Zeit und Geld sparen.
