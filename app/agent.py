@@ -1142,6 +1142,25 @@ def mail_error(exc):
     return f"{exc.__class__.__name__}: {text}"
 
 
+def test_mailbox():
+    """Anmeldung am Akquise-Postfach prüfen, ohne etwas zu senden: Postausgang (SMTP) und Posteingang (IMAP)."""
+    if not outreach_configured():
+        return [("Akquise-Postfach", False, "Benutzer oder Passwort fehlt.")]
+    out = []
+    try:
+        CFG["smtp_connect"](S("OUTREACH_USER"), S("OUTREACH_PASSWORD")).quit()
+        out.append(("Postausgang (SMTP)", True, f"Anmeldung als {S('OUTREACH_USER')} bei {S('SMTP_HOST')} klappt."))
+    except Exception as exc:
+        out.append(("Postausgang (SMTP)", False, mail_error(exc)))
+    if S("IMAP_HOST"):
+        try:
+            _imap().logout()
+            out.append(("Posteingang (IMAP)", True, f"Anmeldung bei {S('IMAP_HOST')} klappt."))
+        except Exception as exc:
+            out.append(("Posteingang (IMAP)", False, mail_error(exc)))
+    return out
+
+
 def fetch_inbox(c):
     """Postfach abrufen und das Ergebnis merken (für den Hinweis im Postfach und an der Glocke)."""
     try:

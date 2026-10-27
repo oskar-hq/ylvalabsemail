@@ -449,6 +449,22 @@ class AgentTest(unittest.TestCase):
         self.assertEqual((sent[1]["Subject"], sent[1]["From"].addresses[0].addr_spec), ("Unterlagen", "k@ylvalabs.de"))
         self.assertIn("Viele Grüße", sent[1].get_content())
 
+    def test_mailbox_connection_test(self):
+        import smtplib
+        settings = dict(agent.CFG["settings"], OUTREACH_USER="k@ylvalabs.de", OUTREACH_PASSWORD="falsch", IMAP_HOST="imap.x")
+
+        def fail(u, p):
+            raise smtplib.SMTPAuthenticationError(535, b"5.7.8 Authentication failed")
+        with mock.patch.dict(agent.CFG, {"settings": settings, "smtp_connect": fail}), \
+                mock.patch.object(agent, "_imap", side_effect=Exception("LOGIN command error: BAD (Password required)")):
+            results = agent.test_mailbox()
+        self.assertEqual([(n, ok) for n, ok, _ in results], [("Postausgang (SMTP)", False), ("Posteingang (IMAP)", False)])
+        self.assertIn("Passwort", results[0][2])
+        ok_smtp = mock.Mock()
+        with mock.patch.dict(agent.CFG, {"settings": settings, "smtp_connect": lambda u, p: ok_smtp}), \
+                mock.patch.object(agent, "_imap", return_value=mock.Mock()):
+            self.assertTrue(all(ok for _, ok, _ in agent.test_mailbox()))
+
     def test_mail_errors_are_readable(self):
         import smtplib
         self.assertIn("Passwort", agent.mail_error(smtplib.SMTPAuthenticationError(535, b"wrong user/password")))
@@ -1341,6 +1357,8 @@ class ViewsTest(unittest.TestCase):
         self.assertIn("Schon gefunden", html)
         self.assertIn("Tischlerei Hansen", html)
         self.assertIn("Firma;Ort", self.client.get("/leads/schon-gefunden?format=csv").get_data(as_text=True))
+        self.assertIn("Verbindung testen", self.client.get("/einstellungen/postfach/zugang").get_data(as_text=True))
+        self.assertTrue(self.client.post("/einstellungen/postfach/test", headers={"X-CSRF-Token": self.csrf}).get_json()["results"])
         r = self.client.post("/push/subscribe", data={"subscription": json.dumps(
             {"endpoint": "https://192.168.1.1:8006/x", "keys": {"p256dh": "a", "auth": "b"}})},
             headers={"X-CSRF-Token": self.csrf})
