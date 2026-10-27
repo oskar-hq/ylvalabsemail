@@ -235,7 +235,7 @@ class AgentTest(unittest.TestCase):
         lead_id = self.add("Tischlerei A", status="passt", stage="neu", contact_name="Jens Hansen", city="Kappeln",
                            research=json.dumps({"zeitfresser": ["Angebote, Aufmaß und Nachkalkulation"], "auszug": "Küchen"}))
         fields = agent.template_draft(self.c, lead_id)
-        self.assertIn("Tischlerei A", fields["subject"])
+        self.assertEqual(fields["subject"], "Ein Gedanke aus der Region")
         self.assertEqual(fields["greeting"], "Guten Tag Jens Hansen,")
         self.assertTrue(fields["body"].startswith("ich bin "))  # erst vorstellen, nicht „Ich kann mir vorstellen …“
         self.assertIn("Angebote und Aufmaß direkt beim Kunden", fields["body"])  # typische Aufgaben im Handwerk
@@ -792,12 +792,12 @@ class TemplateUpgradeTest(unittest.TestCase):
         self.assertIn(agent.NEW_OUTREACH_SENTENCE, seed)
         leaddb.kv_set(c, "template_v3", True)
         old = seed.replace(agent.NEW_OUTREACH_SENTENCE, agent.OLD_OUTREACH_SENTENCE)
-        old = old.replace("Betreff: {firma}: kurze Frage aus Kappeln", "Betreff: Weniger Büroarbeit bei {firma}?")
+        old = old.replace("Betreff: Ein Gedanke aus der Region", "Betreff: {firma}: kurze Frage aus Kappeln")
         leaddb.save_brain(c, old, "t", "alt")
         team.save_settings(c, "finn", vorlage="Betreff: X\n\nMein Text. " + agent.OLD_OUTREACH_SENTENCE)
         text = agent.template_text(c, "oskar")
         self.assertIn("Ansprache neuer Kunden zu automatisieren", text)
-        self.assertIn("Betreff: {firma}: kurze Frage aus Kappeln", text)
+        self.assertIn("Betreff: Ein Gedanke aus der Region", text)
         self.assertNotIn("Weniger Büroarbeit", text)
         self.assertIn("Mein Text. " + agent.NEW_OUTREACH_SENTENCE, team.settings(c, "finn")["vorlage"])
         self.assertFalse(agent.upgrade_template_lines(c))
@@ -979,7 +979,8 @@ class TeamTest(unittest.TestCase):
         fields = agent.template_draft(self.c, lead_id, "hamza")
         self.assertEqual(fields, {"subject": "Hallo Hansen", "greeting": "Moin,", "body": "Ich bin Hamza Al-Shebli."})
         other = agent.template_draft(self.c, lead_id, "finn")  # Finn hat keine eigene: die aus dem Gehirn
-        self.assertIn("Hansen", other["subject"])
+        self.assertEqual(other["subject"], "Ein Gedanke aus der Region")
+        self.assertIn("Finn Adams", other["body"])
         sent = []
         smtp = mock.Mock(send_message=lambda m: sent.append(m))
         settings = dict(agent.CFG["settings"], OUTREACH_USER="k@ylvalabs.de", OUTREACH_PASSWORD="x", IMAP_HOST="")
@@ -1440,11 +1441,12 @@ class ViewsTest(unittest.TestCase):
         self.assertEqual((bad["status"], bad["rejected_by"], bad["stage"]), ("aussortiert", "team", None))
         self.client.post(f"/leads/{cand[1][0]}/urteil/zurueck", headers={"X-CSRF-Token": self.csrf})
         self.assertEqual(leaddb.get_lead(c, cand[1][0])["status"], "passt")
-        # Mail-Fenster: Vorlage wird eingesetzt (Firmenname), Demo darf „senden“ (nur markieren)
+        # Mail-Fenster: Vorlage wird eingesetzt, Demo darf „senden“ (nur markieren)
         fresh = c.execute("SELECT id, name FROM leads WHERE status='passt' AND IFNULL(body,'')='' AND email IS NOT NULL "
                           "LIMIT 1").fetchone()
         m = self.client.get(f"/leads/{fresh[0]}/mail.json").get_json()
-        self.assertIn(fresh[1], m["subject"] + m["body"])
+        self.assertEqual(m["subject"], "Ein Gedanke aus der Region")
+        self.assertTrue(m["body"].startswith("ich bin "))
         self.assertTrue(m["can_email"] and m["editable"])
         self.assertEqual(leaddb.get_lead(c, fresh[0])["status"], "entwurf")
         r = self.client.post(f"/leads/{fresh[0]}/send", data={"subject": "Hallo", "greeting": "Moin,", "body": "Kurz."},

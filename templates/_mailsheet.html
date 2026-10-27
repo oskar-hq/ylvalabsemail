@@ -7,6 +7,7 @@
   <p class="note small" id="mailNote" hidden></p>
   <label class="field from-field"><span class="sub">Von</span><select name="von" id="mailFrom"></select></label>
   <label class="field"><span class="sub">Betreff</span><input type="text" name="subject" id="mailSubject"></label>
+  {% with subject_for = 'mailSubject', subject_firma = '' %}{% include "_subjects.html" %}{% endwith %}
   <label class="field"><span class="sub">Anrede</span><input type="text" name="greeting" id="mailGreeting"></label>
   <label class="field"><span class="sub">Text <em>Gruß und Unterschrift kommen automatisch dazu</em></span><textarea name="body" id="mailBody" rows="9"></textarea></label>
   <div class="mail-design">

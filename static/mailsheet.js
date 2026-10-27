@@ -55,6 +55,12 @@
     lead = d;
     $('mailTitle').textContent = d.name;
     $('mailTo').textContent = d.email ? `an ${d.contact ? d.contact + ' · ' : ''}${d.email}` : 'Keine E-Mail-Adresse bekannt';
+    const picks = dlg.querySelector('.subject-picks');
+    if (picks) {
+      picks.dataset.firma = d.name || '';
+      picks.hidden = !d.editable;
+      picks.querySelectorAll('[data-subject]').forEach((b) => { b.textContent = b.dataset.subject.replace('{firma}', d.name || '{firma}'); });
+    }
     $('mailSubject').value = d.subject; $('mailGreeting').value = d.greeting; $('mailBody').value = d.body;
     ['mailSubject', 'mailGreeting', 'mailBody'].forEach((id) => { $(id).readOnly = !d.editable; });
     $('mailDetail').href = d.detail;

@@ -10,7 +10,8 @@
   {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note small">{{ m }}</p>{% endfor %}{% endwith %}
   <form class="tpl-grid" id="tplForm" autocomplete="off">
     <section class="tpl-edit pane" data-pane="edit">
-      <label class="field"><span class="sub">Betreff</span><input type="text" id="tplSubject" placeholder="Eine Idee für {firma}"></label>
+      <label class="field"><span class="sub">Betreff</span><input type="text" id="tplSubject" placeholder="Ein Gedanke aus der Region"></label>
+      {% with subject_for = 'tplSubject' %}{% include "_subjects.html" %}{% endwith %}
       <label class="field"><span class="sub">Anrede</span><input type="text" id="tplGreeting" placeholder="{anrede}"></label>
       <label class="field"><span class="sub">Text <em>Absätze mit Leerzeile trennen. Ein Absatz, dessen Platzhalter leer bleibt, fällt weg.</em></span>
         <textarea id="tplBody" rows="14"></textarea></label>
