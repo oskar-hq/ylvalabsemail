@@ -786,6 +786,18 @@ class ClaudeResearchTest(unittest.TestCase):
 
 
 class TemplateUpgradeTest(unittest.TestCase):
+    def test_outreach_sentence_added_once(self):
+        c = leaddb.connect(os.path.join(tempfile.mkdtemp(), "t.db"))
+        seed = leaddb.BRAIN_SEED.read_text(encoding="utf-8")
+        self.assertIn(agent.NEW_OUTREACH_SENTENCE, seed)
+        leaddb.kv_set(c, "template_v3", True)
+        leaddb.save_brain(c, seed.replace(agent.NEW_OUTREACH_SENTENCE, agent.OLD_OUTREACH_SENTENCE), "t", "alt")
+        team.save_settings(c, "finn", vorlage="Betreff: X\n\nMein Text. " + agent.OLD_OUTREACH_SENTENCE)
+        text = agent.template_text(c, "oskar")
+        self.assertIn("Ansprache neuer Kunden zu automatisieren", text)
+        self.assertIn("Mein Text. " + agent.NEW_OUTREACH_SENTENCE, team.settings(c, "finn")["vorlage"])
+        self.assertFalse(agent.upgrade_outreach_sentence(c))
+
     V2 = """## Vorlage (ohne KI)
 
 Betreff: Eine Idee für {firma}
