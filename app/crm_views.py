@@ -32,9 +32,11 @@ def board():
 
 
 def _wer():
-    """Welches CRM: „meine“ (Standard, wenn man als Person angemeldet ist), „alle“ oder eine Person."""
-    wer = request.args.get("wer") or ("meine" if me() else "alle")
-    return wer if wer in ("meine", "alle") or wer in team.names(db()) else "alle"
+    """Welches CRM: das der angemeldeten Person (Standard), das einer anderen Person oder „alle“ (Gesamt)."""
+    wer = request.args.get("wer") or me() or "alle"
+    if wer == "meine":
+        wer = me() or "alle"
+    return wer if wer == "alle" or wer in team.names(db()) else "alle"
 
 
 @bp.post("/crm/<int:lead_id>/stufe")
