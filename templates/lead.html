@@ -91,7 +91,8 @@
         </div>
         {% endif %}
         <div data-pane="edit">
-          <label class="field"><span class="sub">Betreff</span><input name="subject" type="text" value="{{ lead.subject or '' }}" {{ 'readonly' if not editable }}></label>
+          <label class="field"><span class="sub">Betreff</span><input name="subject" id="leadSubject" type="text" value="{{ lead.subject or '' }}" {{ 'readonly' if not editable }}></label>
+          {% if editable %}{% with subject_for = 'leadSubject', subject_firma = lead.name %}{% include "_subjects.html" %}{% endwith %}{% endif %}
           <label class="field"><span class="sub">Anrede</span><input name="greeting" type="text" value="{{ lead.greeting or '' }}" {{ 'readonly' if not editable }} placeholder="Guten Tag,"></label>
           <label class="field"><span class="sub">Text <em>· Grußformel und Unterschrift kommen automatisch dazu</em></span><textarea name="body" rows="12" {{ 'readonly' if not editable }}>{{ lead.body or '' }}</textarea></label>
         </div>

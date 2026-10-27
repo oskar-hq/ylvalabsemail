@@ -509,11 +509,17 @@ NEW_OUTREACH_SENTENCE = ("Für unsere eigene Akquise haben wir uns zum Beispiel 
                          "Wir helfen Ihnen, die Gewinnung und Ansprache neuer Kunden zu automatisieren.")
 
 
+# Betreffs zum Auswählen beim Schreiben (Mail-Fenster, Akte, Vorlage). Neugierig, nicht nach Werbung.
+SUBJECTS = ["Ein Gedanke aus der Region", "Ein Gedanke zu Ihren Abläufen", "Eine kleine Beobachtung zu {firma}",
+            "Vielleicht kennen Sie das auch"]
+
 # Einmalige Änderungen an der Vorlage: (Merker, alter Text, neuer Text, Notiz im Verlauf des Gehirns)
 TEMPLATE_REPLACEMENTS = [
     ("template_v4", OLD_OUTREACH_SENTENCE, NEW_OUTREACH_SENTENCE, "Vorlage: wir automatisieren auch Kundenakquise"),
-    ("template_v5", "Betreff: Weniger Büroarbeit bei {firma}?", "Betreff: {firma}: kurze Frage aus Kappeln",
+    ("template_v5", "Betreff: Weniger Büroarbeit bei {firma}?", "Betreff: Ein Gedanke aus der Region",
      "Vorlage: Betreff macht neugierig statt nach Werbung zu klingen"),
+    ("template_v6", "Betreff: {firma}: kurze Frage aus Kappeln", "Betreff: Ein Gedanke aus der Region",
+     "Vorlage: Betreff „Ein Gedanke aus der Region“"),
 ]
 
 

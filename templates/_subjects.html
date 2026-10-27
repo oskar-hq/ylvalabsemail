@@ -1,0 +1,4 @@
+{# Betreffs zum Antippen. data-for: id des Betreff-Felds; data-firma setzt den Firmennamen für {firma} ein. #}
+<div class="ph-chips subject-picks" data-for="{{ subject_for }}"{% if subject_firma is defined %} data-firma="{{ subject_firma }}"{% endif %} aria-label="Betreff auswählen">
+  {% for s in subject_choices %}<button type="button" class="chip" data-subject="{{ s }}">{{ s|replace('{firma}', subject_firma) if subject_firma else s }}</button>{% endfor %}
+</div>

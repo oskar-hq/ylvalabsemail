@@ -705,6 +705,7 @@ from .team_views import bp as team_bp  # noqa: E402
 from .palette import bp as palette_bp  # noqa: E402
 from .settings_views import bp as settings_bp  # noqa: E402
 
+app.jinja_env.globals["subject_choices"] = agent.SUBJECTS
 app.register_blueprint(leads_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(crm_bp)
