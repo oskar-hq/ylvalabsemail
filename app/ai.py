@@ -156,7 +156,7 @@ def _obj(props, required=None):
 
 STR = {"type": "string"}
 DRAFT_FIELDS = {
-    "betreff": {"type": "string", "description": "Betreffzeile, kurz und konkret, ohne Werbesprache."},
+    "betreff": {"type": "string", "description": "Betreffzeile: kurz, persönlich, macht neugierig, wie von einem Menschen aus der Nachbarschaft (z. B. „Hansen: kurze Frage aus Kappeln“). Darf nicht nach Werbung klingen: keine Wörter wie weniger Büroarbeit, sparen, effizient, Lösung, Angebot, digital; kein Ausrufezeichen."},
     "anrede": {"type": "string", "description": "Anrede-Zeile, z. B. „Guten Tag Frau Hansen,“ oder „Moin zusammen,“."},
     "text": {"type": "string", "description": "Nachrichtentext ohne Anrede und ohne Grußformel/Unterschrift. "
              "Absätze durch Leerzeile trennen. Erlaubt: **fett**, [Linktext](https://…)."},

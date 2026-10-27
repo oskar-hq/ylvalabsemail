@@ -509,28 +509,38 @@ NEW_OUTREACH_SENTENCE = ("Für unsere eigene Akquise haben wir uns zum Beispiel 
                          "Wir helfen Ihnen, die Gewinnung und Ansprache neuer Kunden zu automatisieren.")
 
 
-def upgrade_outreach_sentence(c):
-    """Einmalig: in der Vorlage (Gehirn und eigene Vorlagen) den Satz zum Akquise-Werkzeug ergänzen, dass wir
-    Kundenakquise auch für andere automatisieren. Nur dieser eine Satz wird ersetzt, der Rest bleibt."""
-    if leaddb.kv_get(c, "template_v4"):
-        return False
-    leaddb.kv_set(c, "template_v4", True)
-    for m in team.members(c):
-        own = team.settings(c, m["key"])["vorlage"] or ""
-        if OLD_OUTREACH_SENTENCE in own:
-            team.save_settings(c, m["key"], vorlage=own.replace(OLD_OUTREACH_SENTENCE, NEW_OUTREACH_SENTENCE))
-    current = leaddb.brain(c)
-    if OLD_OUTREACH_SENTENCE not in current:
-        return False
-    return leaddb.save_brain(c, current.replace(OLD_OUTREACH_SENTENCE, NEW_OUTREACH_SENTENCE), "Update",
-                             "Vorlage: wir automatisieren auch Kundenakquise")
+# Einmalige Änderungen an der Vorlage: (Merker, alter Text, neuer Text, Notiz im Verlauf des Gehirns)
+TEMPLATE_REPLACEMENTS = [
+    ("template_v4", OLD_OUTREACH_SENTENCE, NEW_OUTREACH_SENTENCE, "Vorlage: wir automatisieren auch Kundenakquise"),
+    ("template_v5", "Betreff: Weniger Büroarbeit bei {firma}?", "Betreff: {firma}: kurze Frage aus Kappeln",
+     "Vorlage: Betreff macht neugierig statt nach Werbung zu klingen"),
+]
+
+
+def upgrade_template_lines(c):
+    """Einmalig je Änderung: einen Satz der Vorlage ersetzen, im Gehirn und in den eigenen Vorlagen der Personen.
+    Nur dieser Text wird ersetzt, der Rest bleibt; wer ihn schon selbst geändert hat, behält seinen."""
+    changed = False
+    for flag, old, new, note in TEMPLATE_REPLACEMENTS:
+        if leaddb.kv_get(c, flag):
+            continue
+        leaddb.kv_set(c, flag, True)
+        for m in team.members(c):
+            own = team.settings(c, m["key"])["vorlage"] or ""
+            if old in own:
+                team.save_settings(c, m["key"], vorlage=own.replace(old, new))
+        current = leaddb.brain(c)
+        if old in current:
+            leaddb.save_brain(c, current.replace(old, new), "Update", note)
+            changed = True
+    return changed
 
 
 def template_text(c, member=None):
     """Die Vorlage als Text („Betreff: …“, „Anrede: …“, Leerzeile, Text): die eigene der Person, sonst die aus
     dem Gehirn (Abschnitt „Vorlage (ohne KI)“)."""
     upgrade_template(c)
-    upgrade_outreach_sentence(c)
+    upgrade_template_lines(c)
     own = (team.settings(c, member)["vorlage"] if member else "") or ""
     if own.strip():
         return own.strip()
