@@ -395,44 +395,105 @@ VERSTAENDNIS = {
 VERSTAENDNIS_SONST = ("Ich kann mir gut vorstellen, dass bei Ihnen vieles an wenigen Köpfen hängt und Routinearbeit im "
                       "Büro Zeit kostet, die an anderer Stelle fehlt.")
 BEISPIEL = {
-    "handwerk": "Genau da setzen wir an, zum Beispiel mit Angeboten, die Sie per Sprachnotiz direkt beim Kunden "
-                "diktieren und die im Büro fertig formatiert ankommen.",
-    "pflege": "Genau da setzen wir an, zum Beispiel mit Einsatzberichten, die Ihr Team direkt nach dem Besuch "
-              "einspricht und die sauber im richtigen Format landen, ohne Abtippen am Abend.",
-    "landwirtschaft": "Genau da setzen wir an, zum Beispiel mit Nachweisen, die sich aus den Daten Ihrer Maschinen und "
-                      "Apps fast von selbst schreiben.",
-    "dienstleistung": "Genau da setzen wir an, zum Beispiel mit Anfragen, die vorsortiert und mit einem "
-                      "Antwortvorschlag in Ihrem Postfach liegen.",
-    "industrie": "Genau da setzen wir an, zum Beispiel mit Prüfprotokollen und Berichten, die aus Fotos und kurzen "
-                 "Notizen von selbst entstehen.",
-    "kreativ": "Genau da setzen wir an, zum Beispiel mit Angeboten und Projektplänen, die aus einem kurzen Briefing "
-               "fast von selbst entstehen, damit mehr Zeit für die eigentliche Arbeit bleibt.",
-    "gesundheit": "Genau da setzen wir an, zum Beispiel mit Anfragen und Terminwünschen, die vorsortiert und mit einem "
-                  "Antwortvorschlag bei Ihnen ankommen.",
-    "gastgewerbe": "Genau da setzen wir an, zum Beispiel mit Buchungsanfragen, die automatisch vorbereitet und mit "
-                   "einer passenden Antwort bei Ihnen liegen.",
-    "handel": "Genau da setzen wir an, zum Beispiel mit Bestellungen und Anfragen, die automatisch erfasst und "
-              "sortiert bei Ihnen ankommen.",
+    "handwerk": "So könnte das aussehen: Sie sprechen beim Kunden kurz ein, was gemacht werden soll, und im Büro liegt "
+                "das Angebot danach fertig formatiert bereit.",
+    "pflege": "So könnte das aussehen: Ihr Team spricht den Einsatzbericht direkt nach dem Besuch ein, und er landet "
+              "sauber im richtigen Format, ohne Abtippen am Abend.",
+    "landwirtschaft": "So könnte das aussehen: Nachweise, die sich aus den Daten Ihrer Maschinen und Apps fast von "
+                      "selbst schreiben.",
+    "dienstleistung": "So könnte das aussehen: Anfragen kommen vorsortiert und mit einem Antwortvorschlag in Ihrem "
+                      "Postfach an.",
+    "industrie": "So könnte das aussehen: Prüfprotokolle und Berichte entstehen aus ein paar Fotos und kurzen Notizen "
+                 "fast von selbst.",
+    "kreativ": "So könnte das aussehen: Aus einem kurzen Briefing entstehen Angebot und Projektplan fast von selbst, "
+               "und es bleibt mehr Zeit für die eigentliche Arbeit.",
+    "gesundheit": "So könnte das aussehen: Anfragen und Terminwünsche kommen vorsortiert und mit einem "
+                  "Antwortvorschlag bei Ihnen an.",
+    "gastgewerbe": "So könnte das aussehen: Buchungsanfragen werden automatisch vorbereitet und liegen mit einer "
+                   "passenden Antwort bei Ihnen.",
+    "handel": "So könnte das aussehen: Bestellungen und Anfragen werden automatisch erfasst und kommen sortiert bei "
+              "Ihnen an.",
 }
-BEISPIEL_SONST = "Genau da setzen wir an, zum Beispiel mit einem kleinen Werkzeug, das wiederkehrende Schreibarbeit übernimmt."
-# Alte Vorlage (bis Oktober 2026), wird beim Start einmal durch die neue ersetzt, wenn ihr sie nicht geändert habt
+BEISPIEL_SONST = ("So könnte das aussehen: ein kleines Werkzeug, das wiederkehrende Schreibarbeit übernimmt und Ihrem "
+                  "Team Zeit für das Wesentliche lässt.")
+# Was wir bei einer Branche typischerweise lösen können (Aufzählung in der Vorlage, Platzhalter {probleme})
+PROBLEME = {
+    "handwerk": "Angebote und Aufmaß direkt beim Kunden, Rechnungen aus erledigten Aufträgen und die Einsatzplanung "
+                "für Ihr Team",
+    "pflege": "die Dokumentation nach jedem Einsatz, Tourenplanung und Anfragen von Angehörigen",
+    "landwirtschaft": "Dokumentationspflichten, Förderanträge und die Auswertung von Maschinendaten",
+    "dienstleistung": "wiederkehrende Kundenanfragen, Terminabstimmung und das Zusammensuchen von Unterlagen",
+    "industrie": "Prüfprotokolle, Berichte und die Abstimmung zwischen Werkstatt und Büro",
+    "kreativ": "Angebote, Briefings, Abstimmungsschleifen und Rechnungen",
+    "gesundheit": "Terminanfragen, Rückrufe und wiederkehrende Unterlagen für Patientinnen und Patienten",
+    "gastgewerbe": "Buchungsanfragen, Dienstpläne und Bestellungen",
+    "handel": "Bestellungen, Kundenanfragen und Lieferscheine",
+}
+PROBLEME_SONST = "wiederkehrende Anfragen, Dokumentation und Schreibarbeit im Büro"
+# Kleines Rechenbeispiel (Platzhalter {rechenbeispiel}): ausdrücklich als Annahme, nie als Behauptung über den Betrieb
+RECHENBEISPIEL = {
+    "handwerk": "Kosten Angebote und Rechnungen bei Ihnen etwa 5 Stunden pro Woche und nimmt ein Werkzeug davon die "
+                "Hälfte ab, sind das rund 10 Stunden im Monat, bei 50 € pro Stunde also etwa 500 € jeden Monat.",
+    "pflege": "Spart jede von 10 Pflegekräften nur 15 Minuten Dokumentation am Tag, sind das rund 50 Stunden im Monat, "
+              "mehr als eine ganze Arbeitswoche.",
+    "landwirtschaft": "Kosten Nachweise und Anträge etwa 4 Stunden pro Woche und fällt davon die Hälfte weg, sind das "
+                      "rund 8 Stunden im Monat, die wieder auf dem Hof fehlen dürfen.",
+    "dienstleistung": "Gehen bei 20 Anfragen am Tag pro Anfrage nur 3 Minuten weniger drauf, ist das eine Stunde am "
+                      "Tag, rund 20 Stunden im Monat.",
+    "industrie": "Spart jedes von 30 Protokollen pro Woche 10 Minuten, sind das 5 Stunden pro Woche, rund 20 Stunden "
+                 "im Monat.",
+    "kreativ": "Spart Ihr Team pro Woche 2 Stunden bei Angeboten und Abstimmung, sind das rund 8 Stunden im Monat, bei "
+               "70 € pro Stunde also etwa 560 €.",
+    "gesundheit": "Kosten 30 Anrufe am Tag je 2 Minuten weniger, ist das eine Stunde am Tag, rund 20 Stunden im Monat "
+                  "am Empfang.",
+    "gastgewerbe": "Spart jede von 15 Buchungsanfragen am Tag 4 Minuten, ist das eine Stunde am Tag, rund 20 Stunden "
+                   "im Monat.",
+    "handel": "Spart jede von 10 Bestellungen am Tag 5 Minuten, sind das rund 16 Stunden im Monat.",
+}
+RECHENBEISPIEL_SONST = ("Spart ein Werkzeug Ihrem Team nur eine Stunde am Tag, sind das rund 20 Stunden im Monat, bei "
+                        "45 € pro Stunde also etwa 900 €.")
 OLD_TEMPLATE_MARK = "Bei Betrieben wie {firma} kostet oft das hier viel Zeit"
 
 
+# Merkmale der früheren Standard-Vorlagen und des früheren Stils. Nur unveränderte werden ersetzt.
+V2_TEMPLATE_MARKS = ("{verstaendnis}", "Dazu kommt bei Ihnen vermutlich noch: {zeitfresser}.",
+                     "Hätten Sie Lust auf ein Gespräch von 30 Minuten?")
+V2_STYLE_MARK = "Dann Verständnis für das Problem, dann ein konkretes Beispiel, wie wir es lösen könnten."
+
+
+def _old_default(text):
+    return OLD_TEMPLATE_MARK in text or all(m in text for m in V2_TEMPLATE_MARKS)
+
+
 def upgrade_template(c):
-    """Einmalig: die alte, eher allgemeine Vorlage („Bei Betrieben wie …“) durch die persönlichere ersetzen.
-    Nur, wenn ihr sie nicht selbst geändert habt; der Rest des Gehirns bleibt, wie er ist."""
-    if leaddb.kv_get(c, "template_v2"):
+    """Einmalig: frühere Standard-Vorlage und früheren Stil durch die neuen ersetzen (erst vorstellen, typische
+    Aufgaben, Rechenbeispiel, offen für andere Themen). Nur, wenn ihr sie nicht selbst geändert habt; der Rest des
+    Gehirns bleibt, wie er ist. Eigene Vorlagen im Profil, die noch die alte Standard-Vorlage sind, gelten danach
+    wieder als gemeinsame."""
+    if leaddb.kv_get(c, "template_v3"):
         return False
-    leaddb.kv_set(c, "template_v2", True)
+    leaddb.kv_set(c, "template_v3", True)
     current = leaddb.brain(c)
-    if OLD_TEMPLATE_MARK not in current:
-        return False
     seed = leaddb.BRAIN_SEED.read_text(encoding="utf-8")
-    new_section = leaddb.brain_sections(seed, [TEMPLATE_HEADING]).strip()
+    new = {TEMPLATE_HEADING: leaddb.brain_sections(seed, [TEMPLATE_HEADING]).strip(),
+           "Stil der Nachrichten": leaddb.brain_sections(seed, ["Stil der Nachrichten"]).strip()}
     parts = re.split(r"(?m)^(?=## )", current)
-    replaced = "".join(new_section + "\n\n" if p.startswith(f"## {TEMPLATE_HEADING}") else p for p in parts)
-    return leaddb.save_brain(c, replaced, "Update", "Neue, persönlichere Vorlage (ohne KI)")
+    out, changed = [], False
+    for p in parts:
+        if p.startswith(f"## {TEMPLATE_HEADING}") and _old_default(p):
+            out.append(new[TEMPLATE_HEADING] + "\n\n")
+            changed = True
+        elif p.startswith("## Stil der Nachrichten") and V2_STYLE_MARK in p:
+            out.append(new["Stil der Nachrichten"] + "\n\n")
+            changed = True
+        else:
+            out.append(p)
+    for m in team.members(c):
+        if _old_default(team.settings(c, m["key"])["vorlage"] or ""):
+            team.save_settings(c, m["key"], vorlage="")
+    if not changed:
+        return False
+    return leaddb.save_brain(c, "".join(out), "Update", "Neue Vorlage: erst vorstellen, Beispiele, Rechenbeispiel")
 
 
 def template_text(c, member=None):
@@ -474,7 +535,11 @@ def fill_template(lead, text, absender):
               "zeitfresser": " und ".join(fresser), "ort": lead.get("city") or "Ihrer Region",
               "absender": absender, "aufhaenger": imported.get("aufhaenger", ""),
               "verstaendnis": imported.get("verstaendnis") or VERSTAENDNIS.get(lead.get("branche"), VERSTAENDNIS_SONST),
-              "beispiel": imported.get("beispiel") or BEISPIEL.get(lead.get("branche"), BEISPIEL_SONST)}
+              "beispiel": imported.get("beispiel") or BEISPIEL.get(lead.get("branche"), BEISPIEL_SONST),
+              # recherchierter Zeitfresser genau dieses Betriebs geht vor der allgemeinen Aufzählung der Branche
+              "probleme": " und ".join(imported.get("zeitfresser") or [])[:300] or PROBLEME.get(lead.get("branche"),
+                                                                                                  PROBLEME_SONST),
+              "rechenbeispiel": RECHENBEISPIEL.get(lead.get("branche"), RECHENBEISPIEL_SONST)}
 
     def fill(t):
         return re.sub(r"\{(\w+)\}", lambda m: values.get(m.group(1), m.group(0)), t).strip()

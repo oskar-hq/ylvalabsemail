@@ -48,33 +48,36 @@ Feedback und aus den Antworten der Firmen fort.
 
 ## Stil der Nachrichten
 
-- Deutsch, per „Sie“, außer der Betrieb duzt auf seiner Webseite selbst. Formell, aber warm: so, wie Oskar einem
-  Betrieb schreiben würde, den er aus der Region kennt und schätzt, auch wenn es die erste Nachricht ist.
-- Persönlich statt Serienbrief: nie „Bei Betrieben wie …“ oder „Unternehmen Ihrer Branche“. Den Betrieb direkt
-  ansprechen und zeigen, dass wir seinen Alltag verstehen (was dort konkret Zeit kostet und warum das nervt).
-- Erster Satz: etwas Konkretes über genau diesen Betrieb (was wir auf der Webseite gesehen haben).
-- Dann Verständnis für das Problem, dann ein konkretes Beispiel, wie wir es lösen könnten. Kein Verkaufston.
-- Kurz: höchstens 140 Wörter im Text. Keine Floskeln, kein Tech-Englisch, keine Hype-Wörter.
+- Deutsch, per „Sie“, außer der Betrieb duzt auf seiner Webseite selbst. Formell, aber warm und kurz.
+- Erst sagen, wer wir sind und was wir wollen: ein kleines Team aus Kappeln, das sich anschaut, wo Betriebe in der
+  Region Zeit verlieren, und dafür einfache digitale Werkzeuge baut, die Zeit und Geld sparen.
+- Nicht so tun, als wüssten wir schon, wie es beim Betrieb läuft. Keine Sätze wie „Ich kann mir gut vorstellen, wie
+  es bei Ihnen läuft“. Stattdessen sagen, wobei wir typischerweise helfen können, und fragen, was bei ihnen Zeit frisst.
+- Falls belegt: ein Satz, warum wir gerade diesem Betrieb schreiben (Stellenanzeige, Angebot, Webseite).
+- Ein kurzes Rechenbeispiel, ausdrücklich als Annahme („Kostet … etwa …, sind das …“), nie als Behauptung über den
+  Betrieb.
+- Offen für andere Themen: Der Betrieb darf uns auch ganz andere Zeitfresser schicken.
+- Kurz: höchstens 170 Wörter im Text. Keine Floskeln, kein Tech-Englisch, keine Hype-Wörter, kein Verkaufston.
 - Genau eine Bitte am Ende: ein kostenloses Gespräch von 30 Minuten, am Telefon oder vor Ort.
-- Ehrlich: keine erfundenen Zahlen, keine Versprechen, keine Referenzkunden, die es nicht gibt.
+- Ehrlich: keine erfundenen Tatsachen, keine Versprechen, keine Referenzkunden, die es nicht gibt.
 - Absender ist die Person aus dem Team, die schreibt (Finn Adams, Hamza Al-Shebli oder Oskar Jacobsen), von Ylva Labs aus Kappeln.
 
 ## Vorlage (ohne KI)
 
-Betreff: Eine Idee für {firma}
+Betreff: Weniger Büroarbeit bei {firma}?
 Anrede: {anrede}
+
+ich bin {absender} von Ylva Labs, einem kleinen Team aus Kappeln. Wir schauen uns an, wo Betriebe in der Region im Alltag Zeit verlieren, und bauen dafür einfache digitale Werkzeuge, die Zeit und Geld sparen.
 
 {aufhaenger}
 
-{verstaendnis}
+Typische Aufgaben, bei denen wir helfen können: {probleme}. {beispiel}
 
-Dazu kommt bei Ihnen vermutlich noch: {zeitfresser}.
+Ein kleines Rechenbeispiel: {rechenbeispiel}
 
-{beispiel}
+Vielleicht frisst bei Ihnen aber auch etwas ganz anderes Zeit. Dann erzählen Sie uns gern davon, wir schauen es uns unverbindlich an. Für unsere eigene Akquise haben wir uns zum Beispiel ein Werkzeug gebaut, das passende Betriebe findet und Antworten vorsortiert. Das Entwicklungsrisiko tragen wir, und lohnt es sich für Sie nicht, sagen wir das ehrlich.
 
-Ich bin {absender} von Ylva Labs aus Kappeln. Wir bauen solche Werkzeuge gemeinsam mit Betrieben aus der Region, passend zu Ihren Abläufen und mit dem Entwicklungsrisiko bei uns. Lohnt es sich für Sie nicht, sagen wir das ehrlich.
-
-Hätten Sie Lust auf ein Gespräch von 30 Minuten? Gern bei Ihnen vor Ort oder am Telefon, ganz wie es Ihnen passt.
+Hätten Sie Lust auf ein kurzes Gespräch, 30 Minuten am Telefon oder bei Ihnen vor Ort?
 
 ## Gelernt
 

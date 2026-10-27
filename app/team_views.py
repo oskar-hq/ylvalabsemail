@@ -181,7 +181,8 @@ def template_editor():
 
 PLACEHOLDERS = [("{firma}", "Firma"), ("{anrede}", "Anrede"), ("{kategorie}", "Branche"), ("{ort}", "Ort"),
                 ("{zeitfresser}", "Zeitfresser"), ("{aufhaenger}", "Aufhänger"), ("{verstaendnis}", "Verständnis-Satz"),
-                ("{beispiel}", "Beispiel"), ("{absender}", "Dein Name")]
+                ("{beispiel}", "Beispiel"), ("{probleme}", "Typische Aufgaben"), ("{rechenbeispiel}", "Rechenbeispiel"),
+                ("{absender}", "Dein Name")]
 
 
 @bp.post("/vorlage/vorschau")
