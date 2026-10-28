@@ -13,8 +13,9 @@ TABS = [
     ("qualified", "Qualified", "Hat Interesse. Jetzt selbst weiterschreiben."),
     ("mittel", "Mittel", "Vielleicht später, Rückfrage oder unklar."),
     ("kein_interesse", "Kein Interesse", "Abgesagt oder möchte nicht mehr kontaktiert werden."),
-    ("entwurf", "Zur Prüfung", "Nachricht ist fertig und wartet auf eure Freigabe."),
-    ("passt", "Passt", "Passt laut Regeln, noch ohne Nachricht. Entwurf schreiben lassen, Vorlage nehmen oder selbst schreiben."),
+    ("pruefen", "Zu prüfen", "Neu gefunden und passt laut Regeln. Erst durchsehen: Ja kommt ins CRM unter „Neu“, Nein wird aussortiert."),
+    ("entwurf", "Zur Freigabe", "Nachricht ist fertig und wartet auf eure Freigabe."),
+    ("passt", "Passt", "Von euch geprüft und im CRM, noch ohne Nachricht. Vorlage nehmen, schreiben lassen oder selbst schreiben."),
     ("nachfassen", "Nachfassen", "Keine Antwort seit einer Woche. Einmal kurz erinnern oder anrufen."),
     ("versendet", "Versendet", "Raus, wir warten auf Antwort."),
     ("arbeit", "In Bearbeitung", "Wird gerade bewertet oder hatte einen Fehler."),
@@ -23,14 +24,14 @@ TABS = [
 
 # Für die Übersicht: was zu tun ist, was läuft, was erledigt ist
 TAB_GROUPS = [
-    ("Zu tun", "Hier wartet etwas auf euch.", ["entwurf", "nachfassen", "qualified", "mittel"]),
+    ("Zu tun", "Hier wartet etwas auf euch.", ["pruefen", "entwurf", "nachfassen", "qualified", "mittel"]),
     ("Läuft", "Bewertet oder unterwegs, gerade nichts zu tun.", ["passt", "versendet", "arbeit"]),
     ("Abgeschlossen", "Passt nicht oder möchte nicht.", ["kein_interesse", "aussortiert"]),
 ]
 
 STATUS_LABELS = {
     "kandidat": "Gefunden", "recherche": "Wird bewertet", "passt": "Passt",
-    "vorgeprueft": "Vorgeprüft", "analysiert": "Analysiert", "entwurf": "Zur Prüfung",
+    "vorgeprueft": "Vorgeprüft", "analysiert": "Analysiert", "entwurf": "Zur Freigabe",
     "versendet": "Versendet", "beantwortet": "Beantwortet", "aussortiert": "Aussortiert",
     "gesperrt": "Gesperrt", "fehler": "Fehler", "kontakt": "Kontakt (per Mail)",
 }
@@ -247,6 +248,8 @@ def tab_of(lead):
         return "arbeit"
     if is_due(lead):
         return "nachfassen"
+    if lead["status"] == "passt" and lead.get("stage") is None and not lead.get("rejected_by"):
+        return "pruefen"
     return lead["status"]
 
 
@@ -255,7 +258,8 @@ TAB_SQL = {
     "mittel": "interest='mittel' OR (status='beantwortet' AND interest IS NULL)",
     "kein_interesse": "interest='kein_interesse' OR status='gesperrt'",
     "entwurf": "status='entwurf' AND interest IS NULL",
-    "passt": "status='passt' AND interest IS NULL",
+    "pruefen": "status='passt' AND stage IS NULL AND interest IS NULL AND IFNULL(rejected_by,'')=''",
+    "passt": "status='passt' AND interest IS NULL AND NOT (stage IS NULL AND IFNULL(rejected_by,'')='')",
     "nachfassen": "status='versendet' AND interest IS NULL AND IFNULL(followup_count,0)=0 AND :days > 0"
                   " AND sent_at <= :cutoff",
     "versendet": "status='versendet' AND interest IS NULL AND NOT (IFNULL(followup_count,0)=0 AND :days > 0"
@@ -280,6 +284,7 @@ def tab_counts(conn):
 
 def tab_leads(conn, key, limit=300):
     order = {"entwurf": "fit_score DESC, updated_at DESC", "passt": "fit_score DESC, distance_km",
+             "pruefen": "fit_score DESC, distance_km",
              "nachfassen": "sent_at",
              "arbeit": "IFNULL(fit_score, quick_score) DESC, updated_at DESC"}.get(key, "updated_at DESC")
     rows = conn.execute(f"SELECT * FROM leads WHERE {TAB_SQL[key]} ORDER BY {order} LIMIT :limit",

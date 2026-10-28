@@ -8,7 +8,10 @@
   {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if m.startswith('Nicht') else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
   {% if account.demo %}<p class="note warn small">Demo-Modus: Hier wird nichts gespeichert.</p>
   {% elif not admin %}<p class="note warn small">Den Zeitplan ändern dürfen nur Admins.</p>{% endif %}
-  <p class="muted">Läufe starten zur gewählten Zeit von selbst. Läuft gerade einer, wartet der nächste. Verschickt wird trotzdem nichts ohne eure Freigabe.</p>
+  <p class="muted">Läufe starten zur gewählten Zeit von selbst, solange der Server läuft. Läuft gerade einer, wartet der nächste. Verschickt wird trotzdem nichts ohne eure Freigabe. Neue Betriebe warten danach unter <a href="{{ url_for('leads.review') }}">„Zu prüfen“</a>.</p>
+  {% if offline %}<div class="note warn small"><b>Der Server war zwischendurch aus</b> (oder der Rechner, auf dem er läuft, war ausgeschaltet oder im Ruhezustand). In dieser Zeit konnte kein Lauf starten:
+    <ul class="offline-list">{% for g in offline %}<li>{{ when(g.from) }} bis {{ when(g.to) }}</li>{% endfor %}</ul>
+    Damit der Zeitplan immer läuft, muss die App auf einem Rechner laufen, der dauerhaft an ist (z. B. ein kleiner Server oder ein VPS), nicht auf einem Laptop.</div>{% endif %}
 
   <div class="niche-card">
     <div class="niche-card-head"><span><b>Nischen</b> <span class="muted small">· für beide automatischen Suchen · {{ niche_weights|length }} gewählt{% if not niche_own %} · wie die manuelle Suche{% endif %}</span></span>
@@ -36,7 +39,6 @@
     </div>
     <div class="grid3">
       <label class="field"><span class="sub">Betriebe bewerten</span><input type="number" name="bewerten" min="0" max="1000" value="{{ c.bewerten }}" inputmode="numeric" {{ 'disabled' if not admin }}></label>
-      <label class="field"><span class="sub">Davon ins CRM</span><input type="number" name="top" min="0" max="200" value="{{ c.top }}" inputmode="numeric" {{ 'disabled' if not admin }}></label>
       {% if kind == 'frei' %}
       <label class="field"><span class="sub">Neu suchen alle … Std.</span><input type="number" name="neu_suchen_h" min="1" max="336" value="{{ c.neu_suchen_h }}" inputmode="numeric" {{ 'disabled' if not admin }}></label>
       {% else %}

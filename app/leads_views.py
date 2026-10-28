@@ -149,9 +149,12 @@ def home():
     to_review = review_count()
     parts.append((to_review, "zu prüfen", url_for("leads.review")))
     total = sum(n for n, _, _ in parts)
-    # „Starten“ führt direkt zur ersten Aufgabe: Wiedervorlagen, dann Freigaben, Nachfassen, Interessenten
+    # „Starten“ führt zuerst zum Durchwischen der neuen Betriebe (Ja = CRM, Nein = aussortiert), danach zu
+    # Antworten, Wiedervorlagen, Freigaben, Nachfassen und Interessenten
     start = None
-    if new_replies:
+    if to_review:
+        start = url_for("leads.review")
+    elif new_replies:
         start = url_for("crm.inbox")
     elif st["due_tasks"]:
         start = url_for("crm.board")
@@ -161,8 +164,6 @@ def home():
                 first = leaddb.tab_leads(db(), key, limit=1)
                 start = url_for("leads.detail", lead_id=first[0]["id"]) if first else None
                 break
-        if not start and to_review:
-            start = url_for("leads.review")
     hour = datetime.now().hour
     greeting = "Guten Morgen" if hour < 11 else ("Guten Tag" if hour < 18 else "Guten Abend")
     return render_template("home.html", account=g.account, sched=schedule_view(), queue=review_queue(10),
@@ -342,6 +343,7 @@ def automatic():
                            niche_own=niches.has_own(db(), "auto"),
                            min_every=schedule.MIN_EVERY, st=status_payload(), admin=is_admin(g.account),
                            today_eur=money(leaddb._sum(db(), "at >= ?", (datetime.now().strftime("%Y-%m-%d"),))["usd"]),
+                           offline=list(reversed((leaddb.kv_get(db(), "offline_gaps", []) or [])[-3:])),
                            demo=SETTINGS["DEMO_MODE"])
 
 

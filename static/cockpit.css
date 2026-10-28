@@ -718,3 +718,7 @@ body.has-bulk main{padding-bottom:120px}
 @media (max-width:639px){.bulk-bar{left:8px;right:8px;transform:none;max-width:none;bottom:calc(var(--tabbar) + 8px)}
   .bulk-bar .btn.primary{flex:1}}
 .lead-list.pickable li.moved{opacity:.5}
+.pill.st-pruefen{background:var(--ice);color:var(--blue)}
+.section-head .review-go{margin-left:auto}
+.section-head .review-go+.sel-all{margin-left:12px}
+.offline-list{margin:6px 0;padding-left:18px}

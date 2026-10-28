@@ -261,6 +261,8 @@ def next_candidate(c, plan=None):
     rows = c.execute("SELECT id, source_id, branche, category, niche, distance_km FROM leads "
                      "WHERE status='kandidat'").fetchall()
     imported = [r for r in rows if (r["source_id"] or "").startswith("claude:")]
+    if plan:  # aus der Claude-Recherche nur, was zu den gewählten Nischen passt (oder keine Nische hat)
+        imported = [r for r in imported if not r["niche"] or r["niche"] in plan["weights"]]
     if imported:  # Betriebe aus der Claude-Recherche zuerst, die habt ihr gezielt suchen lassen
         rows = imported
     elif plan:
@@ -295,9 +297,10 @@ def _json(data):
 # ---------------------------------------------------------------- Bewertung nach Regeln (kostenlos) und Entwurf (KI)
 
 
-def stage_score(c, lead_id, learned, promote=True):
+def stage_score(c, lead_id, learned, promote=False):
     """Webseite lesen und nach Regeln bewerten. Gibt True zurück, wenn der Betrieb passt.
-    promote=False (im Lauf): Passende bleiben erst im Reiter „Passt“; ins CRM kommen am Ende nur die besten."""
+    Passende kommen nicht von selbst ins CRM: Sie warten unter „Zu prüfen“, bis jemand Ja (CRM, „Neu“) oder Nein
+    (aussortiert) sagt. Nur Betriebe, die schon im CRM sind (von Hand angelegt, importiert), bleiben dort."""
     lead = leaddb.get_lead(c, lead_id)
     in_pipeline = lead["stage"] is not None  # von Hand angelegt oder importiert: bleibt drin
     leaddb.update_lead(c, lead_id, status="recherche")
@@ -345,15 +348,6 @@ def stage_score(c, lead_id, learned, promote=True):
     leaddb.update_lead(c, lead_id, status="aussortiert", rejected_by="regel", **common)
     leaddb.add_event(c, lead_id, "status", common["fit_reason"], author="Regeln")
     return False
-
-
-def promote_best(c, top):
-    """Nur die besten passenden Betriebe kommen als „Neu“ ins CRM, der Rest bleibt im Reiter „Passt“ als Reserve."""
-    rows = c.execute("SELECT id FROM leads WHERE status='passt' AND stage IS NULL AND interest IS NULL "
-                     "ORDER BY fit_score DESC, distance_km LIMIT ?", (max(0, top),)).fetchall()
-    for r in rows:
-        crm.advance(c, r["id"], "neu", author="Regeln")
-    return len(rows)
 
 
 def _analysis(lead):
@@ -635,7 +629,7 @@ def due_followups(c, without_text=False):
 def estimate(c, drafts, followups=True):
     """Was kostet ein Lauf ungefähr? Die Bewertung ist kostenlos, nur Entwürfe und Erinnerungen kosten."""
     waiting = c.execute("SELECT COUNT(*) FROM leads WHERE status='passt' AND interest IS NULL "
-                        "AND IFNULL(body,'')=''").fetchone()[0]
+                        "AND IFNULL(body,'')='' AND stage IS NOT NULL").fetchone()[0]
     reminders = len(due_followups(c, without_text=True)) if followups else 0
     usd = drafts * avg_cost_usd(c, "entwurf") + reminders * avg_cost_usd(c, "erinnerung")
     if drafts or reminders:
@@ -721,8 +715,7 @@ def execute_run(c, run_id):
 def _execute_run(c, run_id, run, p):
     check, drafts, budget = int(p.get("bewerten", 0)), int(p.get("entwuerfe", 0)), float(p.get("budget_eur", 0))
     use_ai = ai.available()
-    top = int(p.get("top", S("LEADS_RUN_TOP")))
-    counts = {"neu_gefunden": 0, "grobfilter": 0, "bewertet": 0, "passen": 0, "ins_crm": 0, "entwuerfe": 0,
+    counts = {"neu_gefunden": 0, "grobfilter": 0, "bewertet": 0, "passen": 0, "zu_pruefen": 0, "entwuerfe": 0,
               "erinnerungen": 0}
     RUN.update(id=run_id, cancel=False, by=run["started_by"])
     _local.run_id = run_id
@@ -737,7 +730,7 @@ def _execute_run(c, run_id, run, p):
         searched = (leaddb.kv_get(c, "last_search") or {}).get("niches")
         marks = ",".join("?" * len(weights))
         waiting = c.execute(f"SELECT 1 FROM leads WHERE status='kandidat' AND (niche IN ({marks}) "
-                            "OR source_id LIKE 'claude:%')", list(weights)).fetchone()
+                            "OR (source_id LIKE 'claude:%' AND niche IS NULL))", list(weights)).fetchone()
         if p.get("suchen") or (check and (not waiting or (searched is not None and not set(weights) <= set(searched)))):
             counts["neu_gefunden"], counts["grobfilter"] = run_search(c)
         counts["grobfilter"] += learned_filter(c)
@@ -757,14 +750,16 @@ def _execute_run(c, run_id, run, p):
             plan["taken"][niche] = plan["taken"].get(niche, 0) + 1
             _progress(f"Schritt 2/3 · Bewertet {i + 1}/{check}: {leaddb.get_lead(c, lead_id)['name']} (kostenlos)")
             counts["bewertet"] += 1
-            counts["passen"] += stage_score(c, lead_id, learned, promote=False)
-        counts["ins_crm"] = promote_best(c, top)
+            counts["passen"] += stage_score(c, lead_id, learned)
+        counts["zu_pruefen"] = c.execute("SELECT COUNT(*) FROM leads WHERE status='passt' AND stage IS NULL "
+                                         "AND interest IS NULL AND IFNULL(rejected_by,'')=''").fetchone()[0]
 
-        # Schritt 3 (nur auf Wunsch): Entwürfe für die besten passenden Betriebe ohne Nachricht (KI)
+        # Schritt 3 (nur auf Wunsch): Entwürfe für die besten Betriebe im CRM ohne Nachricht (KI), also nur für
+        # die, zu denen ihr beim Prüfen schon Ja gesagt habt
         if drafts and use_ai:
             brain = leaddb.brain(c)
             best = c.execute("SELECT id, name FROM leads WHERE status='passt' AND interest IS NULL AND IFNULL(body,'')='' "
-                             "ORDER BY stage IS NOT NULL DESC, fit_score DESC, distance_km LIMIT ?", (drafts,)).fetchall()
+                             "AND stage IS NOT NULL ORDER BY fit_score DESC, distance_km LIMIT ?", (drafts,)).fetchall()
             for i, row in enumerate(best):
                 check_budget(c, run_id, budget, "entwurf")
                 _progress(f"Schritt 3/3 · Schreibt Entwurf {i + 1}/{len(best)}: {row['name']}")
@@ -797,7 +792,8 @@ def _execute_run(c, run_id, run, p):
         c.execute("UPDATE leads SET status='fehler', updated_at=? WHERE status='recherche'", (leaddb.now(),))
         _local.run_id = None
         cost = ai.eur(leaddb._sum(c, "run_id = ?", (run_id,))["usd"])
-        summary = (f"{counts['bewertet']} bewertet, {counts['passen']} passen, {counts['ins_crm']} davon ins CRM"
+        summary = (f"{counts['bewertet']} bewertet, {counts['passen']} passen"
+                   + (f", {counts['zu_pruefen']} warten aufs Prüfen" if counts["zu_pruefen"] else "")
                    + (f", {counts['entwuerfe']} Entwürfe" if counts["entwuerfe"] else "")
                    + (f", {counts['erinnerungen']} Erinnerungen" if counts["erinnerungen"] else "")
                    + (f". KI-Kosten: {_eur(cost)}." if cost else ". Ohne KI-Kosten."))
@@ -807,10 +803,10 @@ def _execute_run(c, run_id, run, p):
         RUN.update(id=None, cancel=False, progress="")
         title = {"fertig": "Lauf fertig", "gestoppt": "Lauf gestoppt", "fehler": "Lauf mit Fehler beendet"}[status]
         quiet = (run["started_by"] or "").startswith("Automatik") and status == "fertig" \
-            and not (counts["ins_crm"] or counts["entwuerfe"] or counts["erinnerungen"])
+            and not (counts["passen"] or counts["entwuerfe"] or counts["erinnerungen"])
         if not quiet:  # automatische Läufe melden sich nur, wenn etwas Neues da ist
             notify(c, title, " ".join(x for x in (message, summary) if x),
-                   "/leads?tab=entwurf" if counts["entwuerfe"] else "/crm")
+                   "/leads?tab=entwurf" if counts["entwuerfe"] else ("/leads/pruefen" if counts["zu_pruefen"] else "/crm"))
 
 # ---------------------------------------------------------------- Versand
 
@@ -1421,6 +1417,28 @@ def _loop():
     c.commit()
     c.close()
     while True:
+        heartbeat()
         tick()
         _wake.wait(timeout=60)
         _wake.clear()
+
+
+OFFLINE_GAP_MIN = 10
+
+
+def heartbeat(now=None):
+    """Merken, dass der Server läuft. Fehlt das Lebenszeichen länger als 10 Minuten, war der Server (oder der
+    Rechner, auf dem er läuft) aus oder im Ruhezustand: In der Zeit konnte auch kein Zeitplan laufen."""
+    now = now or datetime.now()
+    c = conn()
+    try:
+        seen = leaddb.kv_get(c, "worker_seen")
+        if seen and now - datetime.fromisoformat(seen) > timedelta(minutes=OFFLINE_GAP_MIN):
+            gaps = (leaddb.kv_get(c, "offline_gaps", []) or [])[-9:]
+            gaps.append({"from": seen, "to": now.isoformat(timespec="seconds")})
+            leaddb.kv_set(c, "offline_gaps", gaps)
+        leaddb.kv_set(c, "worker_seen", now.isoformat(timespec="seconds"))
+    except Exception:
+        log.exception("Lebenszeichen nicht gespeichert")
+    finally:
+        c.close()

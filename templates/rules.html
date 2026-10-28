@@ -9,8 +9,8 @@
     <section>
       <p class="measure">Gesucht werden nur Branchen, die zu Ylva Labs passen, und nur in Schleswig-Holstein. Jeder Betrieb startet mit
         <b>{{ base }} Punkten</b>. Die App liest die Startseite und bis zu drei Unterseiten (Impressum, Kontakt, Über uns, Karriere)
-        und vergibt nach festen Regeln Punkte, ganz ohne KI. Ab <b>{{ threshold }} Punkten</b> passt ein Betrieb, ins CRM kommen
-        pro Lauf aber nur die <b>{{ top }} besten</b>. Die übrigen warten im Reiter „Passt“. In der Akte steht jede Regel, die gegriffen hat.</p>
+        und vergibt nach festen Regeln Punkte, ganz ohne KI. Ab <b>{{ threshold }} Punkten</b> passt ein Betrieb und wartet
+        unter „Zu prüfen“: Ja kommt ins CRM unter „Neu“, Nein wird aussortiert. In der Akte steht jede Regel, die gegriffen hat.</p>
       <div class="note small ko-box"><b>Ausschluss, egal wie viele Punkte:</b> {{ ko_rules|join(' · ') }}.</div>
       <div class="table-wrap"><table class="stats">
         <thead><tr><th>Punkte</th><th>Regel</th></tr></thead>
