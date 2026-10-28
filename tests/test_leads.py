@@ -193,12 +193,13 @@ class AgentTest(unittest.TestCase):
         with mock.patch.object(finder, "research_website", return_value=self.SITE):
             self.assertTrue(agent.stage_score(self.c, lead_id, {}))
         lead = leaddb.get_lead(self.c, lead_id)
-        self.assertEqual((lead["status"], lead["stage"]), ("passt", "neu"))
+        self.assertEqual((lead["status"], lead["stage"]), ("passt", None))  # wartet aufs Prüfen, nicht von selbst im CRM
+        self.assertEqual(leaddb.tab_of(lead), "pruefen")
         self.assertGreaterEqual(lead["fit_score"], 60)
         self.assertEqual(lead["email"], "jens.hansen@tischlerei-a.de")  # persönlich, eigene Domain
         self.assertEqual(lead["contact_name"], "Jens Hansen")
         self.assertIn("Sucht Personal fürs Büro, die Verwaltung oder die Disposition", [r for _, r in lead["research"]["signale"]])
-        self.assertEqual(leaddb.tab_of(lead), "passt")
+        self.assertEqual(leaddb.tab_of(lead), "pruefen")
 
     def test_score_stage_rejects_without_ai(self):
         lead_id = self.add("Webagentur", branche="dienstleistung", category="office=company", distance_km=45,
@@ -281,25 +282,42 @@ class AgentTest(unittest.TestCase):
         self.assertEqual(self.c.execute("SELECT COUNT(*) FROM ai_usage").fetchone()[0], 0)
         self.assertEqual(self.c.execute("SELECT COUNT(*) FROM leads WHERE status='kandidat'").fetchone()[0], 2)
 
-    def test_run_puts_only_the_best_into_crm(self):
+    def test_run_puts_nothing_into_crm_without_review(self):
         for i in range(6):
             self.add(f"T{i}", website=f"https://t{i}.example.org")
         with mock.patch.object(ai, "available", return_value=False):
             run = self._run(check=6, drafts=0, budget=0, top=2)
         counts = json.loads(run["counts"])
-        self.assertEqual((counts["passen"], counts["ins_crm"]), (6, 2))
-        self.assertEqual(self.c.execute("SELECT COUNT(*) FROM leads WHERE stage='neu'").fetchone()[0], 2)
-        self.assertEqual(leaddb.tab_counts(self.c)["passt"], 6)  # der Rest wartet im Reiter „Passt“
+        self.assertEqual((counts["passen"], counts["zu_pruefen"]), (6, 6))
+        self.assertEqual(self.c.execute("SELECT COUNT(*) FROM leads WHERE stage IS NOT NULL").fetchone()[0], 0)
+        tabs = leaddb.tab_counts(self.c)
+        self.assertEqual((tabs["pruefen"], tabs["passt"]), (6, 0))  # erst prüfen, nicht einfach „Passt“
+        self.assertIn("6 warten aufs Prüfen", run["message"])
 
     def test_run_with_drafts_and_budget(self):
-        for i in range(10):
-            self.add(f"B{i}", website=f"https://b{i}.example.org")
+        for i in range(10):  # Entwürfe nur für Betriebe, die beim Prüfen schon ins CRM kamen
+            self.add(f"B{i}", website=f"https://b{i}.example.org", stage="neu")
+        self.add("Ungeprueft", website="https://u.example.org")
         with mock.patch.object(ai, "available", return_value=True):
-            run = self._run(check=10, drafts=5, budget=0.1)
+            run = self._run(check=11, drafts=5, budget=0.1)
         self.assertEqual(run["status"], "gestoppt")
         self.assertIn("Budget", run["message"])
         self.assertLessEqual(ai.eur(leaddb._sum(self.c, "run_id=?", (run["id"],))["usd"]), 0.1)
         self.assertEqual(json.loads(run["counts"])["entwuerfe"], 1)
+
+    def test_heartbeat_notes_when_server_was_off(self):
+        from datetime import datetime, timedelta
+        t0 = datetime(2026, 10, 27, 18, 0)
+        for t in (t0, t0 + timedelta(minutes=1), t0 + timedelta(hours=14)):
+            agent.heartbeat(t)
+        gaps = leaddb.kv_get(self.c, "offline_gaps")
+        self.assertEqual(gaps, [{"from": "2026-10-27T18:01:00", "to": "2026-10-28T08:00:00"}])
+
+    def test_claude_imports_follow_chosen_niches(self):
+        a = self.add("Agentur", source_id="claude:a", niche="werbeagentur")
+        self.add("Tischler", source_id="claude:t", niche="tischlerei")
+        plan = {"weights": {"werbeagentur": 100}, "taken": {}}
+        self.assertEqual({agent.next_candidate(self.c, plan) for _ in range(20)}, {a})
 
     def test_no_drafts_without_key(self):
         with mock.patch.object(ai, "available", return_value=False):
@@ -1370,8 +1388,9 @@ class ViewsTest(unittest.TestCase):
             c.commit()
             return cur.lastrowid
         a, b, d = add("Aal"), add("Bach", owner="hamza"), add("Dorn", status="aussortiert", rejected_by="team")
-        html = self.client.get("/leads?tab=passt").get_data(as_text=True)
+        html = self.client.get("/leads?tab=pruefen").get_data(as_text=True)
         self.assertIn(f'class="lead-sel" value="{a}"', html)
+        self.assertIn("Durchsehen →", html)
         self.assertIn('id="bulkBar"', html)
         r = self.client.post("/leads/ins-crm", data={"id": [str(a), str(b)], "stage": "kontaktiert", "owner": "oskar"},
                              headers={"X-CSRF-Token": self.csrf}).get_json()

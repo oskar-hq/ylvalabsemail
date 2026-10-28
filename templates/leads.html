@@ -22,7 +22,7 @@
     <a class="kpi {{ 'act' if c.entwurf }}" href="{{ url_for('leads.overview', tab='entwurf') }}"><span>Zur Freigabe</span><b>{{ c.entwurf }}</b><em>Nachricht fertig</em></a>
     <a class="kpi {{ 'act' if c.nachfassen }}" href="{{ url_for('leads.overview', tab='nachfassen') }}"><span>Nachfassen</span><b>{{ c.nachfassen }}</b><em>seit {{ followup_days }} Tagen still</em></a>
     <a class="kpi {{ 'act' if c.qualified }}" href="{{ url_for('leads.overview', tab='qualified') }}"><span>Interessenten</span><b>{{ c.qualified + c.mittel }}</b><em>{{ c.qualified }} mit Interesse</em></a>
-    <a class="kpi" href="{{ url_for('leads.overview', tab='passt') }}"><span>Passt, ohne Nachricht</span><b>{{ c.passt }}</b><em>{{ c.kandidaten }} warten auf Bewertung</em></a>
+    <a class="kpi {{ 'act' if c.pruefen }}" href="{{ url_for('leads.review') }}"><span>Zu prüfen</span><b>{{ c.pruefen }}</b><em>{{ c.kandidaten }} warten auf Bewertung</em></a>
   </div>
 
   <nav class="segmented" aria-label="Bereiche">
@@ -46,6 +46,7 @@
     <div class="section-head">
       <h2>{{ label }} <span class="muted">{{ st.counts[key] }}</span></h2>
       {% if tab != 'alle' %}<span class="muted small">{{ hint }}</span>{% endif %}
+      {% if key == 'pruefen' and items %}<a class="btn small primary review-go" href="{{ url_for('leads.review') }}">Durchsehen →</a>{% endif %}
       {% if items %}<button type="button" class="link-btn small sel-all" data-sel-all="{{ key }}">alle auswählen</button>{% endif %}
     </div>
     {% if items %}

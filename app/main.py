@@ -72,7 +72,7 @@ SETTINGS = {
     "LEADS_RADIUS_KM": float(env("LEADS_RADIUS_KM", "50")),
     # Vorschläge für den Start-Dialog eines Laufs
     "LEADS_RUN_CHECK": int(env("LEADS_RUN_CHECK", "150")),
-    "LEADS_RUN_TOP": int(env("LEADS_RUN_TOP", "25")),  # so viele der besten pro Lauf ins CRM
+    "LEADS_RUN_TOP": int(env("LEADS_RUN_TOP", "25")),  # nicht mehr genutzt: Passende warten aufs Prüfen
     "LEADS_RUN_DRAFTS": int(env("LEADS_RUN_DRAFTS", "0")),
     "LEADS_RUN_BUDGET_EUR": float(env("LEADS_RUN_BUDGET_EUR", "2")),
     "LEADS_MONTHLY_BUDGET_EUR": float(env("LEADS_MONTHLY_BUDGET_EUR", "20")),  # 0 = keine Grenze

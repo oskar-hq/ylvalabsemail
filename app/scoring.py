@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 from .regions import BAU_CATEGORIES
 
 BASE = 10  # Startwert, bevor eine Regel greift
-MIN_DEFAULT = 50  # Mindestpunktzahl (LEADS_RULE_MIN); ins CRM kommen pro Lauf nur die besten (LEADS_RUN_TOP)
+MIN_DEFAULT = 50  # Mindestpunktzahl (LEADS_RULE_MIN); Passende warten danach aufs Prüfen
 
 # Wen wir suchen (siehe Gehirn, „Wen wir suchen“): Stufe A ist der Kern, Stufe B passt oft, alles andere selten.
 TIER_A = {"handwerk", "pflege", "landwirtschaft"}

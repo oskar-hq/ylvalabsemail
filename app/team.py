@@ -17,7 +17,6 @@ DEFAULTS = {"gruss": "Viele Grüße", "signatur": "", "vorlage": "", "design": N
 PERSONAL = [
     ("LEADS_RULE_MIN", "Mindestpunktzahl, ab der ein Betrieb passt", int, 0, 100),
     ("LEADS_RUN_CHECK", "Betriebe pro Lauf bewerten", int, 0, 1000),
-    ("LEADS_RUN_TOP", "Davon die besten ins CRM", int, 0, 200),
     ("LEADS_RUN_DRAFTS", "KI-Entwürfe pro Lauf", int, 0, 50),
     ("LEADS_RUN_BUDGET_EUR", "KI-Budget pro Lauf (€)", float, 0, 100),
     ("MY_MONTHLY_BUDGET_EUR", "Mein KI-Budget pro Monat (€)", float, 0, 1000),
