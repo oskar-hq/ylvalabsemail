@@ -46,12 +46,13 @@
     <div class="section-head">
       <h2>{{ label }} <span class="muted">{{ st.counts[key] }}</span></h2>
       {% if tab != 'alle' %}<span class="muted small">{{ hint }}</span>{% endif %}
+      {% if items %}<button type="button" class="link-btn small sel-all" data-sel-all="{{ key }}">alle auswählen</button>{% endif %}
     </div>
     {% if items %}
-    <ul class="lead-list">
+    <ul class="lead-list pickable" data-section="{{ key }}">
       {% for l in items %}
-      <li><a class="lead-row" href="{{ url_for('leads.detail', lead_id=l.id) }}">
-        <span class="lead-name">{% if l.unread %}<i class="new" title="Neu"></i>{% endif %}{{ l.name }}</span>
+      <li><label class="lead-pick"><input type="checkbox" class="lead-sel" value="{{ l.id }}" aria-label="{{ l.name }} auswählen"></label><a class="lead-row" href="{{ url_for('leads.detail', lead_id=l.id) }}">
+        <span class="lead-name">{% if l.unread %}<i class="new" title="Neu"></i>{% endif %}{{ l.name }}{% if l.stage %} <em class="in-crm" title="Schon im CRM">CRM</em>{% endif %}</span>
         <span class="lead-meta muted">{{ l.category_label }}{% if l.city %} · {{ l.city }}{% endif %}{% if l.distance_km is not none %} · {{ l.distance_km|round|int }} km{% endif %}</span>
         <span class="lead-score mono" title="Punkte nach Regeln">{{ l.fit_score if l.fit_score is not none else '–' }}</span>
         <span class="pill st-{{ tab_of(l) }}">{{ interest_labels.get(l.interest) or lead_status_labels.get(l.status, l.status) }}</span>
@@ -69,6 +70,14 @@
   {% endfor %}
   </div>
   {% endfor %}
+
+  <div class="bulk-bar" id="bulkBar" hidden role="region" aria-label="Auswahl ins CRM schicken">
+    <span class="bulk-count"><b id="bulkCount">0</b> ausgewählt</span>
+    <label class="bulk-field"><span class="sub">Reiter</span><select id="bulkStage">{% for k, label, _ in stages %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select></label>
+    <label class="bulk-field"><span class="sub">CRM von</span><select id="bulkOwner">{% for m in members %}<option value="{{ m.key }}" {{ 'selected' if m.key == me }}>{{ m.name.split(' ')[0] }}{{ ' (du)' if m.key == me }}</option>{% endfor %}<option value="" {{ 'selected' if not me }}>Nur Gesamt</option></select></label>
+    <button type="button" class="btn primary" id="bulkGo">Ins CRM schicken</button>
+    <button type="button" class="btn" id="bulkClear" aria-label="Auswahl aufheben">✕</button>
+  </div>
 </main>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='leads.js') }}"></script>{% endblock %}

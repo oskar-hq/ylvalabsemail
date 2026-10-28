@@ -700,3 +700,21 @@ dialog.find{width:min(100% - 24px,600px);margin:12vh auto auto;padding:0;overflo
 .subject-picks[hidden]{display:none}
 .who-pick em{font-style:normal;font-weight:400;margin-left:6px}
 .forget-form{margin-top:10px;text-align:center}
+.lead-list.pickable li{display:flex;align-items:center;gap:6px}
+.lead-list.pickable .lead-row{flex:1;min-width:0;margin-left:0}
+.lead-pick{display:flex;align-items:center;justify-content:center;width:34px;min-height:44px;flex:none;cursor:pointer;margin-left:-8px}
+.lead-pick input{width:18px;height:18px;margin:0;accent-color:var(--primary);cursor:pointer}
+.in-crm{font-style:normal;font:600 10.5px/1 var(--sans);color:var(--ink3);background:var(--s3);border-radius:6px;padding:3px 6px;margin-left:6px;vertical-align:2px}
+.section-head .sel-all{margin-left:auto}
+.bulk-bar{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(var(--tabbar) + 16px);z-index:40;display:flex;align-items:flex-end;gap:10px;flex-wrap:wrap;
+  max-width:calc(100% - 32px);padding:12px 14px;border-radius:16px;background:var(--glass-strong);box-shadow:0 10px 40px rgba(0,0,0,.25);
+  -webkit-backdrop-filter:saturate(1.6) blur(18px);backdrop-filter:saturate(1.6) blur(18px)}
+.bulk-bar[hidden]{display:none}
+.bulk-count{align-self:center;font-size:14px;white-space:nowrap}
+.bulk-field{display:flex;flex-direction:column;gap:3px}
+.bulk-field .sub{font-size:11px;color:var(--ink3)}
+.bulk-field select{min-height:38px;padding:4px 8px;width:auto}
+body.has-bulk main{padding-bottom:120px}
+@media (max-width:639px){.bulk-bar{left:8px;right:8px;transform:none;max-width:none;bottom:calc(var(--tabbar) + 8px)}
+  .bulk-bar .btn.primary{flex:1}}
+.lead-list.pickable li.moved{opacity:.5}

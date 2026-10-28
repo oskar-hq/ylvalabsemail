@@ -1359,6 +1359,41 @@ class ViewsTest(unittest.TestCase):
         html = self.client.get(url).get_data(as_text=True)
         return html.split('name="csrf-token" content="')[1].split('"')[0]
 
+    def test_bulk_to_crm_and_mailer_claims(self):
+        c = leaddb.connect(os.path.join(TMP, "mailer.db"))
+        def add(name, **kw):
+            fields = dict(source_id=f"bulk:{name}", created_at=leaddb.now(), updated_at=leaddb.now(), name=name,
+                          branche="handwerk", category_label="Tischlerei", status="passt", email=f"{name.lower()}@bulk.example")
+            fields.update(kw)
+            cur = c.execute(f"INSERT INTO leads ({','.join(fields)}) VALUES ({','.join('?' * len(fields))})",
+                            list(fields.values()))
+            c.commit()
+            return cur.lastrowid
+        a, b, d = add("Aal"), add("Bach", owner="hamza"), add("Dorn", status="aussortiert", rejected_by="team")
+        html = self.client.get("/leads?tab=passt").get_data(as_text=True)
+        self.assertIn(f'class="lead-sel" value="{a}"', html)
+        self.assertIn('id="bulkBar"', html)
+        r = self.client.post("/leads/ins-crm", data={"id": [str(a), str(b)], "stage": "kontaktiert", "owner": "oskar"},
+                             headers={"X-CSRF-Token": self.csrf}).get_json()
+        self.assertEqual((r["moved"], r["stage"], r["owner"], r["kept"]), (2, "Kontaktiert", "Oskar Jacobsen", ["Bach"]))
+        self.assertEqual(r["url"], "/crm?wer=oskar")
+        la, lb = leaddb.get_lead(c, a), leaddb.get_lead(c, b)
+        self.assertEqual((la["stage"], la["owner"], la["status"]), ("kontaktiert", "oskar", "versendet"))
+        self.assertEqual((lb["stage"], lb["owner"]), ("kontaktiert", "hamza"))  # schon zugeordnet: bleibt bei Hamza
+        self.client.post("/leads/ins-crm", data={"id": str(d), "stage": "neu"}, headers={"X-CSRF-Token": self.csrf})
+        ld = leaddb.get_lead(c, d)
+        self.assertEqual((ld["stage"], ld["status"], ld["owner"]), ("neu", "passt", "oskar"))  # ohne Angabe: man selbst
+        self.assertEqual(self.client.post("/leads/ins-crm", data={"id": str(a), "stage": "quatsch"},
+                                          headers={"X-CSRF-Token": self.csrf}).status_code, 400)
+        # Mailer ohne Betrieb aus dem CRM: Empfänger mit bekannter Adresse landen im eigenen CRM als kontaktiert
+        e = add("Eck", stage=None)
+        crm.set_stage(c, e, "antwort")  # nach einer Antwort darf gemailt werden
+        r = self.client.post("/send", data={"recipients": "eck@bulk.example", "subject": "Hallo", "body": "Text",
+                                            "template": "brief", "graphic": "none"}, headers={"X-CSRF-Token": self.csrf})
+        self.assertTrue(r.get_json()["demo"])
+        le = leaddb.get_lead(c, e)
+        self.assertEqual((le["owner"], le["status"]), ("oskar", "versendet"))
+
     def test_pages_and_actions(self):
         self.assertEqual(self.client.post("/leads/demo", headers={"X-CSRF-Token": self.csrf}).status_code, 302)
         html = self.client.get("/leads").get_data(as_text=True)

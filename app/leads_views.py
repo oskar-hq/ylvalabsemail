@@ -184,9 +184,49 @@ def overview():
     by_key = {k: (k, label, hint, items) for k, label, hint, items in sections}
     groups = [(title, hint, [by_key[k] for k in keys if k in by_key]) for title, hint, keys in leaddb.TAB_GROUPS]
     return render_template("leads.html", account=g.account, tab=tab, tabs=leaddb.TABS, sections=sections,
-                           sched=schedule_view(),
+                           sched=schedule_view(), stages=crm.STAGES, members=team.members(db()), me=me(),
                            groups=[grp for grp in groups if grp[2]], tab_groups=leaddb.TAB_GROUPS,
                            st=status_payload(), rd=run_defaults(), demo=SETTINGS["DEMO_MODE"])
+
+
+OPEN_STATUSES = ("kandidat", "recherche", "vorgeprueft", "analysiert", "passt", "entwurf", "aussortiert", "fehler")
+
+
+@bp.post("/leads/ins-crm")
+@login_required
+def to_crm():
+    """Mehrere Betriebe auf einmal ins CRM: in einen Reiter (Stufe) und, wenn noch niemand zuständig ist, zu einer
+    Person. Ab „Kontaktiert“ zählen sie unter Leads als versendet, aussortierte kommen mit „Neu“ zurück zu „Passt“."""
+    c = db()
+    stage = request.form.get("stage", "neu")
+    if stage not in crm.STAGE_KEYS:
+        return jsonify(error="Unbekannter Reiter."), 400
+    names = team.names(c)
+    owner = request.form.get("owner", me() or "")
+    if owner and owner not in names:
+        return jsonify(error="Unbekannte Person."), 400
+    ids = [int(x) for x in request.form.getlist("id") if x.isdigit()][:500]
+    if not ids:
+        return jsonify(error="Bitte mindestens einen Betrieb auswählen."), 400
+    moved, kept = 0, []
+    for lead_id in ids:
+        lead = leaddb.get_lead(c, lead_id)
+        if not lead:
+            continue
+        fields = {"unread": 0}
+        if stage != "neu" and lead["status"] in OPEN_STATUSES:
+            fields.update(status="versendet", sent_at=lead["sent_at"] or leaddb.now(), rejected_by=None)
+        elif stage == "neu" and lead["status"] == "aussortiert":
+            fields.update(status="passt", rejected_by=None)
+        leaddb.update_lead(c, lead_id, **fields)
+        crm.set_stage(c, lead_id, stage, author=who(), note="Aus den Leads ins CRM geschickt.")
+        if owner and not lead["owner"]:
+            crm.set_owner(c, lead_id, owner, who())
+        elif owner and lead["owner"] != owner:
+            kept.append(lead["name"])
+        moved += 1
+    return jsonify(ok=True, moved=moved, stage=crm.STAGE_LABELS[stage], owner=names.get(owner, ""), kept=kept,
+                   url=url_for("crm.board", wer=owner or "alle"))
 
 
 @bp.get("/leads/suche")
