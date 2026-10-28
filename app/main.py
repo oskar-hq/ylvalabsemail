@@ -12,6 +12,7 @@ import threading
 import time
 import uuid
 from datetime import datetime
+from email.utils import parseaddr
 from functools import wraps
 from pathlib import Path
 
@@ -542,6 +543,29 @@ def lead_fields(lead):
             "reply_to": agent.outreach_address() if agent.outreach_configured() else "", "lead_id": str(lead["id"])}
 
 
+def _record_in_crm(lead_id, msgs, author):
+    """Nach dem Versand aus dem Mailer: Betrieb in der Akte vermerken, auf „Kontaktiert“ schieben und ins CRM der
+    angemeldeten Person (wenn noch niemand zuständig ist). Ohne Betrieb aus dem CRM: Empfänger, deren Adresse zu
+    einem Betrieb gehört, zählen genauso."""
+    c = leaddb.connect(DB_PATH)
+    try:
+        if lead_id:
+            pairs = [(lead_id, msgs[0])]
+        else:
+            pairs = []
+            for msg in msgs:
+                addr = parseaddr(str(msg["To"]))[1].strip().lower()
+                row = c.execute("SELECT id FROM leads WHERE lower(email)=? AND status != 'gesperrt' "
+                                "ORDER BY stage IS NULL, id LIMIT 1", (addr,)).fetchone() if addr else None
+                if row:
+                    pairs.append((row["id"], msg))
+        for lid, msg in pairs:
+            crm.record_mail(c, lid, msg, author)
+            crm.claim(c, lid, g.account.get("team"))
+    finally:
+        c.close()
+
+
 @app.route("/compose")
 @login_required
 def compose():
@@ -686,13 +710,8 @@ def send():
             return jsonify(error=why), 400
     if account.get("demo"):
         if not test:
-            if lead_id:  # Demo: in der Akte vermerken, verschickt wird nichts
-                c = leaddb.connect(DB_PATH)
-                try:
-                    msg = emailbuild.build_message(form, rcpts[0], SETTINGS, account["address"], img)
-                    crm.record_mail(c, lead_id, msg, "Demo")
-                finally:
-                    c.close()
+            msgs = [emailbuild.build_message(form, r, SETTINGS, account["address"], img) for r in rcpts]
+            _record_in_crm(lead_id, msgs, "Demo")  # Demo: in der Akte vermerken, verschickt wird nichts
             return jsonify(demo=True, would_send=len(rcpts))
         # Statt zu senden: die fertige Mail als .eml-Datei zum Öffnen im Mailprogramm
         msg = emailbuild.build_message(form, rcpts[0], SETTINGS, account["address"], img)
@@ -733,12 +752,8 @@ def send():
             pass
 
     warning = None
-    if lead_id and sent_msgs and not test:
-        c = leaddb.connect(DB_PATH)
-        try:
-            crm.record_mail(c, lead_id, sent_msgs[0], g.account.get("name") or account["address"])
-        finally:
-            c.close()
+    if sent_msgs and not test:
+        _record_in_crm(lead_id, sent_msgs, g.account.get("name") or account["address"])
     if sent_msgs and not test and SETTINGS["IMAP_HOST"] and form.get("save_sent"):
         try:
             save_to_sent({"user": m_user, "password": m_password}, sent_msgs)

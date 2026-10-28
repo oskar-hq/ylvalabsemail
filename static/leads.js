@@ -550,3 +550,63 @@
   window.addEventListener('hashchange', openRun);
   openRun();
 })();
+
+// Leads-Liste: mehrere auswählen und auf einmal ins CRM schicken (Reiter und Person wählbar)
+(() => {
+  const bar = document.getElementById('bulkBar');
+  if (!bar) return;
+  const csrf = document.querySelector('meta[name=csrf-token]').content;
+  const boxes = () => [...document.querySelectorAll('.lead-sel')];
+  const picked = () => boxes().filter((b) => b.checked);
+  const update = () => {
+    const n = picked().length;
+    document.getElementById('bulkCount').textContent = n;
+    bar.hidden = !n;
+    document.body.classList.toggle('has-bulk', n > 0);
+    document.querySelectorAll('[data-sel-all]').forEach((btn) => {
+      const list = [...document.querySelectorAll(`[data-section="${btn.dataset.selAll}"] .lead-sel`)];
+      btn.textContent = list.length && list.every((b) => b.checked) ? 'keine auswählen' : 'alle auswählen';
+    });
+  };
+  document.addEventListener('change', (e) => { if (e.target.classList?.contains('lead-sel')) update(); });
+  document.querySelectorAll('[data-sel-all]').forEach((btn) => btn.addEventListener('click', () => {
+    const list = [...document.querySelectorAll(`[data-section="${btn.dataset.selAll}"] .lead-sel`)];
+    const on = !list.every((b) => b.checked);
+    list.forEach((b) => { b.checked = on; });
+    update();
+  }));
+  document.getElementById('bulkClear').addEventListener('click', () => { boxes().forEach((b) => { b.checked = false; }); update(); });
+  document.getElementById('bulkGo').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const ids = [...new Set(picked().map((b) => b.value))];
+    const body = new FormData();
+    ids.forEach((id) => body.append('id', id));
+    body.append('stage', document.getElementById('bulkStage').value);
+    body.append('owner', document.getElementById('bulkOwner').value);
+    btn.disabled = true;
+    try {
+      const resp = await fetch('/leads/ins-crm', { method: 'POST', body, headers: { 'X-CSRF-Token': csrf } });
+      const d = await resp.json().catch(() => ({ error: `Fehler ${resp.status}` }));
+      if (!resp.ok || d.error) throw new Error(d.error || `Fehler ${resp.status}`);
+      picked().forEach((b) => {
+        b.checked = false;
+        b.closest('li').classList.add('moved');
+        const name = b.closest('li').querySelector('.lead-name');
+        if (name && !name.querySelector('.in-crm')) name.insertAdjacentHTML('beforeend', ' <em class="in-crm">CRM</em>');
+      });
+      update();
+      const where = d.owner ? `im CRM von ${d.owner}` : 'im Gesamt-CRM';
+      const note = document.getElementById('bulkDone') || Object.assign(document.createElement('p'), { id: 'bulkDone', className: 'note small bulk-done' });
+      note.textContent = `${d.moved} ${d.moved === 1 ? 'Betrieb' : 'Betriebe'} ${where} unter „${d.stage}“. `;
+      if (d.kept.length) note.textContent += `Schon zugeordnet, bleiben bei ihrer Person: ${d.kept.join(', ')}. `;
+      const a = Object.assign(document.createElement('a'), { href: d.url, textContent: 'Im CRM ansehen →' });
+      note.append(a);
+      document.querySelector('.kpis').before(note);
+      note.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+})();
