@@ -235,7 +235,11 @@ def to_crm():
 def search():
     """Neue Betriebe finden: Lauf starten (Kartensuche und Bewertung) oder mit Claude recherchieren."""
     weights = niches.load(db())
+    marks = ",".join("?" * len(weights))
+    waiting_mine = db().execute(f"SELECT COUNT(*) FROM leads WHERE status='kandidat' AND niche IN ({marks})",
+                                list(weights)).fetchone()[0] if weights else 0
     return render_template("search.html", account=g.account, st=status_payload(), rd=run_defaults(),
+                           waiting_mine=waiting_mine,
                            sched=schedule_view(), niche_weights=weights, niche_info=niches.NICHES, known_total=known.count(db()),
                            niche_summary=niches.describe(weights), demo=SETTINGS["DEMO_MODE"])
 

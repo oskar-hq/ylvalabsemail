@@ -207,6 +207,8 @@
           <dt>E-Mail</dt><dd>{% if lead.email %}<a href="mailto:{{ lead.email }}">{{ lead.email }}</a>{% else %}–{% endif %}</dd>
           <dt>Telefon</dt><dd>{% if lead.phone %}<a href="tel:{{ lead.phone|replace(' ', '') }}">{{ lead.phone }}</a>{% else %}–{% endif %}</dd>
           {% if lead.website %}<dt>Webseite</dt><dd><a href="{{ lead.website }}" target="_blank" rel="noopener">{{ lead.website|replace('https://', '')|replace('http://', '') }}</a></dd>{% endif %}
+          {% set social = (lead.research or {}).get('social') or {} %}
+          {% if social %}<dt>Social Media</dt><dd class="social-links">{% for k, url in social.items() if social_labels.get(k) %}<a href="{{ url }}" target="_blank" rel="noopener">{{ social_labels[k] }}</a>{% endfor %}</dd>{% endif %}
           {% if lead.research.pages %}<dt>Gelesen</dt><dd>{% for p in lead.research.pages %}<a href="{{ p }}" target="_blank" rel="noopener">{{ p|replace('https://', '')|truncate(38, true) }}</a><br>{% endfor %}</dd>{% endif %}
         </dl>
         <form id="contactForm" class="contact-form" hidden>

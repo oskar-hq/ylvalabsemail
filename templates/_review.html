@@ -16,7 +16,7 @@
       <dl class="swipe-facts">
         <dt>Was sie machen</dt><dd>{% if p.beschreibung %}{{ p.beschreibung }}{% if p.quelle %} <span class="src">({{ p.quelle }})</span>{% endif %}{% else %}<span class="needs-ai">KI-Recherche nötig</span>{% endif %}</dd>
         <dt>Größe</dt><dd>{{ p.groesse or '' }}{% if not p.groesse %}<span class="needs-ai">unklar · KI-Recherche nötig</span>{% endif %}</dd>
-        <dt>Kontakt</dt><dd>{% if p.kontakt %}{{ p.kontakt }}<br>{% endif %}{% if p.email %}{{ p.email }}<br>{% endif %}{% if p.telefon %}{{ p.telefon }}<br>{% endif %}{% if p.web %}<a href="{{ p.website }}" target="_blank" rel="noopener">{{ p.web }}</a>{% endif %}{% if not (p.kontakt or p.email) %} <span class="needs-ai">Ansprechperson fehlt</span>{% endif %}</dd>
+        <dt>Kontakt</dt><dd>{% if p.kontakt %}{{ p.kontakt }}<br>{% endif %}{% if p.email %}{{ p.email }}<br>{% endif %}{% if p.telefon %}{{ p.telefon }}<br>{% endif %}{% if p.web %}<a href="{{ p.website }}" target="_blank" rel="noopener">{{ p.web }}</a>{% endif %}{% if p.social %}<span class="social-links">{% for label, url in p.social %}<a href="{{ url }}" target="_blank" rel="noopener">{{ label }}</a>{% endfor %}</span>{% endif %}{% if not (p.kontakt or p.email) %} <span class="needs-ai">Ansprechperson fehlt</span>{% endif %}</dd>
         {% if p.zeitfresser %}<dt>Zeitfresser</dt><dd>{{ p.zeitfresser|join(' · ') }}</dd>{% endif %}
         {% if l.signale %}<dt>Warum es passt</dt><dd><ul class="signals small">{% for points, reason in l.signale %}<li><span class="{{ 'neg' if points < 0 }}">{{ '%+d'|format(points) }}</span> {{ reason }}</li>{% endfor %}</ul></dd>{% endif %}
       </dl>

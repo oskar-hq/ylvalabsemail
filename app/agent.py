@@ -191,13 +191,13 @@ def run_search(c):
         reason = f.get("filter_reason")
         cur = c.execute(
             "INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, category_label,"
-            " niche, address, city, lat, lon, distance_km, website, email, phone, status, rejected_by, fit_reason)"
-            " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            " niche, address, city, lat, lon, distance_km, website, email, phone, status, rejected_by, fit_reason,"
+            " research) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (f["source_id"], leaddb.now(), leaddb.now(), f["name"], f["branche"], f["category"], f["category_label"],
              f.get("niche"),
              f["address"], f["city"], f["lat"], f["lon"], f["distance_km"], f["website"], f["email"], f["phone"],
              "aussortiert" if reason else "kandidat", "filter" if reason else None,
-             f"Grobfilter: {reason}" if reason else None))
+             f"Grobfilter: {reason}" if reason else None, _json({"social": f["social"]}) if f.get("social") else None))
         new += cur.rowcount
         filtered += cur.rowcount if reason else 0
         if cur.rowcount:
@@ -322,6 +322,9 @@ def stage_score(c, lead_id, learned, promote=False):
             "titel": research["pages"][0]["title"] if research["pages"] else ""}
     if imported:
         info["import"] = imported
+    social = {**(lead["research"].get("social") or {}), **finder.social_links(research["links"])}
+    if social:  # Instagram, LinkedIn & Co. zum Anschauen (aus Karte, Webseite oder Claude-Recherche)
+        info["social"] = social
     common = dict(fit_score=result["score"], fit_reason=scoring.summary(result, threshold), research=_json(info),
                   contact_name=lead["contact_name"] or result["contact_name"] or None, email=email_addr)
 
@@ -751,6 +754,12 @@ def _execute_run(c, run_id, run, p):
             _progress(f"Schritt 2/3 · Bewertet {i + 1}/{check}: {leaddb.get_lead(c, lead_id)['name']} (kostenlos)")
             counts["bewertet"] += 1
             counts["passen"] += stage_score(c, lead_id, learned)
+        if check and not counts["bewertet"]:  # nichts zu bewerten: sagen, woran es liegt
+            others = c.execute("SELECT COUNT(*) FROM leads WHERE status='kandidat'").fetchone()[0]
+            labels = ", ".join(niches.NICHES[k]["label"] for k in list(weights)[:4]) + (" …" if len(weights) > 4 else "")
+            message = (f"In den gewählten Nischen ({labels}) gibt es auf der Karte gerade keine neuen Betriebe"
+                       + (f"; {others} warten in anderen Nischen" if others else "") + ". Agenturen und Büros stehen "
+                       "oft nicht auf der Karte: „Mit Claude recherchieren“ findet sie über das Web.")
         counts["zu_pruefen"] = c.execute("SELECT COUNT(*) FROM leads WHERE status='passt' AND stage IS NULL "
                                          "AND interest IS NULL AND IFNULL(rejected_by,'')=''").fetchone()[0]
 
