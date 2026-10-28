@@ -201,6 +201,15 @@ class AgentTest(unittest.TestCase):
         self.assertIn("Sucht Personal fürs Büro, die Verwaltung oder die Disposition", [r for _, r in lead["research"]["signale"]])
         self.assertEqual(leaddb.tab_of(lead), "pruefen")
 
+    def test_score_stage_keeps_social_links(self):
+        lead_id = self.add("Agentur Nord", website="https://agentur-nord.de",
+                           research=json.dumps({"social": {"facebook": "https://www.facebook.com/nord/"}}))
+        site = {**self.SITE, "links": ["https://www.instagram.com/agentur_nord/", "https://www.linkedin.com/company/nord"]}
+        with mock.patch.object(finder, "research_website", return_value=site):
+            agent.stage_score(self.c, lead_id, {})
+        social = leaddb.get_lead(self.c, lead_id)["research"]["social"]
+        self.assertEqual(set(social), {"facebook", "instagram", "linkedin"})
+
     def test_score_stage_rejects_without_ai(self):
         lead_id = self.add("Webagentur", branche="dienstleistung", category="office=company", distance_km=45,
                            website="https://agentur.example")
@@ -811,6 +820,24 @@ class ClaudeResearchTest(unittest.TestCase):
         self.assertEqual(claude_research.import_csv(self.c, text, "t", (54.66, 9.93))["neu"], 1)
         with self.assertRaises(claude_research.CsvError):
             claude_research.import_csv(self.c, "a;b\n1;2\n", "t", (54.66, 9.93))
+
+
+class SocialTest(unittest.TestCase):
+    def test_social_links_from_website_osm_and_csv(self):
+        links = ["https://www.instagram.com/p/ABC123/", "https://www.instagram.com/agentur_nord/?hl=de",
+                 "https://de.linkedin.com/company/agentur-nord", "https://www.facebook.com/sharer/sharer.php?u=x",
+                 "https://www.facebook.com/AgenturNord/", "https://www.youtube.com/@agenturnord",
+                 "https://www.linkedin.com/in/jana-hansen-123"]
+        self.assertEqual(finder.social_links(links), {
+            "instagram": "https://www.instagram.com/agentur_nord/",
+            "linkedin": "https://de.linkedin.com/company/agentur-nord",
+            "facebook": "https://www.facebook.com/AgenturNord/",
+            "youtube": "https://www.youtube.com/@agenturnord"})
+        self.assertEqual(finder.osm_social({"contact:instagram": "@agentur_nord", "contact:linkedin": "irgendwas"}),
+                         {"instagram": "https://www.instagram.com/agentur_nord/"})
+        self.assertEqual(finder.social_url("linkedin", "javascript:alert(1)"), "")
+        p = crm.profile({"research": {"social": {"instagram": "https://www.instagram.com/x_y/", "boese": "x"}}})
+        self.assertEqual(p["social"], [("Instagram", "https://www.instagram.com/x_y/")])
 
 
 class TemplateUpgradeTest(unittest.TestCase):

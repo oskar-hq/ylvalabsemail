@@ -95,7 +95,9 @@ def profile(lead):
             "zeitfresser": (research.get("zeitfresser") or imp.get("zeitfresser") or [])[:2],
             "aufhaenger": imp.get("aufhaenger") or "", "punkte": lead.get("fit_score"),
             "grund": lead.get("fit_reason") or "", "kategorie": lead.get("category_label") or "Betrieb",
-            "branche": lead.get("branche") or "", "fehlt": fehlt}
+            "branche": lead.get("branche") or "", "fehlt": fehlt,
+            "social": [(finder.SOCIAL_LABELS[k], u) for k, u in (research.get("social") or {}).items()
+                       if k in finder.SOCIAL_LABELS and u]}
 
 
 def owner_sql(who, me=None):

@@ -805,7 +805,7 @@ def healthz():
 
 
 # ---------------------------------------------------------------- Akquise und CRM
-from . import agent, crm, leaddb  # noqa: E402
+from . import agent, crm, finder, leaddb  # noqa: E402
 from .crm_views import bp as crm_bp  # noqa: E402
 from .leads_views import bp as leads_bp  # noqa: E402
 from .team_views import bp as team_bp  # noqa: E402
@@ -813,6 +813,7 @@ from .palette import bp as palette_bp  # noqa: E402
 from .settings_views import bp as settings_bp  # noqa: E402
 
 app.jinja_env.globals["subject_choices"] = agent.SUBJECTS
+app.jinja_env.globals["social_labels"] = finder.SOCIAL_LABELS
 app.register_blueprint(leads_bp)
 app.register_blueprint(settings_bp)
 app.register_blueprint(crm_bp)

@@ -53,6 +53,10 @@ COLUMNS = [
      "vereinfachen könnte, Eingabe → Verarbeitung → Ergebnis, als mögliches gemeinsames Vorhaben (z. B. „Denkbar wäre "
      "zum Beispiel, dass …“). Leer lassen, wenn unklar: dann setzt die App ein Beispiel zur Branche ein", "{beispiel}"),
     ("Begründung", "begruendung", False, "Ein Satz, warum der Betrieb passt (Größe, Druck, Abläufe)", ""),
+    ("Instagram", "instagram", False, "Link zum Instagram-Profil des Betriebs, wenn es eins gibt (kein einzelner "
+     "Beitrag)", ""),
+    ("LinkedIn", "linkedin", False, "Link zur LinkedIn-Unternehmensseite oder zum Profil der Inhaberin/des "
+     "Inhabers, wenn es eins gibt", ""),
     ("Quelle", "quelle", False, "Adresse der Seite, auf der die wichtigsten Angaben stehen (z. B. Impressum)", ""),
     ("Breite", "lat", False, "Geografische Breite, z. B. 54.6614, wenn bekannt", ""),
     ("Länge", "lon", False, "Geografische Länge, z. B. 9.9311, wenn bekannt", ""),
@@ -232,6 +236,9 @@ def import_csv(conn, raw, author, center):
             "taetigkeit": d.get("taetigkeit", ""),
             "url": d.get("quelle", ""),
         }}
+        social = {k: u for k in ("instagram", "linkedin") if (u := finder.social_url(k, d.get(k, "")))}
+        if social:
+            info["social"] = social
         now = leaddb.now()
         source_id = "claude:" + hashlib.sha1(f"{name}|{email}|{website}".lower().encode()).hexdigest()[:16]
         cur = conn.execute(

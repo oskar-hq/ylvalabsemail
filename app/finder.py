@@ -141,7 +141,7 @@ def parse_elements(elements, lat, lon, radius_km=None, keys=None):
             "address": ", ".join(x for x in (street, city) if x), "city": tags.get("addr:city", ""),
             "lat": plat, "lon": plon, "distance_km": round(dist, 1), "website": website, "email": email,
             "phone": (tags.get("phone") or tags.get("contact:phone") or "").split(";")[0].strip(),
-            "filter_reason": filter_reason,
+            "filter_reason": filter_reason, "social": osm_social(tags),
         })
     return found
 
@@ -342,3 +342,56 @@ def research_website(url, max_pages=4, chars_per_page=6000):
                 except Exception as exc:
                     errors.append(f"{link}: {exc}")
     return {"pages": pages, "emails": sorted(emails), "links": list(dict.fromkeys(links))[:600], "errors": errors}
+
+
+# ---------------------------------------------------------------- Social Media
+# Viele Betriebe, vor allem Agenturen, zeigen ihre Arbeit eher auf Instagram oder LinkedIn als auf der Webseite.
+# Gelesen werden diese Seiten nicht (sie verlangen eine Anmeldung); die App merkt sich nur die Links zum Öffnen.
+SOCIAL = [
+    ("instagram", "Instagram", r"^https?://(?:www\.)?instagram\.com/(?!p/|reel/|reels/|explore/|stories/|accounts/|share)"
+                               r"([A-Za-z0-9_.]{2,30})/?$"),
+    ("linkedin", "LinkedIn", r"^https?://(?:[a-z]{2,3}\.)?linkedin\.com/(company|in|school)/([^/?#]{2,100})/?$"),
+    ("facebook", "Facebook", r"^https?://(?:www\.|m\.|de-de\.)?facebook\.com/(?!sharer|share|plugins|tr|dialog|"
+                             r"login|groups/?$)([^?#]{2,100}?)/?$"),
+    ("xing", "Xing", r"^https?://(?:www\.)?xing\.com/(pages|companies|profile)/([^/?#]{2,100})/?$"),
+    ("tiktok", "TikTok", r"^https?://(?:www\.)?tiktok\.com/@([A-Za-z0-9_.]{2,30})/?$"),
+    ("youtube", "YouTube", r"^https?://(?:www\.)?youtube\.com/(@[^/?#]{2,100}|channel/[^/?#]+|c/[^/?#]+|user/[^/?#]+)/?$"),
+]
+SOCIAL_LABELS = {k: label for k, label, _ in SOCIAL}
+_OSM_SOCIAL = {"instagram": "https://www.instagram.com/{}/", "facebook": "https://www.facebook.com/{}",
+               "linkedin": None, "xing": None, "tiktok": "https://www.tiktok.com/@{}", "youtube": None}
+
+
+def social_url(network, value):
+    """Ein Link oder Name (z. B. aus OpenStreetMap „contact:instagram=agentur_xy“) als aufgeräumter Link, sonst ''."""
+    value = (value or "").strip()
+    if not value:
+        return ""
+    if not value.startswith("http"):
+        template = _OSM_SOCIAL.get(network)
+        if not template or not re.fullmatch(r"@?[A-Za-z0-9_.\-]{2,60}", value):
+            return ""
+        value = template.format(value.lstrip("@"))
+    url = value.split("?")[0].split("#")[0]
+    pattern = dict((k, p) for k, _, p in SOCIAL)[network]
+    return url if re.match(pattern, url, re.I) else ""
+
+
+def social_links(urls):
+    """Aus allen Links einer Webseite: je Netzwerk der erste Profil-Link (keine einzelnen Beiträge, kein Teilen)."""
+    found = {}
+    for raw in urls or []:
+        url = (raw or "").split("?")[0].split("#")[0]
+        for key, _, pattern in SOCIAL:
+            if key not in found and re.match(pattern, url, re.I):
+                found[key] = url
+    return found
+
+
+def osm_social(tags):
+    out = {}
+    for key in SOCIAL_LABELS:
+        url = social_url(key, tags.get(f"contact:{key}") or tags.get(key))
+        if url:
+            out[key] = url
+    return out
