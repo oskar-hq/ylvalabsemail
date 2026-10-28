@@ -182,8 +182,9 @@ def connect(path):
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(SCHEMA)
-    from . import known
+    from . import known, reports
     conn.executescript(known.SCHEMA)
+    conn.executescript(reports.SCHEMA)
     for stmt in MIGRATIONS:
         try:
             conn.execute(stmt)

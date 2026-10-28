@@ -27,7 +27,7 @@ from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid, parseaddr, parsedate_to_datetime
 from urllib.parse import urlparse
 
-from . import ai, crm, emailbuild, finder, known, leaddb, mailbox, niches, regions, schedule, scoring, team, webpush
+from . import ai, crm, emailbuild, finder, known, leaddb, mailbox, niches, regions, reports, schedule, scoring, team, webpush
 
 log = logging.getLogger("ylva.leads")
 
@@ -207,7 +207,7 @@ def run_search(c):
     niches.backfill(c)  # schon bekannte Betriebe, die jetzt in eine gewählte Nische fallen
     leaddb.kv_set(c, "last_search", {"at": leaddb.now(), "found": len(found), "new": new, "filtered": filtered,
                                      "known": duplicates, "niches": keys})
-    return new, filtered
+    return new, filtered, duplicates
 
 
 def learned_filter(c):
@@ -735,7 +735,7 @@ def _execute_run(c, run_id, run, p):
         waiting = c.execute(f"SELECT 1 FROM leads WHERE status='kandidat' AND (niche IN ({marks}) "
                             "OR (source_id LIKE 'claude:%' AND niche IS NULL))", list(weights)).fetchone()
         if p.get("suchen") or (check and (not waiting or (searched is not None and not set(weights) <= set(searched)))):
-            counts["neu_gefunden"], counts["grobfilter"] = run_search(c)
+            counts["neu_gefunden"], counts["grobfilter"], counts["schon_bekannt"] = run_search(c)
         counts["grobfilter"] += learned_filter(c)
         ensure_boundaries(c)
         assign_kreise(c)
@@ -753,7 +753,10 @@ def _execute_run(c, run_id, run, p):
             plan["taken"][niche] = plan["taken"].get(niche, 0) + 1
             _progress(f"Schritt 2/3 · Bewertet {i + 1}/{check}: {leaddb.get_lead(c, lead_id)['name']} (kostenlos)")
             counts["bewertet"] += 1
-            counts["passen"] += stage_score(c, lead_id, learned)
+            passed = stage_score(c, lead_id, learned)
+            counts["passen"] += passed
+            rated = leaddb.get_lead(c, lead_id)
+            reports.record(c, run_id, lead_id, passed, rated["fit_score"], rated["fit_reason"])
         if check and not counts["bewertet"]:  # nichts zu bewerten: sagen, woran es liegt
             others = c.execute("SELECT COUNT(*) FROM leads WHERE status='kandidat'").fetchone()[0]
             labels = ", ".join(niches.NICHES[k]["label"] for k in list(weights)[:4]) + (" …" if len(weights) > 4 else "")
@@ -811,9 +814,9 @@ def _execute_run(c, run_id, run, p):
         c.commit()
         RUN.update(id=None, cancel=False, progress="")
         title = {"fertig": "Lauf fertig", "gestoppt": "Lauf gestoppt", "fehler": "Lauf mit Fehler beendet"}[status]
-        quiet = (run["started_by"] or "").startswith("Automatik") and status == "fertig" \
-            and not (counts["passen"] or counts["entwuerfe"] or counts["erinnerungen"])
-        if not quiet:  # automatische Läufe melden sich nur, wenn etwas Neues da ist
+        # automatische Läufe melden sich nur bei Fehlern, ihr Ergebnis kommt gesammelt im Tagesbericht
+        quiet = (run["started_by"] or "").startswith("Automatik") and status == "fertig"
+        if not quiet:
             notify(c, title, " ".join(x for x in (message, summary) if x),
                    "/leads?tab=entwurf" if counts["entwuerfe"] else ("/leads/pruefen" if counts["zu_pruefen"] else "/crm"))
 
@@ -1311,6 +1314,7 @@ def tick():
                     fetch_inbox(c)
             notify_due(c)
             notify_tasks(c)
+            reports.notify_released(c, notify)
             start_scheduled(c)
             run = c.execute("SELECT id FROM runs WHERE status='wartet' ORDER BY id LIMIT 1").fetchone()
             if run:
@@ -1423,6 +1427,7 @@ def _loop():
     c.execute("UPDATE leads SET status='kandidat' WHERE status='recherche'")  # nach Neustart
     c.execute("UPDATE runs SET status='abgebrochen', ended_at=?, message='Server wurde neu gestartet.' "
               "WHERE status='laeuft'", (leaddb.now(),))
+    reports.cleanup(c)
     c.commit()
     c.close()
     while True:

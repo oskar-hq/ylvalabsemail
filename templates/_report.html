@@ -1,0 +1,26 @@
+{# Ein Bericht (ein Lauf von Hand oder ein Tag der automatischen Suche): Zahlen und die ausgewählten Betriebe mit Grund. #}
+{% macro report_body(r, limit=50) %}
+<div class="rep-nums">
+  <span><b>{{ r.gefunden }}</b> neu gefunden</span>
+  {% if r.schon_bekannt %}<span><b>{{ r.schon_bekannt }}</b> schon bekannt</span>{% endif %}
+  {% if r.grobfilter %}<span><b>{{ r.grobfilter }}</b> Grobfilter</span>{% endif %}
+  <span><b>{{ r.bewertet }}</b> bewertet</span>
+  <span class="rep-ok"><b>{{ r.ausgewaehlt }}</b> ausgewählt</span>
+  <span><b>{{ r.aussortiert }}</b> aussortiert</span>
+  {% if r.entwuerfe %}<span><b>{{ r.entwuerfe }}</b> Entwürfe</span>{% endif %}
+</div>
+{% if r.picked %}
+<ul class="rep-list">
+  {% for l in r.picked[:limit] %}
+  <li><a href="{{ url_for('leads.detail', lead_id=l.id) }}">
+    <span class="rep-name">{{ l.name }} <span class="muted">· {{ l.category_label }}{% if l.city %} · {{ l.city }}{% endif %}</span></span>
+    <span class="rep-score mono">{{ l.score if l.score is not none else '–' }}</span>
+    <span class="pill rep-{{ l.state }}">{{ l.state_label }}</span>
+    {% if l.reason %}<span class="rep-why muted small">{{ l.reason }}</span>{% endif %}
+  </a></li>
+  {% endfor %}
+</ul>
+{% if r.picked|length > limit %}<p class="muted small">und {{ r.picked|length - limit }} weitere</p>{% endif %}
+{% elif r.ausgewaehlt and not r.detail %}<p class="muted small">Welche es waren, steht erst bei Läufen ab diesem Update im Bericht.</p>
+{% elif r.bewertet %}<p class="muted small">Keiner der bewerteten Betriebe hat gepasst.</p>{% endif %}
+{% endmacro %}

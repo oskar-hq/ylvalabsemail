@@ -338,6 +338,37 @@ class AgentTest(unittest.TestCase):
         self.assertIn("In den gewählten Nischen (Werbeagentur) gibt es auf der Karte gerade keine neuen Betriebe", run["message"])
         self.assertIn("1 warten in anderen Nischen", run["message"])
 
+    def test_reports_for_manual_and_automatic_runs(self):
+        from datetime import datetime
+        from app import reports
+        for i in range(4):
+            self.add(f"R{i}", website=f"https://r{i}.example.org")
+        with mock.patch.object(ai, "available", return_value=False):
+            run = self._run(check=4, drafts=0, budget=0)
+        rep = reports.last_manual(self.c)
+        self.assertEqual(rep["id"], run["id"])
+        self.assertEqual((rep["bewertet"], rep["ausgewaehlt"], len(rep["picked"])), (4, 4, 4))
+        self.assertEqual(rep["picked"][0]["state"], "pruefen")
+        self.assertTrue(rep["picked"][0]["reason"])
+        self.assertEqual(reports.manual_days(self.c)[0]["label"], "Heute")
+        # Tagesbericht: fertig nach dem letzten Zeitfenster, über Mitternacht erst um 0 Uhr
+        d = datetime(2026, 10, 28).date()  # Mittwoch
+        day = {"enabled": True, "days": [2], "start": "08:00", "end": "18:00"}
+        self.assertEqual(reports.release_at([day], d), datetime(2026, 10, 28, 18, 0))
+        night = {"enabled": True, "days": [2], "start": "22:00", "end": "06:00"}
+        self.assertEqual(reports.release_at([day, night], d), datetime(2026, 10, 29, 0, 0))
+        self.c.execute("UPDATE runs SET started_by='Automatik · kostenlos', started_at=? WHERE id=?",
+                       ("2026-10-28T10:00:00", run["id"]))
+        self.c.commit()
+        schedule.save(self.c, "frei", {**schedule.DEFAULTS["frei"], **day})
+        before = reports.auto_day(self.c, d, list(schedule.load(self.c).values()), datetime(2026, 10, 28, 12, 0))
+        after = reports.auto_day(self.c, d, list(schedule.load(self.c).values()), datetime(2026, 10, 28, 18, 1))
+        self.assertEqual((before["released"], after["released"], after["laeufe"], after["ausgewaehlt"]), (False, True, 1, 4))
+        told = []
+        reports.notify_released(self.c, lambda c, title, body, url: told.append((title, url)), datetime(2026, 10, 28, 18, 1))
+        reports.notify_released(self.c, lambda c, title, body, url: told.append((title, url)), datetime(2026, 10, 28, 19, 0))
+        self.assertEqual(told, [("Tagesbericht der automatischen Suche (Heute)", "/leads/berichte?art=auto")])
+
     def test_no_drafts_without_key(self):
         with mock.patch.object(ai, "available", return_value=False):
             run_id, err = agent.start_run({"bewerten": 1, "entwuerfe": 1, "budget_eur": 1}, "t")
@@ -1425,6 +1456,9 @@ class ViewsTest(unittest.TestCase):
             c.commit()
             return cur.lastrowid
         a, b, d = add("Aal"), add("Bach", owner="hamza"), add("Dorn", status="aussortiert", rejected_by="team")
+        for art in ("hand", "auto"):
+            self.assertEqual(self.client.get(f"/leads/berichte?art={art}").status_code, 200)
+        self.assertIn("Berichte", self.client.get("/leads/suche").get_data(as_text=True))
         html = self.client.get("/leads?tab=pruefen").get_data(as_text=True)
         self.assertIn(f'class="lead-sel" value="{a}"', html)
         self.assertIn("Durchsehen →", html)

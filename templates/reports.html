@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_report.html" import report_body %}
+{% block title %}Berichte · Leads{% endblock %}
+{% macro when(iso) %}{% if iso %}{{ iso[11:16] }} Uhr{% endif %}{% endmacro %}
+{% block content %}
+<main class="page narrow">
+  <a class="back" href="{{ url_for('leads.search') }}">‹ Neue Betriebe finden</a>
+  <h1 class="title">Berichte</h1>
+  <div class="segmented" role="tablist" aria-label="Welche Läufe">
+    <a href="{{ url_for('leads.run_reports', art='hand') }}" class="{{ 'on' if art == 'hand' }}" role="tab" aria-selected="{{ 'true' if art == 'hand' else 'false' }}">Von Hand</a>
+    <a href="{{ url_for('leads.run_reports', art='auto') }}" class="{{ 'on' if art == 'auto' }}" role="tab" aria-selected="{{ 'true' if art == 'auto' else 'false' }}">Automatisch</a>
+  </div>
+  <p class="muted small">{% if art == 'hand' %}Jeder Lauf, den ihr von Hand gestartet habt, eine Woche zurück. Ausgewählte Betriebe warten unter „Zu prüfen“, bis ihr Ja oder Nein sagt.{% else %}Ein Bericht pro Tag, eine Woche zurück. Er ist fertig, wenn das letzte Zeitfenster des Tages vorbei ist; läuft die Suche über Mitternacht oder rund um die Uhr, um 0 Uhr.{% endif %}</p>
+
+  {% for d in days %}
+  <section class="rep-day">
+    <h2 class="rep-day-head">{{ d.label }} <span class="muted small">{{ d.date[8:10] }}.{{ d.date[5:7] }}.</span></h2>
+    {% if art == 'hand' %}
+      {% for r in d.runs %}
+      <article class="rep-card">
+        <div class="rep-head"><b>{{ when(r.started_at) }}</b><span class="muted small">{{ r.by or 'Lauf' }}{% if r.status != 'fertig' %} · {{ {'gestoppt': 'gestoppt', 'fehler': 'mit Fehler', 'abgebrochen': 'abgebrochen'}.get(r.status, r.status) }}{% endif %}</span></div>
+        {% if r.status != 'fertig' and r.message %}<p class="note small {{ 'err' if r.status == 'fehler' else 'warn' }}">{{ r.message }}</p>
+        {% elif not r.bewertet and r.message %}<p class="note small">{{ r.message }}</p>{% endif %}
+        {{ report_body(r) }}
+      </article>
+      {% endfor %}
+    {% else %}
+      <article class="rep-card">
+      {% if not d.released %}
+        <p class="muted">Der Bericht für heute kommt {% if d.ready_at[11:16] == '00:00' %}um 0 Uhr{% else %}um {{ d.ready_at[11:16] }} Uhr{% endif %}, wenn die automatische Suche für heute fertig ist.{% if d.laeufe %} Bisher {{ d.laeufe }} {{ 'Lauf' if d.laeufe == 1 else 'Läufe' }}.{% endif %}</p>
+      {% else %}
+        <div class="rep-head"><b>{{ d.laeufe }} {{ 'Lauf' if d.laeufe == 1 else 'Läufe' }}</b>{% if d.fehler %}<span class="pill st-mittel">{{ d.fehler }} mit Fehler</span>{% endif %}</div>
+        {{ report_body(d) }}
+      {% endif %}
+      </article>
+    {% endif %}
+  </section>
+  {% else %}
+  <p class="muted empty">{% if art == 'hand' %}In den letzten sieben Tagen gab es keinen Lauf von Hand.{% else %}In den letzten sieben Tagen lief die automatische Suche nicht. <a href="{{ url_for('leads.automatic') }}">Einschalten</a>{% endif %}</p>
+  {% endfor %}
+</main>
+{% endblock %}
