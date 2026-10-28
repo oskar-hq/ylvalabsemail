@@ -319,6 +319,16 @@ class AgentTest(unittest.TestCase):
         plan = {"weights": {"werbeagentur": 100}, "taken": {}}
         self.assertEqual({agent.next_candidate(self.c, plan) for _ in range(20)}, {a})
 
+    def test_run_says_why_nothing_was_rated(self):
+        self.add("Tischler", website="https://t.example.org")
+        niches.save(self.c, {"werbeagentur": 100}, "manuell")
+        with mock.patch.object(ai, "available", return_value=False), \
+                mock.patch.object(finder, "search_osm", return_value=[]):
+            run = self._run(check=5, drafts=0, budget=0)
+        self.assertEqual(run["status"], "fertig")
+        self.assertIn("In den gewählten Nischen (Werbeagentur) gibt es auf der Karte gerade keine neuen Betriebe", run["message"])
+        self.assertIn("1 warten in anderen Nischen", run["message"])
+
     def test_no_drafts_without_key(self):
         with mock.patch.object(ai, "available", return_value=False):
             run_id, err = agent.start_run({"bewerten": 1, "entwuerfe": 1, "budget_eur": 1}, "t")

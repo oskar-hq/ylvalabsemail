@@ -751,6 +751,12 @@ def _execute_run(c, run_id, run, p):
             _progress(f"Schritt 2/3 · Bewertet {i + 1}/{check}: {leaddb.get_lead(c, lead_id)['name']} (kostenlos)")
             counts["bewertet"] += 1
             counts["passen"] += stage_score(c, lead_id, learned)
+        if check and not counts["bewertet"]:  # nichts zu bewerten: sagen, woran es liegt
+            others = c.execute("SELECT COUNT(*) FROM leads WHERE status='kandidat'").fetchone()[0]
+            labels = ", ".join(niches.NICHES[k]["label"] for k in list(weights)[:4]) + (" …" if len(weights) > 4 else "")
+            message = (f"In den gewählten Nischen ({labels}) gibt es auf der Karte gerade keine neuen Betriebe"
+                       + (f"; {others} warten in anderen Nischen" if others else "") + ". Agenturen und Büros stehen "
+                       "oft nicht auf der Karte: „Mit Claude recherchieren“ findet sie über das Web.")
         counts["zu_pruefen"] = c.execute("SELECT COUNT(*) FROM leads WHERE status='passt' AND stage IS NULL "
                                          "AND interest IS NULL AND IFNULL(rejected_by,'')=''").fetchone()[0]
 
