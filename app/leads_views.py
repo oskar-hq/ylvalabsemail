@@ -8,7 +8,7 @@ from datetime import datetime
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from . import agent, ai, claude_research, crm, emailbuild, known, leaddb, mailbox, niches, pixel, schedule, scoring, team, webpush
+from . import agent, ai, claude_research, crm, emailbuild, known, leaddb, mailbox, niches, pixel, reports, schedule, scoring, team, webpush
 from .main import DB_PATH, ROOT, SETTINGS, login_required
 
 bp = Blueprint("leads", __name__)
@@ -239,9 +239,21 @@ def search():
     waiting_mine = db().execute(f"SELECT COUNT(*) FROM leads WHERE status='kandidat' AND niche IN ({marks})",
                                 list(weights)).fetchone()[0] if weights else 0
     return render_template("search.html", account=g.account, st=status_payload(), rd=run_defaults(),
-                           waiting_mine=waiting_mine,
+                           waiting_mine=waiting_mine, report=reports.last_manual(db()),
                            sched=schedule_view(), niche_weights=weights, niche_info=niches.NICHES, known_total=known.count(db()),
                            niche_summary=niches.describe(weights), demo=SETTINGS["DEMO_MODE"])
+
+
+@bp.get("/leads/berichte")
+@login_required
+def run_reports():
+    """Berichte: jeder Lauf von Hand und der Tagesbericht der automatischen Suche, eine Woche zurück."""
+    art = request.args.get("art", "hand")
+    if art not in ("hand", "auto"):
+        art = "hand"
+    days = reports.manual_days(db()) if art == "hand" else reports.auto_days(db())
+    return render_template("reports.html", account=g.account, art=art, days=days, sched=schedule_view(),
+                           st=status_payload(), demo=SETTINGS["DEMO_MODE"])
 
 
 @bp.get("/leads/schon-gefunden")
@@ -348,6 +360,7 @@ def automatic():
                            min_every=schedule.MIN_EVERY, st=status_payload(), admin=is_admin(g.account),
                            today_eur=money(leaddb._sum(db(), "at >= ?", (datetime.now().strftime("%Y-%m-%d"),))["usd"]),
                            offline=list(reversed((leaddb.kv_get(db(), "offline_gaps", []) or [])[-3:])),
+                           day_report=next((d for d in reports.auto_days(db()) if d["released"]), None),
                            demo=SETTINGS["DEMO_MODE"])
 
 

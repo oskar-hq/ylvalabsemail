@@ -22,6 +22,7 @@ PAGES = [
     ("Mit Claude recherchieren", "Leads", "leads.claude", {}, "csv prompt import recherche"),
     ("Betriebe prüfen", "Leads", "leads.review", {}, "wischen swipe gut nicht gut bewerten"),
     ("So wird bewertet", "Leads", "leads.rules", {}, "regeln punkte bewertung"),
+    ("Berichte", "Leads · Läufe", "leads.run_reports", {}, "bericht historie verlauf lauf woche tagesbericht zusammenfassung"),
     ("Schon gefunden", "Leads · Merkliste", "leads.known_list", {}, "merkliste doppelt duplikate bekannt gefunden liste"),
     ("Gehirn und Vorlage", "Leads", "leads.brain", {}, "vorlage template text nachricht wen wir suchen"),
     ("Meine Vorlage", "Profil", "team.template_editor", {}, "vorlage template design vorschau text bearbeiten"),

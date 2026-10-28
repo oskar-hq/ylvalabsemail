@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_report.html" import report_body %}
 {% block title %}Neue Betriebe finden · Leads{% endblock %}
 {% block content %}
 <main class="page search-page">
@@ -11,7 +12,19 @@
     <div class="niche-tags">{% for k, w in niche_weights|dictsort(by='value', reverse=true) %}{% if loop.index <= 12 %}<span>{{ niche_info[k].label }} <i>{{ w }} %</i></span>{% endif %}{% endfor %}{% if niche_weights|length > 12 %}<span>+{{ niche_weights|length - 12 }} weitere</span>{% endif %}</div>
   </div>
   {% include "_leads_bar.html" %}
+  {% if report and not st.run %}
+  <section class="rep-card rep-last">
+    <div class="rep-head"><b>Letzter Lauf</b><span class="muted small">{{ report.started_at|kurzdatum }}{% if report.by %} · {{ report.by }}{% endif %}</span>
+      <a class="small" href="{{ url_for('leads.run_reports', art='hand') }}">Alle der Woche →</a></div>
+    {% if report.status != 'fertig' and report.message %}<p class="note small {{ 'err' if report.status == 'fehler' else 'warn' }}">{{ report.message }}</p>
+    {% elif not report.bewertet and report.message %}<p class="note small">{{ report.message }}</p>{% endif %}
+    {{ report_body(report, 8) }}
+    {% if report.picked|selectattr('state', 'equalto', 'pruefen')|list %}<a class="btn primary small" href="{{ url_for('leads.review') }}">Jetzt durchsehen →</a>{% endif %}
+  </section>
+  {% endif %}
   <ul class="menu" style="margin-top:28px">
+    <li><a href="{{ url_for('leads.run_reports') }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M8 13h8"/><path d="M8 17h5"/></svg></span>
+      <span class="txt"><b>Berichte</b><span>Jeder Lauf von Hand und der Tagesbericht der Automatik, eine Woche zurück</span></span><span class="chev">›</span></a></li>
     <li><a href="{{ url_for('leads.automatic') }}"><span class="ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg></span>
       <span class="txt"><b>Automatisch suchen</b><span>Kostenlos: {{ sched.frei.summary }} · KI: {{ sched.ki.summary }}</span></span>
       {% if sched.frei.cfg.enabled or sched.ki.cfg.enabled %}<span class="flag ok"><i></i>an</span>{% endif %}<span class="chev">›</span></a></li>

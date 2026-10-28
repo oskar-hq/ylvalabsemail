@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% block title %}Automatisch suchen · Leads{% endblock %}
 {% macro when(iso) %}{% if iso %}{{ iso[8:10] }}.{{ iso[5:7] }}. {{ iso[11:16] }} Uhr{% endif %}{% endmacro %}
+{% from "_report.html" import report_body %}
 {% block content %}
 <main class="page narrow">
   <a class="back" href="{{ url_for('leads.search') }}">‹ Neue Betriebe finden</a>
@@ -12,6 +13,14 @@
   {% if offline %}<div class="note warn small"><b>Der Server war zwischendurch aus</b> (oder der Rechner, auf dem er läuft, war ausgeschaltet oder im Ruhezustand). In dieser Zeit konnte kein Lauf starten:
     <ul class="offline-list">{% for g in offline %}<li>{{ when(g.from) }} bis {{ when(g.to) }}</li>{% endfor %}</ul>
     Damit der Zeitplan immer läuft, muss die App auf einem Rechner laufen, der dauerhaft an ist (z. B. ein kleiner Server oder ein VPS), nicht auf einem Laptop.</div>{% endif %}
+
+  {% if day_report %}
+  <section class="rep-card">
+    <div class="rep-head"><b>Tagesbericht · {{ day_report.label }}</b><span class="muted small">{{ day_report.laeufe }} {{ 'Lauf' if day_report.laeufe == 1 else 'Läufe' }}</span>
+      <a class="small" href="{{ url_for('leads.run_reports', art='auto') }}">Die ganze Woche →</a></div>
+    {{ report_body(day_report, 6) }}
+  </section>
+  {% else %}<p class="small"><a href="{{ url_for('leads.run_reports', art='auto') }}">Tagesberichte der automatischen Suche →</a></p>{% endif %}
 
   <div class="niche-card">
     <div class="niche-card-head"><span><b>Nischen</b> <span class="muted small">· für beide automatischen Suchen · {{ niche_weights|length }} gewählt{% if not niche_own %} · wie die manuelle Suche{% endif %}</span></span>
