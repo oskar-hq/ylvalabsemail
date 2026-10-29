@@ -190,8 +190,18 @@ def parse(raw):
 
 def import_csv(conn, raw, author, center):
     """Betriebe als Kandidaten anlegen. Gibt {neu, uebersprungen: [(zeile, grund)]} zurück."""
+    return import_rows(conn, parse(raw), author, center)
+
+
+SOURCES = {"claude": ("claude:", "Claude-Recherche", "Aus der Claude-Recherche übernommen (CSV)."),
+           "web": ("web:", "Websuche", "Mit der Websuche gefunden.")}
+
+
+def import_rows(conn, rows, author, center, source="claude"):
+    """rows: [(zeile, daten)] mit den Feldern aus COLUMNS. Auch für die Websuche (source="web")."""
+    prefix, label, note = SOURCES[source]
     created, skipped = 0, []
-    for line, d in parse(raw):
+    for line, d in rows:
         name = d.get("name", "")
         email = d.get("email", "").lower()
         website = crm.website_url(d.get("website", ""))
@@ -200,8 +210,9 @@ def import_csv(conn, raw, author, center):
             continue
         if email and not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", email):
             email = ""
-        if not website and not email:
-            skipped.append((line, f"{name}: weder Webseite noch E-Mail"))
+        social = {k: u for k in ("instagram", "linkedin") if (u := finder.social_url(k, d.get(k, "")))}
+        if not website and not email and not social:
+            skipped.append((line, f"{name}: weder Webseite noch E-Mail noch Instagram/LinkedIn"))
             continue
         dup = crm.find_duplicate(conn, name, email, website)
         if dup:
@@ -225,7 +236,7 @@ def import_csv(conn, raw, author, center):
         distance = round(finder.haversine_km(center[0], center[1], lat, lon), 1) if lat is not None else None
         size = _num(d.get("groesse", ""))
         info = {"import": {
-            "quelle": "Claude-Recherche",
+            "quelle": label,
             "anrede": d.get("anrede", ""),
             "zeitfresser": [z.strip() for z in re.split(r"\|", d.get("zeitfresser", "")) if z.strip()][:3],
             "aufhaenger": d.get("aufhaenger", ""),
@@ -236,11 +247,10 @@ def import_csv(conn, raw, author, center):
             "taetigkeit": d.get("taetigkeit", ""),
             "url": d.get("quelle", ""),
         }}
-        social = {k: u for k in ("instagram", "linkedin") if (u := finder.social_url(k, d.get(k, "")))}
         if social:
             info["social"] = social
         now = leaddb.now()
-        source_id = "claude:" + hashlib.sha1(f"{name}|{email}|{website}".lower().encode()).hexdigest()[:16]
+        source_id = prefix + hashlib.sha1(f"{name}|{email}|{website}".lower().encode()).hexdigest()[:16]
         cur = conn.execute(
             "INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, category_label,"
             " niche, address, city, lat, lon, distance_km, website, email, phone, contact_name, status, research)"
@@ -253,8 +263,8 @@ def import_csv(conn, raw, author, center):
         if not cur.rowcount:
             skipped.append((line, f"{name}: gibt es schon"))
             continue
-        known.remember(conn, name, city, website, email, source_id, "claude", author, cur.lastrowid, commit=False)
+        known.remember(conn, name, city, website, email, source_id, source, author, cur.lastrowid, commit=False)
         conn.commit()
-        leaddb.add_event(conn, cur.lastrowid, "status", "Aus der Claude-Recherche übernommen (CSV).", author=author)
+        leaddb.add_event(conn, cur.lastrowid, "status", note, author=author)
         created += 1
     return {"neu": created, "uebersprungen": skipped}

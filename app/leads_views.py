@@ -8,7 +8,7 @@ from datetime import datetime
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from . import agent, ai, claude_research, crm, emailbuild, known, leaddb, mailbox, niches, pixel, reports, schedule, scoring, team, webpush
+from . import agent, ai, claude_research, crm, emailbuild, known, leaddb, mailbox, niches, pixel, reports, schedule, scoring, team, websearch, webpush
 from .main import DB_PATH, ROOT, SETTINGS, login_required
 
 bp = Blueprint("leads", __name__)
@@ -401,12 +401,17 @@ def run():
                   "top": max(0, min(200, int(request.form.get("top", my("LEADS_RUN_TOP"))))),
                   "entwuerfe": max(0, min(50, int(request.form.get("entwuerfe", 0)))),
                   "budget_eur": max(0.0, min(100.0, float(request.form.get("budget_eur", "0").replace(",", ".") or 0))),
-                  "suchen": request.form.get("suchen") == "1",
+                  "suchen": request.form.get("suchen") == "1", "karte": request.form.get("karte") == "1",
+                  "web_anzahl": max(0, min(websearch.MAX_FIRMS, int(request.form.get("web_anzahl") or 0)))
+                  if request.form.get("web") == "1" else 0,
+                  "web_kanaele": websearch.parse_channels(request.form.getlist("web_kanaele")),
                   "erinnerungen": request.form.get("erinnerungen") == "1", "person": me()}
     except ValueError:
         return jsonify(error="Bitte Zahlen eingeben."), 400
+    if not params["karte"] and not params["web_anzahl"] and not params["bewerten"]:
+        return jsonify(error="Bitte wählen, wo gesucht wird: Karte oder Websuche."), 400
     own = agent.person_budget_left_eur(db(), me())
-    if params["entwuerfe"] and own is not None and own <= 0:
+    if (params["entwuerfe"] or params["web_anzahl"]) and own is not None and own <= 0:
         return jsonify(error="Dein eigenes KI-Budget für diesen Monat ist aufgebraucht (Mein Profil)."), 400
     run_id, error = agent.start_run(params, who())
     if error:

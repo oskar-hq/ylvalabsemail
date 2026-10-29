@@ -24,7 +24,7 @@ CREATE INDEX IF NOT EXISTS known_lead ON known_firms(lead_id);
 """
 LEGAL = re.compile(r"\b(gmbh|mbh|ug|haftungsbeschränkt|ag|kg|ohg|gbr|ek|ev|co|inh|inhaber|und|partner|"
                    r"partnerschaft)\b")
-SOURCES = {"osm": "Kartensuche", "claude": "Claude-Recherche", "hand": "Von Hand", "import": "CSV-Import"}
+SOURCES = {"osm": "Kartensuche", "claude": "Claude-Recherche", "web": "Websuche", "hand": "Von Hand", "import": "CSV-Import"}
 
 
 def host_of(website):

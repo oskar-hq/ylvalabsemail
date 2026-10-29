@@ -33,7 +33,7 @@
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
     <div class="auto-head">
       <div><h2>{{ s.label }}</h2>
-        <span class="muted small">{% if kind == 'frei' %}Suchen und nach Regeln bewerten · kostet nichts{% else %}Entwürfe und Erinnerungen von der KI · kostet{% endif %}</span></div>
+        <span class="muted small">{% if kind == 'frei' %}Suchen und nach Regeln bewerten · kostet nichts{% else %}Websuche, Entwürfe und Erinnerungen von der KI · kostet{% endif %}</span></div>
       <label class="switch-big"><input type="checkbox" name="enabled" value="1" {{ 'checked' if c.enabled }} {{ 'disabled' if not admin }}><span></span><em class="sr">Eingeschaltet</em></label>
     </div>
     <p class="auto-state small">{% if c.enabled %}<i class="dot-on"></i>{{ s.summary }}{% if s.next %} · nächster Lauf {{ when(s.next) }}{% endif %}{% else %}<i class="dot-off"></i>Aus{% endif %}{% if s.last %} · zuletzt {{ when(s.last) }}{% endif %}</p>
@@ -60,6 +60,11 @@
       <label class="field"><span class="sub">Höchstens pro Tag (€)</span><input type="text" name="tag_max_eur" value="{{ '%.2f'|format(c.tag_max_eur)|replace('.', ',') }}" inputmode="decimal" {{ 'disabled' if not admin }}></label>
       <label class="check field"><input type="checkbox" name="erinnerungen" value="1" {{ 'checked' if c.erinnerungen }} {{ 'disabled' if not admin }}> Fällige Erinnerungen schreiben</label>
     </div>
+    <div class="field web-auto"><span class="sub">Websuche pro Lauf <em>findet auch Betriebe, die nicht auf der Karte stehen</em></span>
+      <div class="web-ch">
+        <label class="unit"><input type="number" name="web_anzahl" min="0" max="30" value="{{ c.web_anzahl or 0 }}" inputmode="numeric" {{ 'disabled' if not admin }}><em>Betriebe (0 = aus)</em></label>
+        {% for key, label in [('webseiten', 'Webseiten'), ('instagram', 'Instagram'), ('linkedin', 'LinkedIn')] %}<label class="check"><input type="checkbox" name="web_kanaele" value="{{ key }}" {{ 'checked' if key in (c.web_kanaele or []) }} {{ 'disabled' if not admin }}> {{ label }}</label>{% endfor %}
+      </div></div>
     <p class="hint">Heute schon {{ '%.2f'|format(today_eur)|replace('.', ',') }} € für die KI ausgegeben. Ist die Tagesgrenze erreicht, pausiert die Suche mit KI bis morgen. Das Monatsbudget ({{ '%.0f'|format(st.cap_eur) if st.cap_eur else 'keins' }}{{ ' €' if st.cap_eur }}) gilt immer.{% if not st.ai %} <b>Ohne KI-Schlüssel läuft diese Suche nicht.</b>{% endif %}</p>
     {% else %}
     <p class="hint">Die Kartensuche (OpenStreetMap) läuft höchstens so oft wie oben eingestellt, dazwischen werden die schon gefundenen Betriebe weiter bewertet. Bis über Mitternacht geht auch: z. B. 22:00 bis 06:00.</p>

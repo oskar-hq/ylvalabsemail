@@ -146,13 +146,31 @@ def parse_elements(elements, lat, lon, radius_km=None, keys=None):
     return found
 
 
+# Weitere öffentliche Overpass-Server: Ist der eingestellte überlastet (504, 429, Zeitüberschreitung), fragt die
+# Suche den nächsten. Alle liefern dieselben OpenStreetMap-Daten.
+OVERPASS_MIRRORS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter",
+                    "https://overpass.kumi.systems/api/interpreter"]
+
+
 def search_osm(lat, lon, radius_km, overpass_url, region="", keys=None):
     """Mit Region (z. B. DE-SH) zählt nur das Bundesland, Entfernung dient dann nur der Anzeige."""
     data = urllib.parse.urlencode({"data": overpass_query(lat, lon, radius_km, region, keys)}).encode()
-    req = urllib.request.Request(overpass_url, data=data, headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=330) as resp:
-        payload = json.load(resp)
-    return parse_elements(payload.get("elements", []), lat, lon, None if region else radius_km, keys)
+    errors = []
+    for url in dict.fromkeys([overpass_url, *OVERPASS_MIRRORS]):
+        req = urllib.request.Request(url, data=data, headers={"User-Agent": USER_AGENT})
+        try:
+            with urllib.request.urlopen(req, timeout=330) as resp:
+                payload = json.load(resp)
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (429, 502, 503, 504):
+                raise
+            errors.append(f"{urllib.parse.urlparse(url).netloc}: {exc.code}")
+            continue
+        except (urllib.error.URLError, TimeoutError, socket.timeout, ValueError) as exc:
+            errors.append(f"{urllib.parse.urlparse(url).netloc}: {getattr(exc, 'reason', exc)}")
+            continue
+        return parse_elements(payload.get("elements", []), lat, lon, None if region else radius_km, keys)
+    raise OSError("alle Kartenserver überlastet oder nicht erreichbar (" + "; ".join(errors) + ")")
 
 # ---------------------------------------------------------------- Webseite lesen
 

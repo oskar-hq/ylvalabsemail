@@ -335,7 +335,7 @@ class AgentTest(unittest.TestCase):
                 mock.patch.object(finder, "search_osm", return_value=[]):
             run = self._run(check=5, drafts=0, budget=0)
         self.assertEqual(run["status"], "fertig")
-        self.assertIn("In den gewählten Nischen (Werbeagentur) gibt es auf der Karte gerade keine neuen Betriebe", run["message"])
+        self.assertIn("In den gewählten Nischen (Werbeagentur) gibt es gerade keine neuen Betriebe", run["message"])
         self.assertIn("1 warten in anderen Nischen", run["message"])
 
     def test_reports_for_manual_and_automatic_runs(self):
@@ -851,6 +851,111 @@ class ClaudeResearchTest(unittest.TestCase):
         self.assertEqual(claude_research.import_csv(self.c, text, "t", (54.66, 9.93))["neu"], 1)
         with self.assertRaises(claude_research.CsvError):
             claude_research.import_csv(self.c, "a;b\n1;2\n", "t", (54.66, 9.93))
+
+
+class WebSearchTest(unittest.TestCase):
+    def setUp(self):
+        self.db_path = os.path.join(tempfile.mkdtemp(), "w.db")
+        self.c = leaddb.connect(self.db_path)
+        agent.CFG["db_path"] = self.db_path
+
+    def test_overpass_falls_back_to_other_servers(self):
+        import urllib.error
+        calls = []
+        class Resp(io.BytesIO):
+            def __enter__(self):
+                return self
+            def __exit__(self, *a):
+                return False
+        def fake(req, timeout=0):
+            calls.append(req.full_url)
+            if len(calls) == 1:
+                raise urllib.error.HTTPError(req.full_url, 504, "Gateway Timeout", {}, None)
+            return Resp(b'{"elements": []}')
+        with mock.patch.object(finder.urllib.request, "urlopen", side_effect=fake):
+            self.assertEqual(finder.search_osm(54.6, 9.9, 50, "https://eigener.example/api/interpreter", "DE-SH",
+                                               ["werbeagentur"]), [])
+        self.assertEqual(calls[:2], ["https://eigener.example/api/interpreter", finder.OVERPASS_MIRRORS[0]])
+        with mock.patch.object(finder.urllib.request, "urlopen",
+                               side_effect=urllib.error.HTTPError("u", 504, "x", {}, None)):
+            with self.assertRaises(OSError):
+                finder.search_osm(54.6, 9.9, 50, "https://eigener.example/api/interpreter", "DE-SH", ["werbeagentur"])
+
+    def test_search_firms_handles_pause_and_reports(self):
+        from types import SimpleNamespace as NS
+        usage = NS(input_tokens=1000, output_tokens=200, cache_creation_input_tokens=0, cache_read_input_tokens=0,
+                   server_tool_use=NS(web_search_requests=3))
+        paused = NS(stop_reason="pause_turn", content=[NS(type="text", text="…")], usage=usage, model="claude-opus-5-5")
+        done = NS(stop_reason="tool_use", usage=usage, model="claude-opus-5-5",
+                  content=[NS(type="tool_use", name="betriebe_melden", input={"betriebe": [{"name": "Nordlicht"}]})])
+        fake = mock.Mock()
+        fake.beta.messages.create.side_effect = [paused, done]
+        seen = []
+        with mock.patch.object(ai, "client", return_value=fake), \
+                mock.patch.object(ai, "on_usage", lambda *a: seen.append(a)):
+            firms = ai.search_firms("finde", ["instagram"], max_searches=5)
+        self.assertEqual(firms, [{"name": "Nordlicht"}])
+        kwargs = fake.beta.messages.create.call_args_list[0].kwargs
+        self.assertEqual(kwargs["tools"][0]["allowed_domains"], ["instagram.com"])
+        self.assertEqual(kwargs["tools"][0]["type"], "web_search_20260209")
+        self.assertEqual(len(fake.beta.messages.create.call_args_list[1].kwargs["messages"]), 2)  # Pause fortgesetzt
+        self.assertAlmostEqual(seen[0][3], ai.cost_usd("claude-opus-5-5", {"input": 1000, "output": 200,
+                                                                          "cache_write": 0, "cache_read": 0}) + 0.03)
+
+    def test_find_creates_candidates_also_without_website(self):
+        from app import websearch
+        firms = [{"name": "Nordlicht Kreativ", "nische": "werbeagentur", "kategorie": "Werbeagentur", "ort": "Kiel",
+                  "plz": "24103", "strasse": "", "webseite": "", "instagram": "https://www.instagram.com/nordlicht.kreativ/",
+                  "linkedin": "", "email": "", "telefon": "", "ansprechperson": "", "mitarbeitende": "8",
+                  "taetigkeit": "Kampagnen für Händler", "begruendung": "Kleines Team mit viel Kundenkontakt",
+                  "quelle": "https://www.instagram.com/nordlicht.kreativ/"},
+                 {"name": "Ohne alles", "nische": "werbeagentur", "kategorie": "", "ort": "Kiel", "plz": "", "strasse": "",
+                  "webseite": "", "instagram": "", "linkedin": "", "email": "", "telefon": "", "ansprechperson": "",
+                  "mitarbeitende": "", "taetigkeit": "", "begruendung": "", "quelle": ""}]
+        settings = {"LEADS_REGION": "DE-SH", "LEADS_CENTER": (54.66, 9.93), "LEADS_RADIUS_KM": 50}
+        with mock.patch.object(ai, "search_firms", return_value=firms) as sf:
+            new, reported, skipped = websearch.find(self.c, settings, {"werbeagentur": 100}, ["instagram"], 10, "Finn",
+                                                    (54.66, 9.93))
+        self.assertIn("Werbeagentur", sf.call_args.args[0])
+        self.assertEqual((new, reported, skipped), (1, 2, 1))
+        lead = dict(self.c.execute("SELECT * FROM leads WHERE source_id LIKE 'web:%'").fetchone())
+        research = json.loads(lead["research"])
+        self.assertEqual((lead["niche"], lead["status"]), ("werbeagentur", "kandidat"))
+        self.assertEqual(research["social"], {"instagram": "https://www.instagram.com/nordlicht.kreativ/"})
+        # Bewertung: ohne Webseite und E-Mail kein Ausschluss, gewählte Nische zählt
+        niches.save(self.c, {"werbeagentur": 100}, "manuell")
+        agent.stage_score(self.c, lead["id"], {})
+        rated = leaddb.get_lead(self.c, lead["id"])
+        reasons = [r for _, r in rated["research"]["signale"]]
+        self.assertNotIn("Webseite nicht lesbar", rated["research"]["ko"])
+        self.assertNotIn("Keine E-Mail-Adresse gefunden", rated["research"]["ko"])
+        self.assertIn("Gehört zu euren gewählten Nischen", reasons)
+        self.assertIn("Keine E-Mail, Kontakt über Instagram", reasons)
+
+    def test_run_with_web_search_survives_map_outage(self):
+        self.addCleanup(agent.CFG["settings"].__setitem__, "LEADS_WORKER", agent.CFG["settings"]["LEADS_WORKER"])
+        agent.CFG["settings"]["LEADS_WORKER"] = True
+        niches.save(self.c, {"werbeagentur": 100}, "manuell")
+        firm = {"name": "Agentur Möwe", "nische": "werbeagentur", "kategorie": "Werbeagentur", "ort": "Flensburg",
+                "plz": "", "strasse": "", "webseite": "https://moewe.example", "instagram": "", "linkedin": "",
+                "email": "hallo@moewe.example", "telefon": "", "ansprechperson": "", "mitarbeitende": "",
+                "taetigkeit": "", "begruendung": "", "quelle": ""}
+        with mock.patch.object(ai, "available", return_value=True):
+            self.assertIn("mindestens eins", agent.start_run({"bewerten": 1, "web_anzahl": 5, "web_kanaele": []}, "t")[1])
+            run_id, err = agent.start_run({"bewerten": 5, "web_anzahl": 5, "web_kanaele": ["webseiten"], "suchen": True,
+                                           "budget_eur": 1.0}, "Finn Adams")
+            self.assertIsNone(err)
+            with mock.patch.object(finder, "search_osm", side_effect=OSError("504")), \
+                    mock.patch.object(ai, "search_firms", return_value=[firm]), \
+                    mock.patch.object(finder, "research_website", return_value={"pages": [], "emails": [], "links": [],
+                                                                               "errors": ["x"]}):
+                agent.execute_run(self.c, run_id)
+        run = self.c.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
+        counts = json.loads(run["counts"])
+        self.assertEqual(run["status"], "fertig")
+        self.assertEqual((counts["web_neu"], counts["bewertet"]), (1, 1))
+        self.assertIn("Bewertet wurde, was schon gefunden war", run["message"])
+        self.assertIn("Websuche: 1 neu von 1 gemeldet", run["message"])
 
 
 class SocialTest(unittest.TestCase):
