@@ -11,7 +11,16 @@
       <label><span class="sub">Betriebe bewerten <em>kostenlos</em></span><input type="number" name="bewerten" min="0" max="1000" value="{{ rd.check }}" inputmode="numeric"></label>
       <label><span class="sub">Entwürfe schreiben <em>KI, optional</em></span><input type="number" name="entwuerfe" min="0" max="50" value="{{ rd.drafts if st.ai else 0 }}" inputmode="numeric" {{ 'disabled' if not st.ai }}></label>
       <label><span class="sub">Budget für die KI</span><span class="unit"><input type="number" name="budget_eur" min="0" max="100" step="0.05" value="{{ '%.2f'|format(rd.budget) }}" inputmode="decimal" {{ 'disabled' if not st.ai }}><em>€</em></span></label>
-      <label class="check"><input type="checkbox" name="suchen" value="1" {{ 'checked' if not st.counts.kandidaten }}> Vorher neu suchen <em class="muted">· erst neue Betriebe auf der Karte suchen, sonst werden nur schon gefundene bewertet</em></label>
+      <fieldset class="run-where"><legend class="sub">Wo suchen</legend>
+        <label class="check"><input type="checkbox" name="karte" value="1" checked> Karte (OpenStreetMap) <em class="muted">· kostenlos, vor allem Handwerk, Pflege, Läden</em></label>
+        <label class="check sub-check"><input type="checkbox" name="suchen" value="1" {{ 'checked' if not st.counts.kandidaten }}> Vorher neu auf der Karte suchen <em class="muted">· sonst werden nur schon gefundene bewertet</em></label>
+        <label class="check"><input type="checkbox" name="web" value="1" {{ 'disabled' if not st.ai }}> Websuche <em class="muted">· KI, findet auch Betriebe, die nicht auf der Karte stehen{% if not st.ai %} (braucht einen KI-Schlüssel){% endif %}</em></label>
+        <div class="web-opts" id="webOpts" hidden>
+          <span class="web-ch">{% for key, label in [('webseiten', 'Webseiten'), ('instagram', 'Instagram'), ('linkedin', 'LinkedIn')] %}<label class="check"><input type="checkbox" name="web_kanaele" value="{{ key }}" checked> {{ label }}</label>{% endfor %}</span>
+          <label><span class="sub">Betriebe finden</span><input type="number" name="web_anzahl" min="1" max="30" value="10" inputmode="numeric"></label>
+          <p class="muted small">Nur Instagram oder LinkedIn gewählt: Die Suche bleibt auf diesen Seiten. Gut für Agenturen und Büros, die eher dort als mit eigener Webseite zu finden sind. Die Profile werden verlinkt; ohne E-Mail schreibt ihr ihnen dort direkt.</p>
+        </div>
+      </fieldset>
       {% if st.ai %}<label class="check"><input type="checkbox" name="erinnerungen" value="1"> Fällige Erinnerungen schreiben{% if st.counts.nachfassen %} ({{ st.counts.nachfassen }}){% endif %} <em class="muted">· KI schreibt eine kurze Nachfass-Mail für alle, die seit einer Woche nicht geantwortet haben; verschickt wird nichts ohne Freigabe</em></label>{% endif %}
     </div>
     <p class="estimate small" id="estimate">{% if rd.estimate.eur %}KI geschätzt: <b>ca. {{ '%.2f'|format(rd.estimate.eur)|replace('.', ',') }} €</b>{% else %}Ohne KI-Kosten.{% endif %} Passende Betriebe warten danach unter <a href="{{ url_for('leads.review') }}">„Zu prüfen“</a>: Ja kommt ins CRM unter „Neu“, Nein wird aussortiert. Entwürfe schreibt die KI nur für Betriebe, die schon im CRM sind.{% if rd.estimate.ohne_entwurf == 1 %} 1 Betrieb im CRM hat noch keine Nachricht.{% elif rd.estimate.ohne_entwurf %} {{ rd.estimate.ohne_entwurf }} Betriebe im CRM haben noch keine Nachricht.{% endif %}</p>

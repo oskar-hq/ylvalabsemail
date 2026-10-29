@@ -44,13 +44,21 @@
         try {
           const e = await (await fetch('/leads/schaetzung?' + q)).json();
           const budget = parseFloat(String(runForm.budget_eur.value).replace(',', '.')) || 0;
-          est.innerHTML = (e.eur ? `KI geschätzt: <b>ca. ${euro(e.eur)}</b>` : 'Ohne KI-Kosten.')
-            + (e.entwuerfe ? ` · ${e.entwuerfe} Entwürfe` : '') + (e.erinnerungen ? ` · ${e.erinnerungen} Erinnerungen` : '')
-            + ' Nur die besten passenden Betriebe landen als „Neu“ im <a href="/crm">CRM</a>.'
-            + (e.eur > budget ? ' <span class="err">Das KI-Budget reicht dafür vermutlich nicht, der Lauf stoppt dann vorher.</span>' : '');
+          const per = JSON.parse(runForm.dataset.per || '{}');
+          const web = runForm.web?.checked && !runForm.web.disabled;
+          const eur = (e.eur || 0) + (web ? (per.websuche || 0) : 0);
+          est.innerHTML = (eur ? `KI geschätzt: <b>ca. ${euro(eur)}</b>` : 'Ohne KI-Kosten.')
+            + (web ? ' · Websuche' : '') + (e.entwuerfe ? ` · ${e.entwuerfe} Entwürfe` : '')
+            + (e.erinnerungen ? ` · ${e.erinnerungen} Erinnerungen` : '')
+            + ' Passende Betriebe warten danach unter <a href="/leads/pruefen">„Zu prüfen“</a>.'
+            + (eur > budget ? ' <span class="err">Das KI-Budget reicht dafür vermutlich nicht, der Lauf stoppt dann vorher.</span>' : '');
         } catch {}
       }, 250);
     });
+    const webBox = $('#webOpts');
+    const syncWeb = () => { if (webBox && runForm.web) webBox.hidden = !runForm.web.checked; };
+    runForm.web?.addEventListener('change', syncWeb);
+    syncWeb();
     runForm.addEventListener('submit', async (ev) => {
       ev.preventDefault();
       const btn = $('button.primary', runForm);

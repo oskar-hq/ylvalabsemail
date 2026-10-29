@@ -16,7 +16,8 @@ DEFAULTS = {
     "frei": {"enabled": False, "days": [0, 1, 2, 3, 4], "start": "08:00", "end": "18:00", "every": 60,
              "bewerten": 50, "top": 10, "neu_suchen_h": 24},
     "ki": {"enabled": False, "days": [0, 1, 2, 3, 4], "start": "09:00", "end": "17:00", "every": 120,
-           "bewerten": 0, "top": 10, "entwuerfe": 3, "budget_eur": 1.0, "erinnerungen": True, "tag_max_eur": 3.0},
+           "bewerten": 0, "top": 10, "entwuerfe": 3, "budget_eur": 1.0, "erinnerungen": True, "tag_max_eur": 3.0,
+           "web_anzahl": 0, "web_kanaele": ["webseiten", "instagram", "linkedin"]},
 }
 STARTED_BY = {"frei": "Automatik · kostenlos", "ki": "Automatik · KI"}
 
@@ -78,9 +79,13 @@ def parse(kind, form):
         cfg.update(entwuerfe=_int(form.get("entwuerfe", 0), "Entwürfe pro Lauf", 0, 50),
                    budget_eur=_eur(form.get("budget_eur", 0), "Budget pro Lauf"),
                    erinnerungen=form.get("erinnerungen") == "1",
-                   tag_max_eur=_eur(form.get("tag_max_eur", 0), "Höchstens pro Tag"))
-        if cfg["enabled"] and not (cfg["entwuerfe"] or cfg["erinnerungen"]):
-            raise ScheduleError("Entwürfe oder Erinnerungen einschalten, sonst braucht es keinen KI-Lauf.")
+                   tag_max_eur=_eur(form.get("tag_max_eur", 0), "Höchstens pro Tag"),
+                   web_anzahl=_int(form.get("web_anzahl", 0) or 0, "Websuche: Betriebe pro Lauf", 0, 30),
+                   web_kanaele=[k for k in ("webseiten", "instagram", "linkedin") if k in set(getlist("web_kanaele"))])
+        if cfg["web_anzahl"] and not cfg["web_kanaele"]:
+            raise ScheduleError("Websuche: bitte Webseiten, Instagram oder LinkedIn wählen.")
+        if cfg["enabled"] and not (cfg["entwuerfe"] or cfg["erinnerungen"] or cfg["web_anzahl"]):
+            raise ScheduleError("Websuche, Entwürfe oder Erinnerungen einschalten, sonst braucht es keinen KI-Lauf.")
     return cfg
 
 
@@ -141,8 +146,9 @@ def params_for(kind, cfg, c, now, eur):
     budget = min(cfg["budget_eur"], left)
     if budget <= 0.005:
         return None, f"Tagesgrenze von {cfg['tag_max_eur']:.2f} € erreicht."
-    return {"bewerten": cfg["bewerten"], "top": cfg["top"], "entwuerfe": cfg["entwuerfe"],
-            "budget_eur": round(budget, 2), "suchen": False, "erinnerungen": cfg["erinnerungen"], "nischen": "auto"}, None
+    return {"bewerten": cfg["bewerten"] or (cfg.get("web_anzahl") or 0), "top": cfg["top"], "entwuerfe": cfg["entwuerfe"],
+            "budget_eur": round(budget, 2), "suchen": False, "erinnerungen": cfg["erinnerungen"], "nischen": "auto",
+            "web_anzahl": cfg.get("web_anzahl") or 0, "web_kanaele": cfg.get("web_kanaele") or []}, None
 
 
 def describe(cfg):

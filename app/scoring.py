@@ -161,6 +161,11 @@ def score(lead, research, learned=None, region=None, now=None):
         add(20, f"Kernbranche {label}")
     elif branche in TIER_B:
         add(8, f"Passende Branche: {label}")
+    # Von euch gewählte Nischen (z. B. Werbeagenturen) zählen wie eine Kernbranche
+    if research.get("nische_gewaehlt") and branche not in TIER_A:
+        add(12 if branche in TIER_B else 20, "Gehört zu euren gewählten Nischen")
+    if research.get("empfehlung"):  # Claude-Recherche oder Websuche hat begründet, warum er passt
+        add(10, "Recherche: " + research["empfehlung"][:160])
 
     # Größe: 10–100 ist ideal für einen Piloten
     size = extract_size(text) or research.get("size_hint")  # sonst die Zahl aus der Claude-Recherche
@@ -223,9 +228,15 @@ def score(lead, research, learned=None, region=None, now=None):
         add(5, f"Inhaber oder Geschäftsführung im Impressum: {contact}")
     if email and is_personal(email):
         add(5, "Persönliche E-Mail-Adresse statt info@")
-    if not email:
+    social = [k for k in ("instagram", "linkedin") if (research.get("social") or {}).get(k)]
+    social_label = " und ".join({"instagram": "Instagram", "linkedin": "LinkedIn"}[k] for k in social)
+    if not email and social:
+        add(0, f"Keine E-Mail, Kontakt über {social_label}")
+    elif not email:
         ko.append("Keine E-Mail-Adresse gefunden")
-    if not pages:
+    if not pages and social:
+        add(5, f"Aktiv auf {social_label}" + ("" if lead.get("website") else ", ohne eigene Webseite"))
+    elif not pages:
         ko.append("Webseite nicht lesbar")
 
     # Wachstumsregion (Statistik je Kreis): kleiner Zuschlag, ersetzt nicht die Prüfung des Betriebs

@@ -27,7 +27,8 @@ from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid, parseaddr, parsedate_to_datetime
 from urllib.parse import urlparse
 
-from . import ai, crm, emailbuild, finder, known, leaddb, mailbox, niches, regions, reports, schedule, scoring, team, webpush
+from . import ai, crm, emailbuild, finder, known, leaddb, mailbox, niches, regions, reports, schedule, scoring, team, \
+    websearch, webpush
 
 log = logging.getLogger("ylva.leads")
 
@@ -260,7 +261,7 @@ def next_candidate(c, plan=None):
             s[1] += (r["k"] or 0) + (r["rt"] or 0) + 0.5 * (r["rk"] or 0)
     rows = c.execute("SELECT id, source_id, branche, category, niche, distance_km FROM leads "
                      "WHERE status='kandidat'").fetchall()
-    imported = [r for r in rows if (r["source_id"] or "").startswith("claude:")]
+    imported = [r for r in rows if (r["source_id"] or "").startswith(("claude:", "web:"))]
     if plan:  # aus der Claude-Recherche nur, was zu den gewählten Nischen passt (oder keine Nische hat)
         imported = [r for r in imported if not r["niche"] or r["niche"] in plan["weights"]]
     if imported:  # Betriebe aus der Claude-Recherche zuerst, die habt ihr gezielt suchen lassen
@@ -306,9 +307,14 @@ def stage_score(c, lead_id, learned, promote=False):
     leaddb.update_lead(c, lead_id, status="recherche")
     research = finder.research_website(lead["website"]) if lead["website"] else \
         {"pages": [], "emails": [], "links": [], "errors": ["keine Webseite"]}
-    imported = lead["research"].get("import")  # aus der Claude-Recherche (CSV), bleibt erhalten
+    imported = lead["research"].get("import")  # aus der Claude-Recherche oder Websuche, bleibt erhalten
     if imported and imported.get("groesse"):
         research["size_hint"] = imported["groesse"]
+    social = {**(lead["research"].get("social") or {}), **finder.social_links(research["links"])}
+    research["social"] = social
+    research["nische_gewaehlt"] = bool(lead["niche"]) and lead["niche"] in (
+        set(niches.load(c, "manuell")) | set(niches.load(c, "auto")))
+    research["empfehlung"] = (imported or {}).get("begruendung") or ""
     result = scoring.score(lead, research, learned, regions.bonus_info(leaddb.kv_get(c, "regionen")))
     if imported:
         result["zeitfresser"] = list(dict.fromkeys([*imported.get("zeitfresser", []), *result["zeitfresser"]]))
@@ -322,7 +328,6 @@ def stage_score(c, lead_id, learned, promote=False):
             "titel": research["pages"][0]["title"] if research["pages"] else ""}
     if imported:
         info["import"] = imported
-    social = {**(lead["research"].get("social") or {}), **finder.social_links(research["links"])}
     if social:  # Instagram, LinkedIn & Co. zum Anschauen (aus Karte, Webseite oder Claude-Recherche)
         info["social"] = social
     common = dict(fit_score=result["score"], fit_reason=scoring.summary(result, threshold), research=_json(info),
@@ -609,7 +614,7 @@ def template_draft(c, lead_id, member=None):
 # ---------------------------------------------------------------- Läufe (von Hand oder nach Zeitplan, siehe schedule.py)
 
 # Grobe Kosten pro Aufruf in US-Dollar, bis genug eigene Messwerte da sind
-DEFAULT_COST_USD = {"entwurf": 0.06, "chat": 0.06, "lernen": 0.04, "erinnerung": 0.02}
+DEFAULT_COST_USD = {"entwurf": 0.06, "chat": 0.06, "lernen": 0.04, "erinnerung": 0.02, "websuche": 0.40}
 RUN = {"id": None, "cancel": False, "progress": ""}
 _local = threading.local()
 
@@ -677,12 +682,16 @@ def start_run(params, started_by):
     if params.get("entwuerfe") and not ai.available():
         return None, ("Ohne KI-Schlüssel (ANTHROPIC_API_KEY) schreibt niemand Entwürfe. Setzt „Entwürfe“ auf 0: "
                       "Die Bewertung läuft ohne KI.")
+    if params.get("web_anzahl") and not ai.available():
+        return None, "Die Websuche (Webseiten, Instagram, LinkedIn) braucht einen KI-Schlüssel (ANTHROPIC_API_KEY)."
+    if params.get("web_anzahl") and not params.get("web_kanaele"):
+        return None, "Websuche: bitte mindestens eins wählen, Webseiten, Instagram oder LinkedIn."
     c = conn()
     try:
         if RUN["id"] or c.execute("SELECT 1 FROM runs WHERE status='wartet'").fetchone():
             return None, "Es läuft schon ein Lauf."
         left = month_budget_left_eur(c)
-        if params.get("entwuerfe") and left is not None and left <= 0:
+        if (params.get("entwuerfe") or params.get("web_anzahl")) and left is not None and left <= 0:
             return None, f"Das Monatsbudget von {S('LEADS_MONTHLY_BUDGET_EUR'):.2f} € ist aufgebraucht."
         cur = c.execute("INSERT INTO runs (started_at, started_by, params, status) VALUES (?,?,?, 'wartet')",
                         (leaddb.now(), started_by, _json(params)))
@@ -724,7 +733,7 @@ def _execute_run(c, run_id, run, p):
     _local.run_id = run_id
     c.execute("UPDATE runs SET status='laeuft' WHERE id=?", (run_id,))
     c.commit()
-    status, message = "fertig", None
+    status, message, notes = "fertig", None, []
     try:
         # Schritt 1: suchen und grob filtern (kostenlos). Neu suchen auch, wenn eine gewählte Nische noch nie
         # gesucht wurde. Welche Auswahl gilt: die der manuellen oder der automatischen Suche (params „nischen“)
@@ -733,9 +742,28 @@ def _execute_run(c, run_id, run, p):
         searched = (leaddb.kv_get(c, "last_search") or {}).get("niches")
         marks = ",".join("?" * len(weights))
         waiting = c.execute(f"SELECT 1 FROM leads WHERE status='kandidat' AND (niche IN ({marks}) "
-                            "OR (source_id LIKE 'claude:%' AND niche IS NULL))", list(weights)).fetchone()
-        if p.get("suchen") or (check and (not waiting or (searched is not None and not set(weights) <= set(searched)))):
-            counts["neu_gefunden"], counts["grobfilter"], counts["schon_bekannt"] = run_search(c)
+                            "OR ((source_id LIKE 'claude:%' OR source_id LIKE 'web:%') AND niche IS NULL))",
+                            list(weights)).fetchone()
+        web_count = int(p.get("web_anzahl") or 0) if use_ai else 0
+        map_ok = p.get("karte", True)
+        if map_ok and (p.get("suchen") or (check and (not waiting or (searched is not None
+                                                                         and not set(weights) <= set(searched))))):
+            try:
+                counts["neu_gefunden"], counts["grobfilter"], counts["schon_bekannt"] = run_search(c)
+            except SearchError as exc:
+                if not (waiting or web_count):
+                    raise
+                notes.append(f"{exc} Bewertet wurde, was schon gefunden war.")
+        # Schritt 1b (auf Wunsch, KI): im Web, auf Instagram und LinkedIn suchen, auch was nicht auf der Karte steht
+        if web_count:
+            check_budget(c, run_id, budget, "websuche")
+            channels = websearch.parse_channels(p.get("web_kanaele"))
+            _progress(f"Schritt 1/3 · Sucht im Web ({', '.join(websearch.CHANNELS[k] for k in channels)}) …")
+            settings = {k: S(k) for k in ("LEADS_REGION", "LEADS_CENTER", "LEADS_RADIUS_KM")}
+            new, reported, _ = websearch.find(c, settings, weights, channels, web_count, run["started_by"] or "Websuche",
+                                              S("LEADS_CENTER"))
+            counts["web_neu"], counts["web_gemeldet"] = new, reported
+            counts["neu_gefunden"] += new
         counts["grobfilter"] += learned_filter(c)
         ensure_boundaries(c)
         assign_kreise(c)
@@ -757,12 +785,15 @@ def _execute_run(c, run_id, run, p):
             counts["passen"] += passed
             rated = leaddb.get_lead(c, lead_id)
             reports.record(c, run_id, lead_id, passed, rated["fit_score"], rated["fit_reason"])
+        if notes:
+            message = " ".join(notes)
         if check and not counts["bewertet"]:  # nichts zu bewerten: sagen, woran es liegt
             others = c.execute("SELECT COUNT(*) FROM leads WHERE status='kandidat'").fetchone()[0]
             labels = ", ".join(niches.NICHES[k]["label"] for k in list(weights)[:4]) + (" …" if len(weights) > 4 else "")
-            message = (f"In den gewählten Nischen ({labels}) gibt es auf der Karte gerade keine neuen Betriebe"
-                       + (f"; {others} warten in anderen Nischen" if others else "") + ". Agenturen und Büros stehen "
-                       "oft nicht auf der Karte: „Mit Claude recherchieren“ findet sie über das Web.")
+            message = " ".join(notes + [
+                f"In den gewählten Nischen ({labels}) gibt es gerade keine neuen Betriebe"
+                + (f"; {others} warten in anderen Nischen" if others else "") + ". Agenturen und Büros stehen "
+                "oft nicht auf der Karte: Die Websuche (Webseiten, Instagram, LinkedIn) findet sie."])
         counts["zu_pruefen"] = c.execute("SELECT COUNT(*) FROM leads WHERE status='passt' AND stage IS NULL "
                                          "AND interest IS NULL AND IFNULL(rejected_by,'')=''").fetchone()[0]
 
@@ -804,7 +835,9 @@ def _execute_run(c, run_id, run, p):
         c.execute("UPDATE leads SET status='fehler', updated_at=? WHERE status='recherche'", (leaddb.now(),))
         _local.run_id = None
         cost = ai.eur(leaddb._sum(c, "run_id = ?", (run_id,))["usd"])
-        summary = (f"{counts['bewertet']} bewertet, {counts['passen']} passen"
+        summary = ((f"Websuche: {counts['web_neu']} neu von {counts['web_gemeldet']} gemeldet. "
+                    if counts.get("web_gemeldet") is not None else "")
+                   + f"{counts['bewertet']} bewertet, {counts['passen']} passen"
                    + (f", {counts['zu_pruefen']} warten aufs Prüfen" if counts["zu_pruefen"] else "")
                    + (f", {counts['entwuerfe']} Entwürfe" if counts["entwuerfe"] else "")
                    + (f", {counts['erinnerungen']} Erinnerungen" if counts["erinnerungen"] else "")
