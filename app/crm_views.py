@@ -14,7 +14,8 @@ bp = Blueprint("crm", __name__)
 @bp.app_context_processor
 def _crm_globals():
     return {"crm_due": lambda: crm.due_count(db(), me()) + mailbox.unread_count(db(), me()),
-            "inbox_unread": lambda: mailbox.unread_count(db(), me())}
+            "inbox_unread": lambda: mailbox.unread_count(db(), me()),
+            "notices_unseen": lambda: leaddb.notices(db(), g.account["user"], 1)[1] if g.get("account") else 0}
 
 
 @bp.get("/crm")
@@ -232,6 +233,22 @@ def inbox_news():
     status = leaddb.kv_get(c, "inbox_status") or {}
     return jsonify(count=mailbox.unread_count(c, me()), items=items,
                    error=None if status.get("ok", True) else status.get("error"), checked=status.get("at"))
+
+
+@bp.get("/meldungen.json")
+@login_required
+def notices_json():
+    """Für die Glocke: Meldungen der App (Läufe, Antworten, Wiedervorlagen, Tagesberichte)."""
+    rows, unseen = leaddb.notices(db(), g.account["user"])
+    return jsonify(count=unseen, items=[{"title": r["title"], "text": (r["body"] or "")[:160], "url": r["url"] or "/",
+                                         "at": r["at"], "new": r["new"]} for r in rows])
+
+
+@bp.post("/meldungen/gelesen")
+@login_required
+def notices_read():
+    leaddb.notices_seen(db(), g.account["user"])
+    return jsonify(ok=True)
 
 
 @bp.post("/crm/postfach/abrufen")

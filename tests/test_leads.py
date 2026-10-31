@@ -958,6 +958,25 @@ class WebSearchTest(unittest.TestCase):
         self.assertIn("Websuche: 1 neu von 1 gemeldet", run["message"])
 
 
+class NoticeTest(unittest.TestCase):
+    def test_notices_in_app_push_only_for_manual_runs(self):
+        db_path = os.path.join(tempfile.mkdtemp(), "n.db")
+        c = leaddb.connect(db_path)
+        agent.CFG["db_path"] = db_path
+        c.execute("INSERT INTO push_subs (endpoint, data, created_at) VALUES ('https://fcm.googleapis.com/x', '{}', 'x')")
+        c.commit()
+        with mock.patch.object(webpush, "send", return_value=True) as send, mock.patch.object(agent, "vapid", return_value={}):
+            agent.notify(c, "Neue Antwort von Hansen", "Text", "/crm/postfach/1")
+            self.assertEqual(send.call_count, 0)  # nur in der Glocke
+            agent.notify(c, "Lauf fertig", "3 passen", "/leads/pruefen", push=True)
+            self.assertEqual(send.call_count, 1)
+        rows, unseen = leaddb.notices(c, "finn")
+        self.assertEqual(([r["title"] for r in rows], unseen), (["Lauf fertig", "Neue Antwort von Hansen"], 2))
+        leaddb.notices_seen(c, "finn")
+        self.assertEqual(leaddb.notices(c, "finn")[1], 0)
+        self.assertEqual(leaddb.notices(c, "hamza")[1], 2)  # jede Person für sich
+
+
 class SocialTest(unittest.TestCase):
     def test_social_links_from_website_osm_and_csv(self):
         links = ["https://www.instagram.com/p/ABC123/", "https://www.instagram.com/agentur_nord/?hl=de",
@@ -1561,6 +1580,9 @@ class ViewsTest(unittest.TestCase):
             c.commit()
             return cur.lastrowid
         a, b, d = add("Aal"), add("Bach", owner="hamza"), add("Dorn", status="aussortiert", rejected_by="team")
+        r = self.client.get("/meldungen.json").get_json()
+        self.assertIn("items", r)
+        self.assertTrue(self.client.post("/meldungen/gelesen", headers={"X-CSRF-Token": self.csrf}).get_json()["ok"])
         for art in ("hand", "auto"):
             self.assertEqual(self.client.get(f"/leads/berichte?art={art}").status_code, 200)
         self.assertIn("Berichte", self.client.get("/leads/suche").get_data(as_text=True))

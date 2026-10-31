@@ -1,5 +1,5 @@
-// Glocke oben: Zahl der ungelesenen Mails, beim Antippen die neuesten mit Absender und Anfang des Texts.
-// Die Zahl wird jede Minute aktualisiert, damit neue Antworten auch ohne Neuladen auffallen.
+// Glocke oben: Meldungen der App (Läufe, Antworten, Wiedervorlagen, Tagesberichte) und ungelesene Mails.
+// Die Zahl = neue Meldungen + ungelesene Mails, jede Minute aktualisiert. Beim Öffnen gelten die Meldungen als gesehen.
 (() => {
   const bell = document.getElementById('bell');
   if (!bell) return;
@@ -8,6 +8,39 @@
   const list = document.getElementById('bellList');
   const countEl = document.getElementById('bellCount');
   const errEl = document.getElementById('bellError');
+  const noticeList = document.getElementById('noticeList');
+  const csrf = document.querySelector('meta[name=csrf-token]')?.content;
+  let mails = 0, notices = 0;
+  const showCount = () => {
+    const n = mails + notices;
+    countEl.textContent = n;
+    countEl.hidden = !n;
+    btn.setAttribute('aria-label', n ? `Meldungen und neue Mails: ${n}` : 'Meldungen und neue Mails');
+  };
+  const entry = (url, title, at, text, isNew) => {
+    const li = document.createElement('li');
+    const a = document.createElement('a');
+    a.href = url;
+    if (isNew) a.className = 'is-new';
+    a.innerHTML = '<span class="bell-top"><b></b><time></time></span><span class="bell-text"></span>';
+    a.querySelector('b').textContent = title;
+    a.querySelector('time').textContent = fmt(at);
+    a.querySelector('.bell-text').textContent = text;
+    li.appendChild(a);
+    return li;
+  };
+  const empty = (text) => Object.assign(document.createElement('li'), { className: 'muted small bell-empty', textContent: text });
+
+  async function loadNotices() {
+    try {
+      const r = await (await fetch('/meldungen.json', { headers: { Accept: 'application/json' } })).json();
+      notices = r.count;
+      noticeList.innerHTML = '';
+      if (!r.items.length) noticeList.appendChild(empty('Noch keine Meldungen.'));
+      r.items.forEach((it) => noticeList.appendChild(entry(it.url, it.title, it.at, it.text, it.new)));
+      showCount();
+    } catch (e) { /* offline */ }
+  }
   const fmt = (iso) => {
     if (!iso) return '';
     const d = new Date(iso.replace(' ', 'T'));
@@ -18,29 +51,13 @@
   async function load() {
     try {
       const r = await (await fetch('/crm/postfach/neu.json', { headers: { Accept: 'application/json' } })).json();
-      countEl.textContent = r.count;
-      countEl.hidden = !r.count;
-      btn.setAttribute('aria-label', r.count ? `Neue Mails: ${r.count}` : 'Neue Mails');
+      mails = r.count;
+      showCount();
       errEl.textContent = r.error ? `Abrufen klappt gerade nicht: ${r.error}` : '';
       errEl.hidden = !r.error;
       list.innerHTML = '';
-      if (!r.items.length) {
-        const li = document.createElement('li');
-        li.className = 'muted small bell-empty';
-        li.textContent = 'Keine ungelesenen Mails.';
-        list.appendChild(li);
-      }
-      r.items.forEach((it) => {
-        const li = document.createElement('li');
-        const a = document.createElement('a');
-        a.href = it.url;
-        a.innerHTML = '<span class="bell-top"><b></b><time></time></span><span class="bell-text"></span>';
-        a.querySelector('b').textContent = it.n > 1 ? `${it.name} (${it.n})` : it.name;
-        a.querySelector('time').textContent = fmt(it.at);
-        a.querySelector('.bell-text').textContent = it.text;
-        li.appendChild(a);
-        list.appendChild(li);
-      });
+      if (!r.items.length) list.appendChild(empty('Keine ungelesenen Mails.'));
+      r.items.forEach((it) => list.appendChild(entry(it.url, it.n > 1 ? `${it.name} (${it.n})` : it.name, it.at, it.text, false)));
     } catch (e) { /* offline: Zahl bleibt, wie sie war */ }
   }
 
@@ -49,9 +66,18 @@
     const open = panel.hidden;
     panel.hidden = !open;
     btn.setAttribute('aria-expanded', open ? 'true' : 'false');
-    if (open) load();
+    if (open) {
+      load();
+      loadNotices().then(() => {
+        if (!notices) return;
+        fetch('/meldungen/gelesen', { method: 'POST', headers: { 'X-CSRF-Token': csrf } }).catch(() => {});
+        notices = 0;
+        showCount();
+      });
+    }
   });
   document.addEventListener('click', (e) => { if (!bell.contains(e.target)) close(); });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
-  setInterval(() => { if (document.visibilityState === 'visible') load(); }, 60000);
+  setInterval(() => { if (document.visibilityState === 'visible') { load(); loadNotices(); } }, 60000);
+  loadNotices();
 })();

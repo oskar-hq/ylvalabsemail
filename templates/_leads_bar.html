@@ -42,7 +42,7 @@
     <span class="dot {{ 'busy' if st.run or st.activity != 'Wartet' }}" aria-hidden="true"></span>
     <span><b>Suche:</b> <span id="activity">{{ st.activity if st.activity != 'Wartet' else ('Bereit.' if not st.run else 'Startet gleich …') }}</span></span>
     <span class="muted small">· {{ st.counts.kandidaten }} Betriebe warten auf die Bewertung{% if waiting_mine is defined %}, davon <b>{{ waiting_mine }}</b> in deinen Nischen{% endif %}{% if st.counts.grobfilter %} · {{ st.counts.grobfilter }} vom Grobfilter aussortiert{% endif %}{% if st.last_search %} · letzte Suche {{ st.last_search.at|kurzdatum }}{% if st.last_search.known %}, {{ st.last_search.known }} schon bekannt{% endif %}{% endif %}</span>
-    <button class="btn small push-btn" type="button" id="pushBtn" hidden>Benachrichtigungen an</button>
+    <button class="btn small push-btn" type="button" id="pushBtn" hidden title="Aufs Handy kommt nur: ein Lauf, den du von Hand gestartet hast, ist fertig. Alles andere steht in der Glocke oben.">Benachrichtigungen an</button>
   </div>
 
   <div class="costs" id="costs">
