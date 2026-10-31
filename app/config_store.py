@@ -84,7 +84,7 @@ PAGES = {
     "ki": [("schluessel", "KI-Schlüssel", ["ANTHROPIC_API_KEY"]),
            ("modelle", "Modelle", ["AI_MODEL", "AI_EFFORT", "AI_MODEL_ANALYSE", "AI_EFFORT_ANALYSE"]),
            ("budget", "Budget", ["LEADS_MONTHLY_BUDGET_EUR", "LEADS_RUN_BUDGET_EUR", "LEADS_RUN_DRAFTS", "EUR_PER_USD"])],
-    "hinweise": [("hinweise", "Benachrichtigungen", ["NOTIFY_EMAILS", "BASE_URL", "INBOX_MINUTES"])],
+    "hinweise": [("hinweise", "Benachrichtigungen", ["BASE_URL", "INBOX_MINUTES"])],
 }
 # Fehlt einer dieser Werte, steht beim Bereich „Fehlt“
 NEEDED = {"SMTP_HOST", "OUTREACH_USER", "OUTREACH_PASSWORD", "IMAP_HOST"}

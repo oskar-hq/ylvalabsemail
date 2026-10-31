@@ -968,8 +968,12 @@ class NoticeTest(unittest.TestCase):
         with mock.patch.object(webpush, "send", return_value=True) as send, mock.patch.object(agent, "vapid", return_value={}):
             agent.notify(c, "Neue Antwort von Hansen", "Text", "/crm/postfach/1")
             self.assertEqual(send.call_count, 0)  # nur in der Glocke
-            agent.notify(c, "Lauf fertig", "3 passen", "/leads/pruefen", push=True)
+            smtp = mock.Mock()
+            with mock.patch.dict(agent.CFG, {"smtp_connect": smtp}), \
+                    mock.patch.dict(agent.CFG["settings"], {"NOTIFY_EMAILS": ["chef@ylvalabs.de"]}):
+                agent.notify(c, "Lauf fertig", "3 passen", "/leads/pruefen", push=True)
             self.assertEqual(send.call_count, 1)
+            smtp.assert_not_called()  # keine Benachrichtigungen per Mail mehr
         rows, unseen = leaddb.notices(c, "finn")
         self.assertEqual(([r["title"] for r in rows], unseen), (["Lauf fertig", "Neue Antwort von Hansen"], 2))
         leaddb.notices_seen(c, "finn")

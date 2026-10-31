@@ -79,7 +79,7 @@ def run(settings, smtp_connect, sent_folder, data_dir):
     def smtp_check():
         if not out_user or not out_pw:
             return WARN, "OUTREACH_USER / OUTREACH_PASSWORD fehlen", \
-                "Ohne Akquise-Postfach keine Mails und keine Benachrichtigungen per Mail."
+                "Ohne Akquise-Postfach keine Mails."
         smtp_connect(out_user, out_pw).quit()
         return OK, f"Anmeldung als {out_user} bei {S['SMTP_HOST']}:{S['SMTP_PORT']} klappt", None
 
@@ -154,10 +154,6 @@ def run(settings, smtp_connect, sent_folder, data_dir):
                 "Auf dem Handy die Web-App installieren und „Benachrichtigungen an“ tippen."
         return OK, f"{subs} Gerät(e) angemeldet", None
 
-    def notify_check():
-        if not S["NOTIFY_EMAILS"]:
-            return WARN, "NOTIFY_EMAILS ist leer", "Sonst kommen Benachrichtigungen nur per Push."
-        return OK, "Benachrichtigung per Mail an " + ", ".join(S["NOTIFY_EMAILS"]), None
 
     def budget_check():
         cap = S["LEADS_MONTHLY_BUDGET_EUR"]
@@ -196,7 +192,7 @@ def run(settings, smtp_connect, sent_folder, data_dir):
         ("Grundeinstellungen", config), ("HTTPS-Adresse", https), ("Datenordner", storage),
         ("Postausgang (SMTP)", smtp_check), ("Posteingang (IMAP)", imap_check), ("KI-Schlüssel und Modelle", ai_check),
         ("Kartensuche (OpenStreetMap)", overpass_check), ("Kreise und Wachstumszahlen", regions_check), ("Webseiten lesen", web_check), ("Push-Benachrichtigungen", push_check),
-        ("Benachrichtigung per Mail", notify_check), ("Budget und Versand", budget_check), ("Updates aus der App", updater_check), ("Hintergrund-Arbeiter", worker_check),
+("Budget und Versand", budget_check), ("Updates aus der App", updater_check), ("Hintergrund-Arbeiter", worker_check),
     ]
     return [_check(name, func) for name, func in checks]
 

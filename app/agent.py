@@ -138,8 +138,9 @@ def vapid():
 
 
 def notify(c, title, body, url="/leads", push=False):
-    """Meldung in der App (Glocke oben). Aufs Handy (Push) und per Mail nur mit push=True: das ist nur das Ende
-    eines Laufs, den jemand von Hand gestartet hat (und der Test), damit das Handy nicht ständig klingelt."""
+    """Meldung in der App (Glocke oben). Aufs Handy (Push) nur mit push=True: das ist nur das Ende eines Laufs,
+    den jemand von Hand gestartet hat (und der Test), damit das Handy nicht ständig klingelt. Per Mail kommen keine
+    Benachrichtigungen mehr, sie landeten sonst zusätzlich in Apple Mail oder Gmail."""
     leaddb.add_notice(c, title, body, url)
     if not push:
         return
@@ -151,22 +152,6 @@ def notify(c, title, body, url="/leads", push=False):
                 c.commit()
         except Exception as exc:
             log.warning("Push an %s fehlgeschlagen: %s", row["endpoint"][:60], exc)
-    if S("NOTIFY_EMAILS") and outreach_configured():
-        try:
-            msg = EmailMessage()
-            msg["Subject"] = f"[Leads] {title}"
-            msg["From"] = formataddr(("Ylva Labs · Leads", outreach_address()))
-            msg["To"] = ", ".join(S("NOTIFY_EMAILS"))
-            msg["Date"] = formatdate(localtime=True)
-            link = (S("BASE_URL").rstrip("/") + url) if S("BASE_URL") else url
-            msg.set_content(f"{body}\n\nAnsehen: {link}\n")
-            smtp = CFG["smtp_connect"](S("OUTREACH_USER"), S("OUTREACH_PASSWORD"))
-            try:
-                smtp.send_message(msg)
-            finally:
-                smtp.quit()
-        except Exception as exc:
-            log.warning("Benachrichtigung per Mail fehlgeschlagen: %s", exc)
 
 # ---------------------------------------------------------------- Stufe 1: Firmen suchen und grob filtern (kostenlos)
 
