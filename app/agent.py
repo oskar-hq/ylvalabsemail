@@ -137,7 +137,12 @@ def vapid():
     return _vapid
 
 
-def notify(c, title, body, url="/leads", mail=True):
+def notify(c, title, body, url="/leads", push=False):
+    """Meldung in der App (Glocke oben). Aufs Handy (Push) und per Mail nur mit push=True: das ist nur das Ende
+    eines Laufs, den jemand von Hand gestartet hat (und der Test), damit das Handy nicht ständig klingelt."""
+    leaddb.add_notice(c, title, body, url)
+    if not push:
+        return
     subject = "mailto:" + (S("NOTIFY_EMAILS")[0] if S("NOTIFY_EMAILS") else "info@ylvalabs.de")
     for row in c.execute("SELECT endpoint, data FROM push_subs").fetchall():
         try:
@@ -146,7 +151,7 @@ def notify(c, title, body, url="/leads", mail=True):
                 c.commit()
         except Exception as exc:
             log.warning("Push an %s fehlgeschlagen: %s", row["endpoint"][:60], exc)
-    if mail and S("NOTIFY_EMAILS") and outreach_configured():
+    if S("NOTIFY_EMAILS") and outreach_configured():
         try:
             msg = EmailMessage()
             msg["Subject"] = f"[Leads] {title}"
@@ -847,11 +852,13 @@ def _execute_run(c, run_id, run, p):
         c.commit()
         RUN.update(id=None, cancel=False, progress="")
         title = {"fertig": "Lauf fertig", "gestoppt": "Lauf gestoppt", "fehler": "Lauf mit Fehler beendet"}[status]
-        # automatische Läufe melden sich nur bei Fehlern, ihr Ergebnis kommt gesammelt im Tagesbericht
-        quiet = (run["started_by"] or "").startswith("Automatik") and status == "fertig"
-        if not quiet:
+        # Läufe von Hand melden sich aufs Handy; automatische nur bei Fehlern und nur in der App (ihr Ergebnis
+        # kommt gesammelt im Tagesbericht)
+        auto = (run["started_by"] or "").startswith("Automatik")
+        if not (auto and status == "fertig"):
             notify(c, title, " ".join(x for x in (message, summary) if x),
-                   "/leads?tab=entwurf" if counts["entwuerfe"] else ("/leads/pruefen" if counts["zu_pruefen"] else "/crm"))
+                   "/leads?tab=entwurf" if counts["entwuerfe"] else ("/leads/pruefen" if counts["zu_pruefen"] else "/crm"),
+                   push=not auto)
 
 # ---------------------------------------------------------------- Versand
 

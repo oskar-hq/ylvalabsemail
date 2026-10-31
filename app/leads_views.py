@@ -1093,5 +1093,5 @@ def push_test():
     count = db().execute("SELECT COUNT(*) FROM push_subs").fetchone()[0]
     if not count:
         return jsonify(error="Noch kein Gerät angemeldet."), 400
-    agent.notify(db(), "Test", "Benachrichtigungen funktionieren.", "/leads", mail=False)
+    agent.notify(db(), "Test", "Benachrichtigungen funktionieren.", "/leads", push=True)
     return jsonify(ok=True, devices=count)

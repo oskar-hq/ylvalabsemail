@@ -750,3 +750,6 @@ dd.social-links{margin-left:0}
 .web-auto .web-ch{align-items:center;margin-top:6px}
 .web-auto input[type=number]{max-width:90px}
 .web-auto .sub em{font-style:normal;color:var(--ink3);font-weight:400}
+.bell-notices{max-height:min(34vh,260px)}
+.bell-head-mail{border-top:1px solid var(--line);margin-top:4px}
+.top nav .bell-list a.is-new .bell-top b::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--blue);margin-right:6px;vertical-align:1px}

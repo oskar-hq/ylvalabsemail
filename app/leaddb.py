@@ -104,6 +104,9 @@ CREATE TABLE IF NOT EXISTS team (
     key TEXT PRIMARY KEY, name TEXT NOT NULL, pw_hash TEXT, pw_set_at TEXT, settings TEXT NOT NULL DEFAULT '{}',
     sort INTEGER NOT NULL DEFAULT 0
 );
+CREATE TABLE IF NOT EXISTS notices (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT NOT NULL, title TEXT NOT NULL, body TEXT, url TEXT
+);
 CREATE TABLE IF NOT EXISTS remember_tokens (
     token_hash TEXT PRIMARY KEY, member TEXT NOT NULL, created_at TEXT NOT NULL, last_used REAL NOT NULL
 );
@@ -407,3 +410,27 @@ def stage_averages(conn):
     return {r["stage"]: (r["usd"], r["n"]) for r in conn.execute(
         "SELECT stage, AVG(cost_usd) usd, COUNT(*) n FROM ai_usage GROUP BY stage")}
 
+
+
+# ---------------------------------------------------------------- Meldungen in der App (Glocke)
+
+
+def add_notice(conn, title, body, url):
+    conn.execute("INSERT INTO notices (at, title, body, url) VALUES (?,?,?,?)", (now(), title, body, url))
+    conn.execute("DELETE FROM notices WHERE id <= (SELECT MAX(id) - 200 FROM notices)")
+    conn.commit()
+
+
+def notices(conn, user, limit=15):
+    """Neueste Meldungen und wie viele davon die Person noch nicht gesehen hat."""
+    seen = kv_get(conn, f"notice_seen:{user}", 0) or 0
+    rows = [dict(r) for r in conn.execute("SELECT * FROM notices ORDER BY id DESC LIMIT ?", (limit,))]
+    for r in rows:
+        r["new"] = r["id"] > seen
+    unseen = conn.execute("SELECT COUNT(*) FROM notices WHERE id > ?", (seen,)).fetchone()[0]
+    return rows, unseen
+
+
+def notices_seen(conn, user):
+    top = conn.execute("SELECT MAX(id) FROM notices").fetchone()[0] or 0
+    kv_set(conn, f"notice_seen:{user}", top)

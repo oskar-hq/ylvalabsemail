@@ -35,14 +35,16 @@
       <a href="{{ url_for('crm.board') }}" class="{{ 'on' if sec == 'crm' }}">CRM{% if n_crm %} <span class="nav-count" title="Wiedervorlagen heute">{{ n_crm }}</span>{% endif %}</a>
       <a href="{{ url_for('compose') }}" class="{{ 'on' if sec == 'mailer' }}">Mailer</a>
     </span>
-    {% set n_unread = inbox_unread() %}
+    {% set n_unread = inbox_unread() + notices_unseen() %}
     <div class="bell" id="bell">
-      <button type="button" class="bell-btn" id="bellBtn" aria-haspopup="true" aria-expanded="false" aria-label="Neue Mails{% if n_unread %}: {{ n_unread }}{% endif %}">
+      <button type="button" class="bell-btn" id="bellBtn" aria-haspopup="true" aria-expanded="false" aria-label="Meldungen und neue Mails{% if n_unread %}: {{ n_unread }}{% endif %}">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
         <span class="bell-count" id="bellCount" {{ 'hidden' if not n_unread }}>{{ n_unread }}</span>
       </button>
       <div class="bell-panel" id="bellPanel" hidden>
-        <div class="bell-head"><b>Neue Mails</b><a href="{{ url_for('crm.compose_mail') }}">Neue Mail schreiben</a></div>
+        <div class="bell-head"><b>Meldungen</b></div>
+        <ul class="bell-list bell-notices" id="noticeList"><li class="muted small">Lädt …</li></ul>
+        <div class="bell-head bell-head-mail"><b>Neue Mails</b><a href="{{ url_for('crm.compose_mail') }}">Neue Mail schreiben</a></div>
         <p class="bell-error small" id="bellError" hidden></p>
         <ul class="bell-list" id="bellList"><li class="muted small">Lädt …</li></ul>
         <a class="bell-all" href="{{ url_for('crm.inbox') }}">Zum Postfach →</a>
