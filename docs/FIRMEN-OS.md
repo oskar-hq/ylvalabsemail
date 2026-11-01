@@ -1,11 +1,41 @@
 # Ylva Labs Firmen-OS – Bauplan
 
-**Stand:** 01.11.2026 · Skizze, noch kein Code · Kalender und „alles in den Einstellungen“ eingetragen · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
+**Stand:** 01.11.2026 · Planung abgeschlossen, Bau startet mit Stufe 1 · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
 
 Aus dem Ylva Labs Mailer (Akquise, CRM, Mailer) wird das Betriebssystem der Firma. Diese Datei hält fest, **was**
 gebaut werden soll und **nach welchen Prinzipien**, damit alle, die am Code arbeiten (Menschen und KI), dasselbe
 Bild im Kopf haben. Sie ist der Bauauftrag, auf den die Rollen-Datei verweist. Wer eine Baustufe umsetzt, hakt sie
 hier ab und trägt Abweichungen ein.
+
+## 0. Start für den Bau (hier anfangen)
+
+**Was entschieden ist** (Planungsgespräch mit Oskar, 01.11.2026):
+
+- Leitbild, Grundsätze G1–G10, Freigabe-Stufen und Module wie in dieser Datei.
+- **Alles in den Einstellungen, nie auf den Server** (G9, Abschnitt 4.13). Gilt für jede Zeile Code.
+- Die App läuft bereits unter `https://mail.ylvalabs.de`. Updates kommen per Knopf in der App.
+- Personen und Rechte verwalten dürfen **Oskar und Finn**. Hamza und Omid nicht, bis ihr Status geklärt ist.
+- Kalender: Jede Person verbindet ihr **eigenes** Google-Konto (alle haben private Google-Konten). Google-Projekt
+  ist eingerichtet und in Produktion (4.3). Apple/iCloud und ICS-Abo erst danach.
+- WhatsApp kommt später über Unipile, nicht jetzt.
+
+**Womit der Bau anfängt: Stufe 1** (Abschnitt 8). Der Kalender ist Stufe 3. Für Stufe 1 und 2 wird nichts von
+Google gebraucht.
+
+**Arbeitsweise für jede Baustufe:**
+
+1. Diese Datei, [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md), `CLAUDE.md` und den betroffenen Code lesen.
+2. Vor dem Bauen einen kurzen Plan für die Stufe mit Oskar abstimmen (was genau, welche Seiten, welche Tabellen).
+3. Bauen mit Tests (`python -m unittest discover tests`). Bestehende Funktionen (Leads, CRM, Mailer, Einstellungen,
+   Updates, Sicherung) dürfen nicht kaputtgehen; Daten auf dem Server werden nur per `MIGRATIONS` erweitert, nie
+   gelöscht.
+4. Jede neue Funktion bringt ihre Einstellungen mit. Nichts darf eine Änderung in der `.env` oder auf dem Server
+   voraussetzen.
+5. Stufe hier abhaken, Abweichungen in dieser Datei eintragen, README/UEBERGABE nachziehen, Pull Request.
+
+Noch offen, aber **kein Hindernis** für den Bau (siehe Abschnitt 10): Status von Hamza und Omid, Stunden pro Woche,
+Buchungslink für Kunden, Zeitpunkt Kunden-Bereich, Name des OS. Alles davon wird später Einstellung oder betrifft
+spätere Stufen.
 
 ---
 
@@ -189,8 +219,13 @@ Kalender, dort wo sie ihn ohnehin führt.
 
 **Stand der Google-Einrichtung (01.11.2026, Oskar):** Projekt „Firmen OS“ angelegt, Google Calendar API aktiviert,
 beide Berechtigungen eingetragen, OAuth-Client (Webanwendung) erstellt, JSON-Datei mit dem Clientschlüssel bei
-Oskar gespeichert (nie ins Repository, nie in Chats). Zielgruppe steht auf **„Intern“**. Offen: ob das passt
-(siehe Abschnitt 10, Frage 1).
+Oskar gespeichert (nie ins Repository, nie in Chats). Branding ausgefüllt. Zielgruppe **„Extern“**,
+Veröffentlichungsstatus **„In Produktion“**, **nicht** zur Überprüfung eingereicht (bewusst: Google zeigt beim
+Verbinden einmal „App nicht überprüft“, Grenze 100 Personen über die ganze Lebensdauer des Projekts, Verbindungen
+laufen nicht ab). Der gelbe Hinweis „Die Anwendung muss überprüft werden“ in der Console wird ignoriert.
+Rücksprung-Adressen im Client: `https://mail.ylvalabs.de/kalender/google/zurueck` und
+`http://localhost:8080/kalender/google/zurueck`. Die Kalender-Anbindung muss genau diese Pfade verwenden.
+Noch zu tun beim Bau: Client-ID und Clientschlüssel in der App eintragen können (Einstellungen → Anbindungen → Google).
 
 ### 4.4 Akquise und Recherche (gibt es schon, wird erweitert)
 
@@ -495,8 +530,8 @@ Bitte direkt hier beantworten (Antwort: …), dann wird der Plan angepasst.
    Offen: Zu welcher Organisation gehört das Google-Konto, unter dem das Projekt „Firmen OS“ liegt? Liegen die
    Kalender von Oskar, Finn, Hamza und Omid in genau dieser Organisation (dann „Intern“ lassen) oder auf privaten
    Gmail-Konten bzw. bei Apple (dann „Als extern festlegen“ und „App veröffentlichen“)?
-   Antwort (01.11.2026): Finn, Hamza und Omid haben private Google-Konten. Auf „Extern“ lässt sich die App nur im
-   Modus „Test“ betreiben, „In production“ verlangt bei Google noch weitere Angaben. Wird gerade geklärt.
+   Antwort (01.11.2026): Finn, Hamza und Omid haben private Google-Konten. Entschieden: „Extern“, „In Produktion“,
+   ohne Google-Überprüfung. Jede Person verbindet ihr eigenes Konto. Erledigt, siehe 4.3.
 2. **Status von Hamza und Omid** (Mitgründer oder Mitarbeit) – davon hängen Rechte im OS ab (Finanzen, Entscheidungen).
    Antwort:
 3. **Wie viele Stunden pro Woche** hat jede Person neben der Schule? Das OS kann Aufgaben nur sinnvoll verteilen und
