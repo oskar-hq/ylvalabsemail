@@ -72,7 +72,8 @@ jeweils die erste Option ist die Empfehlung):
 2. **Assistent ausbauen:** weitere Werkzeuge (z. B. Entscheidungs-Log durchsuchen, Kosten je Projekt), „Was zuerst?“
    optional jeden Morgen automatisch, Fragen per Push-Meldung beantworten lassen.
 3. **Unipile** für WhatsApp und LinkedIn verbinden (vorbereitet in Stufe 9), sobald Budget da ist.
-4. **Postfach im CRM** auf `os.css` umstellen (behält bisher die alte Gestaltung).
+4. **Restliche alte Seiten** (CRM-Board, Leads, Akte, Mailer, Einstellungen) nach und nach auf `os.css` umstellen;
+   das Postfach im CRM ist schon umgestellt.
 
 **Bausteine des Assistenten** (für Erweiterungen):
 

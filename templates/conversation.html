@@ -1,75 +1,81 @@
 {% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
 {% block title %}{{ lead.name }} · Postfach{% endblock %}
 {% macro when(iso) %}{% if iso %}{{ fmt_day(iso) }}{% if iso[11:16] %} · {{ iso[11:16] }}{% endif %}{% endif %}{% endmacro %}
 {% block content %}
-<main class="page narrow conv-page" id="conv" data-id="{{ lead.id }}">
-  <a class="back" href="{{ url_for('crm.inbox') }}">‹ Postfach</a>
-  <div class="conv-head">
-    <div>
-      <h1 class="title">{{ lead.name }}</h1>
-      <p class="muted">{{ lead.contact_name or '' }}{% if lead.contact_name and lead.email %} · {% endif %}{{ lead.email or '' }}{% if lead.stage %} · {{ stage_labels.get(lead.stage, '') }}{% endif %}</p>
-      {% if wartet %}<p class="small" style="color:var(--accent-text,#DE2E36)">Wartet auf unsere Antwort seit {{ fmt_day(wartet) }} · {{ wartet[11:16] }}</p>{% endif %}
-    </div>
-    <a class="btn small" href="{{ url_for('leads.detail', lead_id=lead.id) }}">Akte</a>
-  </div>
+<main class="os-page" id="conv" data-id="{{ lead.id }}">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Postfach{% if lead.stage %} · {{ stage_labels.get(lead.stage, '') }}{% endif %}</span>
+    <h1 class="os-title-m">{{ lead.name }}</h1>
+    <p class="os-sub os-lead">{{ lead.contact_name or '' }}{% if lead.contact_name and lead.email %} · {% endif %}{{ lead.email or '' }}</p>
+    <div class="os-btns" style="margin-top:16px"><a class="os-btn small quiet" href="{{ url_for('leads.detail', lead_id=lead.id) }}">Akte öffnen</a></div>
+    {% if wartet %}<p class="os-frist" style="margin:8px 0 0">Wartet auf unsere Antwort seit {{ fmt_day(wartet) }} · {{ wartet[11:16] }}</p>{% endif %}
+  </header>
 
-  <div class="mood-pick" role="group" aria-label="Wie läuft das Gespräch?">
-    <span class="small muted">Wie läuft es?</span>
-    {% for key, label in moods.items() %}<button type="button" data-mood="{{ key }}" class="{{ 'on' if mood == key }}" title="{{ label }}"><i class="mood mood-{{ key }}"></i>{{ label }}</button>{% endfor %}
-    <span class="small muted" id="moodWhy">{{ mood_why }}</span>
-    {% if lead.mood %}<button type="button" class="link small" data-mood="">automatisch</button>{% endif %}
+  <div class="os-chips os-mood-pick" role="group" aria-label="Wie läuft das Gespräch?" style="margin-top:24px">
+    {% for key, label in moods.items() %}<button type="button" data-mood="{{ key }}" class="{{ 'on' if mood == key }}" title="{{ label }}"><i class="os-mood {{ key }}"></i>{{ label }}</button>{% endfor %}
+    {% if lead.mood %}<button type="button" data-mood="">automatisch</button>{% endif %}
   </div>
+  <p class="os-caption" id="moodWhy" style="margin-top:-16px">{{ mood_why }}</p>
 
-  <ol class="thread">
+  <ol class="os-thread">
     {% for m in items %}
-    <li class="msg-{{ m.direction }}" {% if m.id %}id="m{{ m.id }}"{% endif %}>
-      <div class="bubble">
-        <span class="b-meta">{{ m.who }} · {{ when(m.at) }}{% if m.channel != 'email' %} · {{ kanaele.get(m.channel, {'brief': 'Brief', 'telefon': 'Telefon'}.get(m.channel, m.channel)) }}{% endif %}{% if m.postfach_name %} · Postfach {{ m.postfach_name }}{% endif %}</span>
-        {% if m.subject and m.subject not in kanaele.values() %}<b class="b-subj">{{ m.subject }}</b>{% endif %}
+    <li class="{{ m.direction }}" {% if m.id %}id="m{{ m.id }}"{% endif %}>
+      <div class="os-bubble">
+        <span class="os-caption">{{ m.who }} · {{ when(m.at) }}{% if m.channel != 'email' %} · {{ kanaele.get(m.channel, {'brief': 'Brief', 'telefon': 'Telefon'}.get(m.channel, m.channel)) }}{% endif %}{% if m.postfach_name %} · Postfach {{ m.postfach_name }}{% endif %}</span>
+        {% if m.subject and m.subject not in kanaele.values() %}<b>{{ m.subject }}</b>{% endif %}
         <p>{{ m.text }}</p>
-        {% if m.wunsch == 'vorschlag' %}<div class="wunsch-box"><span class="small">Möglicher Änderungswunsch für das laufende Projekt.</span>
-          {% if wunsch_darf %}<button type="button" class="btn small primary" data-wunsch="{{ m.id }}" data-ja="1">Als Wunsch übernehmen</button>
-          <button type="button" class="link small" data-wunsch="{{ m.id }}" data-ja="0">Kein Wunsch</button>{% else %}<span class="muted small">Entscheidet die verantwortliche Person.</span>{% endif %}</div>
-        {% elif m.wunsch == 'uebernommen' %}<span class="muted small">Als Änderungswunsch übernommen.</span>{% endif %}
+        {% if m.wunsch == 'vorschlag' %}<div class="os-wunsch"><span class="os-caption">Möglicher Änderungswunsch für das laufende Projekt.</span>
+          {% if wunsch_darf %}<div class="os-btns" style="margin-top:8px"><button type="button" class="os-btn small" data-wunsch="{{ m.id }}" data-ja="1">Als Wunsch übernehmen</button>
+          <button type="button" class="os-btn small quiet" data-wunsch="{{ m.id }}" data-ja="0">Kein Wunsch</button></div>{% else %}<span class="os-caption">Entscheidet die verantwortliche Person.</span>{% endif %}</div>
+        {% elif m.wunsch == 'uebernommen' %}<span class="os-caption">Als Änderungswunsch übernommen.</span>{% endif %}
       </div>
     </li>
-    {% else %}<li class="muted small">Noch keine Nachrichten.</li>{% endfor %}
+    {% else %}<li><p class="os-empty">Noch keine Nachrichten.</p></li>{% endfor %}
   </ol>
 
   {% if lead.status == 'gesperrt' %}
-  <p class="note warn small">Dieser Betrieb möchte keine Nachrichten mehr bekommen. Antworten ist gesperrt.</p>
-  {% endif %}
-  <details class="festhalten">
-    <summary class="btn small">Telefonat, Brief oder Nachricht festhalten</summary>
-    <form id="festhaltenForm" class="reply-form" style="margin-top:12px">
-      <div class="from-pick"><label class="sub" for="fhKanal">Kanal</label>
-        <select name="kanal" id="fhKanal">{% for k in von_hand %}<option value="{{ k }}">{{ kanaele[k] }}</option>{% endfor %}</select>
-        <select name="richtung" aria-label="Richtung"><option value="in">vom Kunden</option><option value="out">von uns</option></select>
-        <input type="datetime-local" name="am" aria-label="Wann (leer = jetzt)"></div>
-      <textarea name="text" rows="3" placeholder="Was wurde gesagt oder geschrieben?" required></textarea>
-      <div class="reply-actions"><span class="muted small">WhatsApp und LinkedIn kommen später direkt hierher (Unipile). Bis dahin hier festhalten.</span>
-        <button class="btn primary">Festhalten</button></div>
-    </form>
-  </details>
-  {% if lead.status == 'gesperrt' %}
+  <p class="os-hinweis err">Dieser Betrieb möchte keine Nachrichten mehr bekommen. Antworten ist gesperrt.</p>
   {% elif not can_send %}
-  <p class="note warn small">Zum Antworten das Akquise-Postfach eintragen (Einstellungen → Postfach und Versand → Akquise-Postfach).</p>
+  <p class="os-hinweis">Zum Antworten das Akquise-Postfach eintragen (Einstellungen → Postfach und Versand → Akquise-Postfach).</p>
   {% else %}
-  <form class="reply-form" id="replyForm">
-    {% if postfaecher %}<div class="from-pick"><label class="sub" for="replyBox">Postfach</label>
-      <select name="postfach" id="replyBox">{% if akquise %}<option value="">Akquise-Postfach</option>{% endif %}{% for p in postfaecher %}<option value="{{ p.id }}" {{ 'selected' if p.id == postfach_vorschlag }}>{{ p.name }} ({{ p.adresse }})</option>{% endfor %}</select></div>{% endif %}
-    <div class="from-pick"><label class="sub" for="replyFrom">Von</label>
-      <select name="von" id="replyFrom">{% for p in senders %}<option value="{{ p.key }}" {{ 'selected' if p.key == sender }}>{{ p.name }}</option>{% endfor %}</select>
-      {% if lead.owner and lead.owner in people %}<span class="muted small">Zuständig: {{ people[lead.owner] }}</span>{% endif %}</div>
-    <label class="field"><span class="sub">Betreff</span><input type="text" name="subject" value="{{ subject }}"></label>
-    <textarea name="text" rows="5" placeholder="Ihre Antwort an {{ lead.contact_name or lead.name }} …" required></textarea>
-    <div class="reply-actions">
-      <span class="muted small">Gruß, Unterschrift und die zitierte Nachricht kommen automatisch dazu.{% if account.demo %} Demo: wird nicht verschickt.{% endif %}</span>
-      {% if darf('assistent', 2) and assistent_an() %}<button type="button" class="btn" id="entwurfAssistent" data-url="{{ url_for('assistent.entwurf_antwort', lead_id=lead.id) }}">Entwurf vom Assistenten</button>{% endif %}
-      <button class="btn primary">Antworten</button>
-    </div>
-  </form>
+  <section class="os-section">
+    <h2 class="os-headline">Antworten</h2>
+    <form id="replyForm" style="margin-top:16px">
+      <div class="os-grid2">
+        {% if postfaecher %}<label class="os-field"><span>Postfach</span>
+          <select name="postfach" id="replyBox">{% if akquise %}<option value="">Akquise-Postfach</option>{% endif %}{% for p in postfaecher %}<option value="{{ p.id }}" {{ 'selected' if p.id == postfach_vorschlag }}>{{ p.name }} ({{ p.adresse }})</option>{% endfor %}</select></label>{% endif %}
+        <label class="os-field"><span>Von{% if lead.owner and lead.owner in people %} (zuständig: {{ people[lead.owner] }}){% endif %}</span>
+          <select name="von" id="replyFrom">{% for p in senders %}<option value="{{ p.key }}" {{ 'selected' if p.key == sender }}>{{ p.name }}</option>{% endfor %}</select></label>
+      </div>
+      <label class="os-field"><span>Betreff</span><input type="text" name="subject" value="{{ subject }}"></label>
+      <label class="os-field"><span>Text</span><textarea name="text" rows="6" placeholder="Ihre Antwort an {{ lead.contact_name or lead.name }} …" required></textarea></label>
+      <p class="os-caption">Gruß, Unterschrift und die zitierte Nachricht kommen automatisch dazu.{% if account.demo %} Demo: wird nicht verschickt.{% endif %}</p>
+      {% if darf('assistent', 2) and assistent_an() %}<div class="os-btns" style="margin-top:12px"><button type="button" class="os-btn small quiet" id="entwurfAssistent" data-url="{{ url_for('assistent.entwurf_antwort', lead_id=lead.id) }}">Entwurf vom Assistenten</button></div>{% endif %}
+    </form>
+  </section>
   {% endif %}
+
+  <section class="os-section">
+    <details class="os-festhalten">
+      <summary class="os-link">Telefonat, Brief oder Nachricht festhalten</summary>
+      <form id="festhaltenForm" style="margin-top:16px">
+        <div class="os-grid2">
+          <label class="os-field"><span>Kanal</span><select name="kanal" id="fhKanal">{% for k in von_hand %}<option value="{{ k }}">{{ kanaele[k] }}</option>{% endfor %}</select></label>
+          <label class="os-field"><span>Richtung</span><select name="richtung"><option value="in">vom Kunden</option><option value="out">von uns</option></select></label>
+        </div>
+        <label class="os-field"><span>Wann (leer = jetzt)</span><input type="datetime-local" name="am"></label>
+        <label class="os-field"><span>Was wurde gesagt oder geschrieben?</span><textarea name="text" rows="3" required></textarea></label>
+        <p class="os-caption">WhatsApp und LinkedIn kommen später direkt hierher (Unipile). Bis dahin hier festhalten.</p>
+        <button class="os-btn small quiet" style="margin-top:12px">Festhalten</button>
+      </form>
+    </details>
+  </section>
 </main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('crm.inbox') }}" aria-label="Zum Postfach">{{ i('back') }}</a>
+  {% if lead.status != 'gesperrt' and can_send %}<button type="submit" form="replyForm" class="os-btn" id="replySend"><span>Antworten</span>{{ i('pfeil') }}</button>{% endif %}
+</div>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='inbox.js') }}"></script>{% endblock %}
