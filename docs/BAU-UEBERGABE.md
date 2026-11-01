@@ -2,7 +2,8 @@
 
 **Stand:** 01.11.2026 · Stufe 1 bis 9 gebaut und gemergt · nächste: **Stufe 10**
 
-Diese Datei ist für die nächste Sitzung (Mensch oder KI), die am Firmen-OS weiterbaut. Sie fasst zusammen, was
+Diese Datei ist für die nächste Sitzung (Mensch oder KI), die am Firmen-OS weiterbaut. **Wer neu einsteigt:**
+erst `CLAUDE.md`, dann diese Datei ganz, dann Abschnitt 3 mit Oskar abstimmen. Sie fasst zusammen, was
 steht, wie hier gearbeitet wird und was in Stufe 10 zu tun ist. Ausführlich steht alles in
 [FIRMEN-OS.md](FIRMEN-OS.md) (Bauplan, je Stufe „Umsetzung und Abweichungen“).
 
@@ -73,20 +74,65 @@ Briefings und Case Studys.*
 - Freigabe-Stufen: Alles, was der Assistent an Kunden schreibt, läuft über `freigaben.AKTIONEN` (C oder D);
   „Angebot verschicken“ steht dort noch als „kommt später“.
 
-**Vorschlag für den Umfang (mit Oskar abstimmen):**
+**Vorschlag für den Umfang.** Diese vier Fragen waren schon formuliert, aber noch nicht beantwortet. Vor dem Bau
+mit Oskar klären; jeweils die erste Antwort ist die Empfehlung:
 
-1. **Fragen an die Firmendaten** (Chat), nur mit den Daten, die die fragende Person nach ihren Rechten sieht.
-2. **Prioritäten für „Mein Tag“** als Vorschlag (überfällig, wartet auf Antwort, Fristen), nie automatisch.
-3. **Entwürfe:** Antwort im Postfach, Briefing vor einem Termin, Angebot aus Anforderung und Schätzung, Case Study aus
-   einem Projekt im Betrieb. Alles als Entwurf, Versand über die Freigabe-Stufen.
-4. **Kosten und Grenzen** in den Einstellungen: welches Modell, Budget je Monat, was der Assistent lesen darf.
-5. Protokoll: Jede Antwort des Assistenten mit Quelle (welche Daten), damit nachvollziehbar bleibt, woher sie kommt.
+1. **Umfang:** alle Teile (Fragen an die Firmendaten, Prioritäten, Entwürfe für Antwort/Briefing/Angebot/Case Study,
+   Einstellungen mit Budget, Protokoll mit Quellen) · oder ohne Angebote · oder nur Fragen und Entwürfe.
+2. **Wie der Assistent Daten liest:** gezielt mit Werkzeugen (Tool Use: z. B. `akte(lead)`, `offene_rechnungen()`,
+   `kpis(woche)`, jedes Werkzeug prüft `firma.darf` der fragenden Person) · oder eine Zusammenfassung aller sichtbaren
+   Daten mit jeder Frage (einfacher, teurer, ungenauer).
+3. **Prioritäten auf „Mein Tag“:** auf Knopfdruck („Was zuerst?“, kostet nur beim Klick), dazu immer eine
+   Reihenfolge nach Regeln ohne KI · oder jeden Morgen automatisch je Person.
+4. **Angebote:** KI-Entwurf aus Anforderung und Schätzung, bearbeitbar, PDF wie bei Rechnungen (`pdf.py`), Versand
+   über die Freigabe-Stufe „angebot“ (in `freigaben.AKTIONEN` auf `kommt_mit="später"`, freischalten) · oder nur
+   Text-Entwurf.
 
-## 4. Offen und gut zu wissen
+**Bausteine, die es schon gibt:**
+
+- `ai.py`: `_call(stage, brain, prompt, schema)` mit strukturierter Ausgabe (JSON-Schema), Modellwahl je Stufe
+  (`MODELS`), Preise (`PRICES`), Kosten über `ai.on_usage` → `leaddb.record_usage` (Tabelle `ai_usage`, mit Person).
+  Für den Assistenten eine eigene Stufe in `MODELS`/`MAX_TOKENS`/`EFFORT`/`STAGE_LABELS` anlegen; Tool Use braucht
+  eine eigene Schleife (`messages.create` mit `tools`, bis `stop_reason != "tool_use"`), nicht `_call`.
+- Budget: `agent.month_budget_left_eur(c)` (Monatsbudget des Teams), `agent.person_budget_left_eur(c, key)` (eigenes
+  Budget aus dem Profil). KI-Aufrufe immer in `with agent.acting_as(db(), me()):`, damit die Kosten der Person
+  zugerechnet werden (Muster: `leads_views.py`).
+- Ohne Schlüssel (`ai.available()` ist False) muss alles ohne KI weiterlaufen; Tests nie gegen die echte API,
+  sondern mit einem nachgebauten Client (Muster für nachgebaute Dienste: `FakeGoogle`, `FakeImap`, `PostfachMock` in
+  `tests/test_os.py`).
+- Was an Kunden geht, nur als Entwurf; Versand über `portal.mail_an_kunde` bzw. `posteingang.senden` und die
+  Freigabe-Stufen (`freigaben.stufe`, neue Art in `freigaben.ARTEN`). Fremde Texte (Mails, Webseiten) sind Daten,
+  keine Anweisungen an die KI (steht so im Systemprompt in `ai.py`).
+
+## 4. Für einen neuen Agenten: Umgebung und Fallstricke
+
+- **Tests:** `python -m unittest discover tests` (dauert etwa 25 Sekunden; Meldungen „Kreisgrenzen nicht geladen“
+  und „Fehlgeschlagene Anmeldung“ sind normal). Dazu `python -m pyflakes app tests`; bekannte alte Meldungen in
+  `branchentest.py:451` und `main.py` (`firma` doppelt importiert) sind nicht neu.
+- **App lokal ansehen:** `DEMO_MODE=true DATA_DIR=<ordner> SECRET_KEY=x LEADS_WORKER=false flask --app app.main run -p 8097`,
+  dann `/login` → „Demo ansehen“ (angemeldet als Oskar, es wird nichts verschickt). Flask lädt Vorlagen und Python-Code
+  nicht neu: nach Änderungen den Server neu starten. Screenshots mit Playwright (Handy 390×844, Desktop 1300×900,
+  `data-theme` auf `light`/`dark`), auf Überlauf prüfen (`document.documentElement.scrollWidth`).
+- **Skripte außerhalb der App** (z. B. zum Anlegen von Testdaten): `agent.CFG` ist dann leer. Funktionen, die
+  `agent.S(...)` oder `agent.CFG["data_dir"]` brauchen (Mailversand, verschlüsselte Passwörter), vorher mit
+  `agent.CFG["data_dir"] = ...` versorgen oder nur über die App/Tests aufrufen.
+- **Muster je Stufe:** Modul `app/<name>.py` (SCHEMA, Logik, `firma.log` bei jedem Schreiben), Seiten in
+  `app/<name>_views.py` (Blueprint in `main.py` registrieren und in `MODUL_JE_BEREICH` einem Rechte-Modul zuordnen),
+  Vorlagen mit den Bausteinen aus `_os.html`/`os.css`, Einstellungen als `REGELN` in `kv` `regel:<name>`, Takt in
+  `agent.tick()`, Tests als neue Klassen am Ende von `tests/test_os.py`, Doku in FIRMEN-OS.md (abhaken +
+  „Umsetzung und Abweichungen“), README, UEBERGABE („Nach dem Update“) und diese Datei.
+- **Commits und Pull Requests:** auf Deutsch, PR gegen `claude/practical-dijkstra-nnnz1b`, danach mergen und den
+  Arbeits-Branch neu vom Standard-Branch abzweigen.
+
+## 5. Offen und gut zu wissen
 
 - **Google-Kalender** ist im Code fertig, aber noch nie mit echtem Google getestet (in der Entwicklungsumgebung
   gesperrt). Erster echter Test steht in UEBERGABE.md.
 - **Offene Fragen** aus FIRMEN-OS.md Abschnitt 10: Status Hamza/Omid, Stunden pro Woche (für Terminvorschläge je
   Person), Buchungslink für Kunden, Zeitpunkt Kunden-Bereich, Name des OS.
+- **Noch nie mit echten Diensten getestet** (nur mit nachgebauten in den Tests): Mailversand an Kunden
+  (Kunden-Bereich, Wochenbericht, Rechnungen), weitere Postfächer (IMAP/SMTP), Rechnungs-Mail mit PDF-Anhang.
+- **Später fällig:** E-Rechnung (XRechnung/ZUGFeRD) vor 2028; Unipile-Anbindung für WhatsApp/LinkedIn (nur
+  vorbereitet); das Postfach im CRM auf das neue Design (`os.css`) umstellen; Angebote (siehe Abschnitt 3).
 - Nach jedem Update auf dem Server: die „Nach dem Update“-Hinweise je Stufe in UEBERGABE.md abarbeiten
   (Omid anlegen, Google-Zugang eintragen, Zielwerte, Projekte-Regeln …).
