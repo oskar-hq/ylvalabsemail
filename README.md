@@ -1,5 +1,8 @@
 # Ylva Labs Mailer
 
+> **Wohin es geht:** Aus dem Mailer wird das Firmen-OS von Ylva Labs. Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md),
+> Rollen und Abläufe: [docs/ROLLEN-UND-ABLAEUFE.md](docs/ROLLEN-UND-ABLAEUFE.md).
+
 Ein kleines Web-Programm für den eigenen Server (z. B. Proxmox): anmelden, Vorlage und Bild wählen,
 Empfänger, Betreff und Text eintippen. Beim Klick auf **Senden** wird die gestaltete HTML-Mail im
 Ylva-Labs-Design gebaut und über das eigene Postfach verschickt.
