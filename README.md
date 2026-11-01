@@ -276,6 +276,17 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
 - **Einstellungen → Finanzen**: Firmendaten für die Rechnung, Umsatzsteuer (Kleinunternehmer oder 19 %),
   Nummernkreis, Zahlungsziel, Mailtext, Tag der Monatsrechnungen, Personalkosten für die Geld-Regel.
 
+## Ein Posteingang (Stufe 9)
+
+- **Postfach im CRM** zeigt alle Nachrichten an einer Stelle: Akquise-Postfach, weitere Postfächer, Wünsche aus dem
+  Kunden-Bereich und von Hand festgehaltene Telefonate, Briefe, WhatsApp- und LinkedIn-Nachrichten. „Wartet seit“
+  und zuständige Person je Gespräch.
+- **Weitere Postfächer** (z. B. kontakt@, persönliche Adressen) unter Einstellungen → Postfächer, je Postfach für
+  eine Person oder das Team. Antworten gehen aus dem gewählten Postfach raus.
+- **Mögliche Änderungswünsche:** Schreibt oder ruft ein Kunde mit laufendem Projekt an, schlägt das OS vor, daraus
+  einen Änderungswunsch zu machen. Die verantwortliche Person entscheidet mit einem Klick.
+- **WhatsApp und LinkedIn über Unipile** sind vorbereitet (Zugang in den Einstellungen), aber noch nicht verbunden.
+
 ## Team: Konten, eigenes CRM, Vorlage, Zahlen
 
 - **Anmelden mit Name und Passwort**. Passwörter liegen nur als scrypt-Hash in der Datenbank, nach Fehlversuchen

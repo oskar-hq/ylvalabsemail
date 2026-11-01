@@ -8,6 +8,7 @@
     <div>
       <h1 class="title">{{ lead.name }}</h1>
       <p class="muted">{{ lead.contact_name or '' }}{% if lead.contact_name and lead.email %} · {% endif %}{{ lead.email or '' }}{% if lead.stage %} · {{ stage_labels.get(lead.stage, '') }}{% endif %}</p>
+      {% if wartet %}<p class="small" style="color:var(--accent-text,#DE2E36)">Wartet auf unsere Antwort seit {{ fmt_day(wartet) }} · {{ wartet[11:16] }}</p>{% endif %}
     </div>
     <a class="btn small" href="{{ url_for('leads.detail', lead_id=lead.id) }}">Akte</a>
   </div>
@@ -21,11 +22,15 @@
 
   <ol class="thread">
     {% for m in items %}
-    <li class="msg-{{ m.direction }}">
+    <li class="msg-{{ m.direction }}" {% if m.id %}id="m{{ m.id }}"{% endif %}>
       <div class="bubble">
-        <span class="b-meta">{{ m.who }} · {{ when(m.at) }}{% if m.direction == 'out' and m.channel != 'email' %} · {{ {'brief': 'Brief', 'telefon': 'Telefon'}.get(m.channel, m.channel) }}{% endif %}</span>
-        {% if m.subject %}<b class="b-subj">{{ m.subject }}</b>{% endif %}
+        <span class="b-meta">{{ m.who }} · {{ when(m.at) }}{% if m.channel != 'email' %} · {{ kanaele.get(m.channel, {'brief': 'Brief', 'telefon': 'Telefon'}.get(m.channel, m.channel)) }}{% endif %}{% if m.postfach_name %} · Postfach {{ m.postfach_name }}{% endif %}</span>
+        {% if m.subject and m.subject not in kanaele.values() %}<b class="b-subj">{{ m.subject }}</b>{% endif %}
         <p>{{ m.text }}</p>
+        {% if m.wunsch == 'vorschlag' %}<div class="wunsch-box"><span class="small">Möglicher Änderungswunsch für das laufende Projekt.</span>
+          {% if wunsch_darf %}<button type="button" class="btn small primary" data-wunsch="{{ m.id }}" data-ja="1">Als Wunsch übernehmen</button>
+          <button type="button" class="link small" data-wunsch="{{ m.id }}" data-ja="0">Kein Wunsch</button>{% else %}<span class="muted small">Entscheidet die verantwortliche Person.</span>{% endif %}</div>
+        {% elif m.wunsch == 'uebernommen' %}<span class="muted small">Als Änderungswunsch übernommen.</span>{% endif %}
       </div>
     </li>
     {% else %}<li class="muted small">Noch keine Nachrichten.</li>{% endfor %}
@@ -33,10 +38,26 @@
 
   {% if lead.status == 'gesperrt' %}
   <p class="note warn small">Dieser Betrieb möchte keine Nachrichten mehr bekommen. Antworten ist gesperrt.</p>
+  {% endif %}
+  <details class="festhalten">
+    <summary class="btn small">Telefonat, Brief oder Nachricht festhalten</summary>
+    <form id="festhaltenForm" class="reply-form" style="margin-top:12px">
+      <div class="from-pick"><label class="sub" for="fhKanal">Kanal</label>
+        <select name="kanal" id="fhKanal">{% for k in von_hand %}<option value="{{ k }}">{{ kanaele[k] }}</option>{% endfor %}</select>
+        <select name="richtung" aria-label="Richtung"><option value="in">vom Kunden</option><option value="out">von uns</option></select>
+        <input type="datetime-local" name="am" aria-label="Wann (leer = jetzt)"></div>
+      <textarea name="text" rows="3" placeholder="Was wurde gesagt oder geschrieben?" required></textarea>
+      <div class="reply-actions"><span class="muted small">WhatsApp und LinkedIn kommen später direkt hierher (Unipile). Bis dahin hier festhalten.</span>
+        <button class="btn primary">Festhalten</button></div>
+    </form>
+  </details>
+  {% if lead.status == 'gesperrt' %}
   {% elif not can_send %}
   <p class="note warn small">Zum Antworten das Akquise-Postfach eintragen (Einstellungen → Postfach und Versand → Akquise-Postfach).</p>
   {% else %}
   <form class="reply-form" id="replyForm">
+    {% if postfaecher %}<div class="from-pick"><label class="sub" for="replyBox">Postfach</label>
+      <select name="postfach" id="replyBox">{% if akquise %}<option value="">Akquise-Postfach</option>{% endif %}{% for p in postfaecher %}<option value="{{ p.id }}" {{ 'selected' if p.id == postfach_vorschlag }}>{{ p.name }} ({{ p.adresse }})</option>{% endfor %}</select></div>{% endif %}
     <div class="from-pick"><label class="sub" for="replyFrom">Von</label>
       <select name="von" id="replyFrom">{% for p in senders %}<option value="{{ p.key }}" {{ 'selected' if p.key == sender }}>{{ p.name }}</option>{% endfor %}</select>
       {% if lead.owner and lead.owner in people %}<span class="muted small">Zuständig: {{ people[lead.owner] }}</span>{% endif %}</div>

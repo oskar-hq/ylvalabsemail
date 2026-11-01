@@ -7,7 +7,8 @@
     <span class="conv-main">
       <span class="conv-top"><b>{{ cv.name }}</b>{% if cv.unread_msgs %}<span class="nav-count new-count">{{ cv.unread_msgs }} neu</span>{% endif %}
         <span class="conv-when">{{ when(cv.last_at) }}</span></span>
-      <span class="conv-meta">{{ cv.contact_name or cv.category_label }}{% if cv.city %} · {{ cv.city }}{% endif %}{% if cv.stage %} · {{ stage_labels.get(cv.stage, '') }}{% endif %}</span>
+      <span class="conv-meta">{{ cv.contact_name or cv.category_label }}{% if cv.city %} · {{ cv.city }}{% endif %}{% if cv.stage %} · {{ stage_labels.get(cv.stage, '') }}{% endif %}{% if cv.owner and cv.owner in people %} · {{ people[cv.owner] }}{% endif %}</span>
+      {% if cv.wartet_seit %}<span class="conv-meta" style="color:var(--accent-text,#DE2E36)">wartet seit {{ when(cv.wartet_seit) }}{% if cv.wunsch %} · möglicher Änderungswunsch{% endif %}</span>{% elif cv.wunsch %}<span class="conv-meta">möglicher Änderungswunsch</span>{% endif %}
       <span class="conv-snip">{% if cv.last_dir == 'out' %}<em>Ihr:</em> {% endif %}{{ (cv.last_text or '')|replace('\n', ' ')|truncate(140) }}</span>
     </span>
     <span class="chev">›</span></a></li>
@@ -18,15 +19,16 @@
   <div class="inbox-head">
     <h1 class="title">Postfach</h1>
     <span class="inbox-actions">
-      <button class="btn small" type="button" id="inboxFetch" {{ 'disabled' if ready and not account.demo }}>Jetzt abrufen</button>
+      <button class="btn small" type="button" id="inboxFetch" {{ 'disabled' if ready and not account.demo and not weitere }}>Jetzt abrufen</button>
       <a class="btn small primary" href="{{ url_for('crm.compose_mail') }}">Neue Mail</a>
     </span>
   </div>
-  {% if ready %}<p class="note warn small">{{ ready }} Senden und Empfangen gehen erst danach: <a href="{{ url_for('settings.page', gid='postfach', pid='zugang') }}">Einstellungen → Akquise-Postfach</a>.</p>
+  {% if weitere %}<p class="muted small">Weitere Postfächer: {% for p in weitere %}{{ p.name }}{% if p.fehler %} <span style="color:var(--accent-text,#DE2E36)">(Fehler: {{ p.fehler }})</span>{% endif %}{{ ', ' if not loop.last }}{% endfor %}. <a href="{{ url_for('posteingang.einstellungen') }}">Postfächer</a></p>{% endif %}
+  {% if ready and not weitere %}<p class="note warn small">{{ ready }} Senden und Empfangen gehen erst danach: <a href="{{ url_for('settings.page', gid='postfach', pid='zugang') }}">Einstellungen → Akquise-Postfach</a>.</p>
   {% elif inbox_status and not inbox_status.ok %}<p class="note err small">Das Postfach konnte zuletzt nicht abgerufen werden ({{ inbox_status.at|kurzdatum }}): {{ inbox_status.error }} <a href="{{ url_for('leads.system') }}">Systemcheck →</a></p>
   {% elif inbox_status %}<p class="muted small">Zuletzt abgerufen {{ inbox_status.at|kurzdatum }}. Neue Mails kommen alle paar Minuten von selbst.</p>{% endif %}
   <p class="muted small" id="inboxMsg" hidden></p>
-  <p class="muted small">Alle Mails an das Akquise-Postfach, nach Absender. Antworten Sie hier direkt, der Verlauf bleibt zusammen. Newsletter und automatische Mails bleiben draußen.
+  <p class="muted small">Alle Nachrichten an einer Stelle: Akquise-Postfach, weitere Postfächer, Kunden-Bereich und von Hand festgehaltene Telefonate, Briefe und Nachrichten. Nach Absender. Antworten Sie hier direkt, der Verlauf bleibt zusammen. Newsletter und automatische Mails bleiben draußen.
     Der Punkt zeigt, wie es läuft: <i class="mood mood-gut"></i> gut <i class="mood mood-mittel"></i> mittel <i class="mood mood-schlecht"></i> eher schlecht <i class="mood mood-neutral"></i> neutral.</p>
   {% if not groups.offen and not groups.gesendet %}
   <p class="note small">Noch keine Mails. Sobald jemand an das Akquise-Postfach schreibt oder auf eine Mail antwortet, steht es hier.{% if st.warnings %} Prüfen Sie dafür das Akquise-Postfach unter Einstellungen.{% endif %}</p>

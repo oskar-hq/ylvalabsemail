@@ -9,12 +9,16 @@ from . import leaddb, scoring
 
 
 def add(c, lead_id, direction, text, subject="", from_addr="", from_name="", to_addr="", message_id=None,
-        in_reply_to=None, sent_by=None, read=True, at=None):
-    c.execute("INSERT INTO messages (lead_id, at, direction, from_addr, from_name, to_addr, subject, text, message_id,"
-              " in_reply_to, sent_by, read) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
-              (lead_id, at or leaddb.now(), direction, from_addr, from_name, to_addr, subject, text, message_id,
-               in_reply_to, sent_by, 1 if read else 0))
+        in_reply_to=None, sent_by=None, read=True, at=None, kanal="mail", postfach_id=None, erfasst_von=None):
+    """Eine Nachricht im Posteingang. `kanal`: mail, telefon, brief, whatsapp, linkedin, portal; `postfach_id`: weiteres
+    Postfach (None = Akquise-Postfach). Gibt die ID zurück."""
+    cur = c.execute("INSERT INTO messages (lead_id, at, direction, from_addr, from_name, to_addr, subject, text, "
+                    "message_id, in_reply_to, sent_by, read, kanal, postfach_id, erfasst_von) "
+                    "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                    (lead_id, at or leaddb.now(), direction, from_addr, from_name, to_addr, subject, text, message_id,
+                     in_reply_to, sent_by, 1 if read else 0, kanal or "mail", postfach_id, erfasst_von))
     c.commit()
+    return cur.lastrowid
 
 
 def thread(c, lead):
@@ -28,16 +32,22 @@ def thread(c, lead):
         text = "\n\n".join(x for x in ((lead.get("followup_greeting") or "").strip(), lead["followup_body"].strip()) if x)
         items.append({"direction": "out", "at": lead["followup_sent_at"], "subject": lead.get("followup_subject") or "",
                       "text": text, "who": "Ihr", "channel": "email"})
-    for m in c.execute("SELECT * FROM messages WHERE lead_id=? ORDER BY at, id", (lead["id"],)):
+    for m in c.execute("SELECT m.*, p.name AS postfach_name FROM messages m LEFT JOIN postfaecher p ON p.id = m.postfach_id "
+                       "WHERE m.lead_id=? ORDER BY m.at, m.id", (lead["id"],)):
+        kanal = m["kanal"] or "mail"
         items.append({"direction": m["direction"], "at": m["at"], "subject": m["subject"] or "", "text": m["text"] or "",
                       "who": (m["sent_by"] or "Ihr") if m["direction"] == "out" else (m["from_name"] or m["from_addr"] or lead["name"]),
-                      "channel": "email", "message_id": m["message_id"], "from_addr": m["from_addr"], "read": m["read"]})
+                      "channel": "email" if kanal == "mail" else kanal, "kanal": kanal, "id": m["id"],
+                      "message_id": m["message_id"], "from_addr": m["from_addr"], "read": m["read"],
+                      "wunsch": m["wunsch"], "aenderung_id": m["aenderung_id"], "postfach_name": m["postfach_name"],
+                      "postfach_id": m["postfach_id"]})
     return sorted(items, key=lambda i: i["at"] or "")
 
 
 def last_incoming(c, lead_id):
-    row = c.execute("SELECT * FROM messages WHERE lead_id=? AND direction='in' ORDER BY at DESC, id DESC LIMIT 1",
-                    (lead_id,)).fetchone()
+    """Letzte eingehende Mail (für Antwort-Adresse, Betreff, Zitat). Telefonate und andere Kanäle zählen hier nicht."""
+    row = c.execute("SELECT * FROM messages WHERE lead_id=? AND direction='in' AND IFNULL(kanal, 'mail') = 'mail' "
+                    "ORDER BY at DESC, id DESC LIMIT 1", (lead_id,)).fetchone()
     return dict(row) if row else None
 
 
@@ -106,10 +116,16 @@ def mood(lead, last_in):
 
 def grouped(c, me=None):
     """Nach Kunden: offen zum Antworten (letzte Nachricht kam von ihnen) und gesendet (wartet auf ihre Antwort)."""
-    groups = {"offen": [], "gesendet": []}
+    groups = {"offen": [], "gesendet": []}  # „offen“: älteste wartende zuerst (siehe unten)
     for conv in conversations(c, me):
         last_in = last_incoming(c, conv["id"])
         conv["mood"], conv["mood_why"] = mood(conv, last_in)
         conv["last_in"] = last_in
+        if conv["last_dir"] == "in":
+            from . import posteingang
+            conv["wartet_seit"] = posteingang.wartet_seit(c, conv["id"])
+        conv["wunsch"] = bool(c.execute("SELECT 1 FROM messages WHERE lead_id=? AND wunsch='vorschlag'",
+                                        (conv["id"],)).fetchone())
         groups["offen" if conv["last_dir"] == "in" else "gesendet"].append(conv)
+    groups["offen"].sort(key=lambda x: (not x["unread_msgs"], x.get("wartet_seit") or ""))
     return groups

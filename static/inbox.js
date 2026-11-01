@@ -22,10 +22,23 @@
       e.preventDefault();
       const btn = form.querySelector('button.primary');
       btn.disabled = true; btn.textContent = 'Wird gesendet …';
-      try { await post(`/crm/postfach/${id}/antwort`, { text: form.text.value, subject: form.subject.value, von: form.von?.value || '' }); location.reload(); }
+      try { await post(`/crm/postfach/${id}/antwort`, { text: form.text.value, subject: form.subject.value, von: form.von?.value || '', postfach: form.postfach?.value || '' }); location.reload(); }
       catch (err) { alert(err.message); btn.disabled = false; btn.textContent = 'Antworten'; }
     });
-    document.querySelector('.thread li:last-child')?.scrollIntoView({ block: 'end' });
+    root.querySelectorAll('[data-wunsch]').forEach((b) => b.addEventListener('click', async () => {
+      b.disabled = true;
+      try { await post(`/crm/postfach/nachricht/${b.dataset.wunsch}/wunsch`, { ja: b.dataset.ja }); location.reload(); }
+      catch (e) { alert(e.message); b.disabled = false; }
+    }));
+    const fh = document.getElementById('festhaltenForm');
+    fh?.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const btn = fh.querySelector('button.primary');
+      btn.disabled = true;
+      try { await post(`/crm/postfach/${id}/festhalten`, new FormData(fh)); location.reload(); }
+      catch (err) { alert(err.message); btn.disabled = false; }
+    });
+    if (!location.hash) document.querySelector('.thread li:last-child')?.scrollIntoView({ block: 'end' });
   }
 
   const fetchBtn = document.getElementById('inboxFetch');

@@ -202,6 +202,11 @@ def _projekte():
     return projekte
 
 
+def _posteingang():
+    from . import posteingang
+    return posteingang
+
+
 def _finanzen():
     from . import finanzen
     return finanzen
@@ -241,6 +246,10 @@ KATALOG = [
        "runter", quelle="Zeiterfassung an Projekten, live in der Woche"),
     _k("freigaben_ohne_aenderung", "Abnahmen beim ersten Mal", "technik",
        lambda *a: _projekte().kpi_abnahmen_erstes_mal(*a), "prozent", quelle="Erste Abnahme bestanden"),
+    _k("antwortzeit", "Antwortzeit auf Kunden", "alle", lambda *a: _posteingang().antwortzeit(*a), "stunden", "runter",
+       quelle="Nachricht des Kunden bis zu unserer Antwort, alle Kanäle"),
+    _k("wartet_auf_antwort", "Wartet auf unsere Antwort", "alle", lambda *a: _posteingang().kpi_wartend(*a),
+       richtung="runter", quelle="Stand jetzt"),
     _k("umsatz", "Umsatz (Rechnungen, netto)", "markt", lambda *a: _finanzen().kpi_umsatz(*a), "euro",
        je_person=False, quelle="Ausgestellte Rechnungen nach Rechnungsdatum"),
     _k("ausfallzeit", "Ausfallzeit", "technik", lambda *a: _notfall().ausfallzeit(*a), "stunden", "runter",

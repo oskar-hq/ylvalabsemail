@@ -627,8 +627,8 @@ def versenden(c, wer, rid, data_dir):
     if not r["email"]:
         raise FinanzError("An der Rechnung fehlt die Mailadresse.")
     lead = leaddb.get_lead(c, r["lead_id"])
-    domain = r["email"].rsplit("@", 1)[-1]
-    if not lead or lead["status"] == "gesperrt" or domain in set(leaddb.kv_get(c, "blocklist", [])):
+    from . import posteingang
+    if not lead or lead["status"] == "gesperrt" or posteingang.sperrliste(c, r["email"]):
         raise FinanzError("Dieser Kunde möchte keine Nachrichten mehr bekommen.")
     if not agent.outreach_configured():
         raise FinanzError("Das Akquise-Postfach ist nicht eingerichtet (Einstellungen → Postfach und Versand).")

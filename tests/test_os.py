@@ -1898,5 +1898,185 @@ class FinanzenWebTest(WebBasis):
         self.assertNotIn("/finanzen/rechnung/", self.client.get("/mein-tag").get_data(as_text=True))
 
 
+# ---------------------------------------------------------------- Stufe 9: Ein Posteingang
+
+
+def mail_bytes(von, betreff, text, extra=None, tage=0):
+    from email.message import EmailMessage
+    from email.utils import formatdate, make_msgid
+    import time
+    m = EmailMessage()
+    m["From"], m["To"], m["Subject"] = von, "kontakt@ylvalabs.de", betreff
+    m["Date"] = formatdate(time.time() - tage * 86400, localtime=True)
+    m["Message-ID"] = make_msgid(domain="example.de")
+    for k, v in (extra or {}).items():
+        m[k] = v
+    m.set_content(text)
+    return m.as_bytes()
+
+
+class FakeImap:
+    def __init__(self, mails):
+        self.mails = mails
+
+    def select(self, *a, **kw):
+        return "OK", [b"1"]
+
+    def search(self, *a):
+        return "OK", [" ".join(str(i + 1) for i in range(len(self.mails))).encode()]
+
+    def fetch(self, num, spec):
+        return "OK", [(b"1 (BODY[] {1}", self.mails[int(num) - 1])]
+
+    def logout(self):
+        pass
+
+
+class PosteingangTest(unittest.TestCase):
+    def setUp(self):
+        from unittest import mock
+        from app import posteingang
+        self.pe = posteingang
+        self.c = frische_db()
+        self.post = PostfachMock(self)
+        self.imap_mails, self.smtp_mails = [], []
+        smtp = mock.Mock(send_message=lambda m: self.smtp_mails.append(m))
+        p1 = mock.patch.object(posteingang, "IMAP", lambda p: FakeImap(self.imap_mails))
+        p2 = mock.patch.object(posteingang, "SMTP", lambda p: smtp)
+        p1.start(), p2.start()
+        self.addCleanup(p1.stop), self.addCleanup(p2.stop)
+        self.pid_projekt = projekt_anlegen(self.c, "Tischlerei Post", "info@tischlerei-post.de")
+        self.lid = self.c.execute("SELECT lead_id FROM projekte WHERE id=?", (self.pid_projekt,)).fetchone()[0]
+
+    def postfach(self, besitzer="oskar"):
+        return self.pe.postfach_speichern(self.c, "oskar", None, {
+            "name": "Oskar", "adresse": "oskar@ylvalabs.de", "passwort": "geheim", "imap_host": "imap.example.de",
+            "smtp_host": "smtp.example.de", "besitzer": besitzer, "aktiv": "1"})
+
+    def test_postfach_abrufen_zuordnen_senden(self):
+        pe, c = self.pe, self.c
+        with self.assertRaises(pe.PosteingangError):
+            pe.postfach_speichern(c, "oskar", None, {"name": "X", "adresse": "kaputt", "imap_host": "a", "smtp_host": "b"})
+        pid = self.postfach()
+        self.assertNotIn("geheim", str([tuple(r) for r in c.execute("SELECT * FROM postfaecher")]))  # verschlüsselt
+        self.assertEqual(pe._passwort(pe.postfach(c, pid)), "geheim")
+        self.imap_mails += [
+            mail_bytes("Frau Post <info@tischlerei-post.de>", "Kleine Bitte", "Können Sie das Logo größer machen?"),
+            mail_bytes("News <news@shop.de>", "Angebote", "Rabatt!", {"List-Unsubscribe": "<mailto:x@shop.de>"}),
+            mail_bytes("Neu Kunde <neu@firma-neu.de>", "Anfrage", "Was kostet das?"),
+            mail_bytes("Alt <alt@firma.de>", "Alt", "Uralt", tage=10),
+        ]
+        self.assertEqual(pe.abrufen(c, pid), 2)
+        self.assertEqual(pe.abrufen(c, pid), 0)  # schon gesehen
+        m = c.execute("SELECT * FROM messages WHERE lead_id=? AND direction='in'", (self.lid,)).fetchone()
+        self.assertEqual((m["postfach_id"], m["kanal"], m["wunsch"], m["read"]), (pid, "mail", "vorschlag", 0))
+        self.assertTrue(c.execute("SELECT 1 FROM leads WHERE email='neu@firma-neu.de' AND status='kontakt'").fetchone())
+        self.assertIn("Neue Mail von Tischlerei Post", [r["title"] for r in leaddb.notices(c, "o", 20, "oskar")[0]])
+        self.assertIn("Möglicher Änderungswunsch: Tischlerei Post",
+                      [r["title"] for r in leaddb.notices(c, "o", 20, "oskar")[0]])
+        self.assertTrue(pe.wartet_seit(c, self.lid))
+        self.assertEqual([w["id"] for w in pe.wartend(c, "oskar") if w["id"] == self.lid], [self.lid])
+        lead = leaddb.get_lead(c, self.lid)
+        with self.assertRaises(pe.PosteingangError):
+            pe.senden(c, "hamza", pid, lead, "info@tischlerei-post.de", "Re: Kleine Bitte", "Klar.")  # Oskars Postfach
+        pe.senden(c, "oskar", pid, lead, "info@tischlerei-post.de", "Re: Kleine Bitte", "Klar, machen wir.", m["message_id"])
+        sent = self.smtp_mails[0]
+        self.assertIn("oskar@ylvalabs.de", sent["From"])
+        self.assertEqual(sent["In-Reply-To"], m["message_id"])
+        self.assertIsNone(pe.wartet_seit(c, self.lid))
+        self.assertEqual(c.execute("SELECT postfach_id FROM messages WHERE lead_id=? AND direction='out'",
+                                   (self.lid,)).fetchone()[0], pid)
+        # Sperrliste (Domain) und Erstkontakt-Regel gelten für jedes Postfach
+        leaddb.kv_set(c, "blocklist", ["tischlerei-post.de"])
+        with self.assertRaises(pe.PosteingangError):
+            pe.senden(c, "oskar", pid, lead, "info@tischlerei-post.de", "Noch was", "Hallo")
+        kalt = leaddb.get_lead(c, lead_anlegen(c, "Kalter Lead", email="kalt@betrieb.de"))
+        with self.assertRaises(pe.PosteingangError):
+            pe.senden(c, "oskar", pid, kalt, "kalt@betrieb.de", "Hallo", "Erstkontakt")
+        # Fehler am Postfach landen am Postfach
+        from unittest import mock
+
+        def kaputt(p):
+            raise OSError("Verbindung abgelehnt")
+        with mock.patch.object(pe, "IMAP", kaputt):
+            with self.assertRaises(pe.PosteingangError):
+                pe.abrufen(c, pid)
+        self.assertTrue(pe.postfach(c, pid)["fehler"])
+
+    def test_festhalten_und_wunsch(self):
+        from app import projekte
+        pe, c = self.pe, self.c
+        with self.assertRaises(pe.PosteingangError):
+            pe.festhalten(c, "hamza", self.lid, "fax", "in", "Hallo")
+        mid = pe.festhalten(c, "hamza", self.lid, "telefon", "in", "Kundin möchte einen zweiten Benutzer.")
+        m = c.execute("SELECT * FROM messages WHERE id=?", (mid,)).fetchone()
+        self.assertEqual((m["kanal"], m["erfasst_von"], m["wunsch"]), ("telefon", "hamza", "vorschlag"))
+        with self.assertRaises(pe.PosteingangError):
+            pe.wunsch_entscheiden(c, "hamza", mid, True)  # entscheidet die verantwortliche Person
+        aid = pe.wunsch_entscheiden(c, "oskar", mid, True)
+        a = projekte.aenderung_get(c, aid)
+        self.assertEqual(a["quelle"], "telefon")
+        self.assertIn("zweiten Benutzer", a["text"])
+        with self.assertRaises(pe.PosteingangError):
+            pe.wunsch_entscheiden(c, "oskar", mid, True)  # nur einmal
+        mid2 = pe.festhalten(c, "oskar", self.lid, "whatsapp", "in", "Danke für das Update!")
+        self.assertIsNone(pe.wunsch_entscheiden(c, "oskar", mid2, False))
+        self.assertEqual(c.execute("SELECT wunsch FROM messages WHERE id=?", (mid2,)).fetchone()[0], "nein")
+        # Von uns festgehalten: kein Wunsch, beantwortet die Wartenden
+        pe.festhalten(c, "oskar", self.lid, "telefon", "out", "Zurückgerufen, alles geklärt.")
+        self.assertIsNone(pe.wartet_seit(c, self.lid))
+        # Wünsche aus dem Kunden-Bereich stehen auch im Posteingang, schon übernommen
+        from app import portal
+        link = portal.zugang_schicken(c, "oskar", self.pid_projekt, senden=False)
+        z = portal.sitzung(c, portal.anmelden(c, link.rsplit("/", 1)[1])[0])
+        portal.wunsch(c, z, "Bitte Farbe ändern")
+        m = c.execute("SELECT * FROM messages WHERE kanal='portal'").fetchone()
+        self.assertEqual((m["wunsch"], m["read"], m["direction"]), ("uebernommen", 0, "in"))
+
+    def test_antwortzeit_kpi(self):
+        from app import kpis, mailbox
+        pe, c = self.pe, self.c
+        von, bis = kpis.woche_grenzen(kpis.woche_von())
+        tag = von[:10]
+        mailbox.add(c, self.lid, "in", "Frage", at=tag + "T09:00:00")
+        mailbox.add(c, self.lid, "out", "Antwort", at=tag + "T11:00:00")
+        mailbox.add(c, self.lid, "in", "Noch eine", at=tag + "T12:00:00")
+        mailbox.add(c, self.lid, "out", "Antwort 2", at=tag + "T16:00:00")
+        self.assertEqual(pe.antwortzeit(c, von, bis), 3.0)
+        self.assertEqual(kpis.wert(c, "antwortzeit", kpis.woche_von()), 3.0)
+        self.assertEqual(kpis.wert(c, "antwortzeit", kpis.woche_von(), "hamza"), None)  # Oskar ist zuständig
+
+
+class PosteingangWebTest(WebBasis):
+    def test_gespraech_festhalten_wunsch_einstellungen(self):
+        c = self.c
+        pid = projekt_anlegen(c, "Web Post Kunde", "web@post-kunde.de")
+        lid = c.execute("SELECT lead_id FROM projekte WHERE id=?", (pid,)).fetchone()[0]
+        self.addCleanup(lambda: (c.execute("DELETE FROM projekte WHERE id=?", (pid,)),
+                                 c.execute("DELETE FROM messages WHERE lead_id=?", (lid,)), c.commit()))
+        r = self.post(f"/crm/postfach/{lid}/festhalten", {"kanal": "brief", "richtung": "in", "text": "Brief mit Wunsch"})
+        self.assertTrue(r.get_json()["ok"], r.get_data(as_text=True))
+        html = self.client.get(f"/crm/postfach/{lid}").get_data(as_text=True)
+        self.assertIn("Brief mit Wunsch", html)
+        self.assertIn("Als Wunsch übernehmen", html)
+        self.assertIn("Wartet auf unsere Antwort seit", html)
+        mid = c.execute("SELECT id FROM messages WHERE lead_id=? AND kanal='brief'", (lid,)).fetchone()[0]
+        r = self.post(f"/crm/postfach/nachricht/{mid}/wunsch", {"ja": "1"})
+        self.assertTrue(r.get_json()["ok"])
+        self.assertIn("wartet seit", self.client.get("/crm/postfach?wer=alle").get_data(as_text=True))
+        self.assertEqual(self.client.get("/einstellungen/postfaecher").status_code, 200)
+        r = self.post("/einstellungen/postfaecher", {"name": "Kontakt", "adresse": "kontakt2@ylvalabs.de",
+                                                     "passwort": "x", "imap_host": "imap.example.de",
+                                                     "smtp_host": "smtp.example.de", "aktiv": "1"},
+                      headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"], r.get_data(as_text=True))
+        self.addCleanup(lambda: (c.execute("DELETE FROM postfaecher"), c.commit()))
+        self.assertIn("Kontakt (kontakt2@ylvalabs.de)", self.client.get(f"/crm/postfach/{lid}").get_data(as_text=True))
+        self.als("hamza")
+        self.assertEqual(self.client.get("/einstellungen/postfaecher").status_code, 403)
+        # Ein Postfach des Teams steht allen beim Antworten zur Wahl
+        self.assertIn("Kontakt (kontakt2@ylvalabs.de)", self.client.get(f"/crm/postfach/{lid}").get_data(as_text=True))
+
+
 if __name__ == "__main__":
     unittest.main()

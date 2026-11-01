@@ -1120,9 +1120,14 @@ def handle_reply(c, lead_id, msg, message_id=None):
     name, addr = parseaddr(msg.get("From", ""))
     text = _message_text(msg)
     subject = str(msg.get("Subject", ""))
-    mailbox.add(c, lead_id, "in", text or "(leere Nachricht)", subject=subject, from_addr=addr, from_name=name,
-                message_id=(message_id or msg.get("Message-ID") or "").strip() or None,
-                in_reply_to=(msg.get("In-Reply-To") or "").strip() or None, read=False)
+    mid_db = mailbox.add(c, lead_id, "in", text or "(leere Nachricht)", subject=subject, from_addr=addr, from_name=name,
+                         message_id=(message_id or msg.get("Message-ID") or "").strip() or None,
+                         in_reply_to=(msg.get("In-Reply-To") or "").strip() or None, read=False)
+    try:  # Kunde mit laufendem Projekt: möglicher Änderungswunsch (Firmen-OS Stufe 9)
+        from . import posteingang
+        posteingang.nach_eingang(c, lead_id, mid_db)
+    except Exception:
+        log.exception("Wunsch-Vorschlag fehlgeschlagen")
     if lead["status"] in ("beantwortet", "gesperrt", "kontakt") or lead.get("interest"):  # Gespräch läuft schon
         leaddb.update_lead(c, lead_id, unread=1)
         leaddb.add_event(c, lead_id, "reply", text or "(leere Nachricht)", author=name or addr,
@@ -1375,6 +1380,11 @@ def tick():
                 finanzen.takt(c)
             except Exception:
                 log.exception("Fehler im Finanzen-Takt")
+            try:  # weitere Postfächer abrufen (Firmen-OS Stufe 9)
+                from . import posteingang
+                posteingang.takt(c)
+            except Exception:
+                log.exception("Fehler beim Abrufen der weiteren Postfächer")
             reports.notify_released(c, notify)
             start_scheduled(c)
             run = c.execute("SELECT id FROM runs WHERE status='wartet' ORDER BY id LIMIT 1").fetchone()

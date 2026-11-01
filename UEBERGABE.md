@@ -91,6 +91,10 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   nächsten Monatsersten bereitet das OS Monatsrechnungen für Projekte live/im Betrieb mit Pauschale vor; sie warten in
   der Freigabe-Zentrale. Wer schon Rechnungen außerhalb des OS geschrieben hat: im Nummernformat einen anderen
   Präfix wählen oder mit dem Steuerberater klären, wie die Nummern weiterlaufen.
+- **Firmen-OS Stufe 9 (01.11.2026):** Ein Posteingang. Nach dem Update: unter Einstellungen → Postfächer weitere
+  Adressen eintragen (z. B. kontakt@ oder persönliche), je Postfach „Jetzt abrufen“ drücken und prüfen, ob die Ampel
+  grün wird. Persönliche Postfächer der richtigen Person zuordnen. Mails, die gleichzeitig ans Akquise-Postfach
+  gehen, erscheinen nur einmal. WhatsApp und LinkedIn bis zur Unipile-Anbindung im Gespräch von Hand festhalten.
 
 - Die automatischen Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.

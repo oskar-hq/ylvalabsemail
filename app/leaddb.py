@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import aufgaben, branchentest, firma, finanzen, freigaben, kalender, kpis, notfall, portal, projekte  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
+from . import aufgaben, branchentest, firma, finanzen, freigaben, kalender, kpis, notfall, portal, posteingang, projekte  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
 
 ROOT = Path(__file__).resolve().parent.parent
 BRAIN_SEED = Path(__file__).resolve().parent / "brain_seed.md"
@@ -164,6 +164,12 @@ MIGRATIONS = [
     # Firmen-OS Stufe 4: Entwurf, wie ihn die schreibende Person hinterlassen hat (Lernstufen-Messung)
     "ALTER TABLE leads ADD COLUMN entwurf_original TEXT",
     "ALTER TABLE leads ADD COLUMN entwurf_von TEXT",
+    # Firmen-OS Stufe 9: ein Posteingang für alle Kanäle und Postfächer, Wünsche aus Nachrichten
+    "ALTER TABLE messages ADD COLUMN kanal TEXT NOT NULL DEFAULT 'mail'",
+    "ALTER TABLE messages ADD COLUMN postfach_id INTEGER",
+    "ALTER TABLE messages ADD COLUMN wunsch TEXT",
+    "ALTER TABLE messages ADD COLUMN aenderung_id INTEGER",
+    "ALTER TABLE messages ADD COLUMN erfasst_von TEXT",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.
@@ -255,6 +261,7 @@ def connect(path):
     conn.executescript(notfall.SCHEMA)
     conn.executescript(portal.SCHEMA)
     conn.executescript(finanzen.SCHEMA)
+    conn.executescript(posteingang.SCHEMA)
     for stmt in MIGRATIONS:
         try:
             conn.execute(stmt)
