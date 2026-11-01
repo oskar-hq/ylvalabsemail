@@ -8,7 +8,7 @@ from datetime import datetime
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from . import agent, ai, aufgaben, claude_research, crm, emailbuild, firma, known, leaddb, mailbox, niches, pixel, reports, schedule, scoring, team, websearch, webpush
+from . import agent, ai, aufgaben, branchentest, claude_research, crm, emailbuild, firma, known, leaddb, mailbox, niches, pixel, reports, schedule, scoring, team, websearch, webpush
 from .main import DB_PATH, ROOT, SETTINGS, login_required
 
 bp = Blueprint("leads", __name__)
@@ -221,6 +221,8 @@ def to_crm():
             fields.update(status="passt", rejected_by=None)
         leaddb.update_lead(c, lead_id, **fields)
         crm.set_stage(c, lead_id, stage, author=who(), note="Aus den Leads ins CRM geschickt.")
+        if stage == "neu":
+            branchentest.eingang(c, lead_id, me())  # Branchentest: wer recherchiert hat, Testbranche, Prüfung
         if owner and not lead["owner"]:
             crm.set_owner(c, lead_id, owner, who())
         elif owner and lead["owner"] != owner:
@@ -473,6 +475,8 @@ def detail(lead_id):
                            tasks=crm.open_tasks(db(), lead_id=lead_id), can_mail=can_mail, mail_hint=mail_hint,
                            tab=leaddb.tab_of(lead), tabs=leaddb.TABS, people=team.names(db()),
                            komm=aufgaben.kommentare(db(), "lead", lead_id), os_personen=firma.aktive_personen(db()),
+                           testbranchen=branchentest.branchen(db()), kanaele=branchentest.KANAELE,
+                           pruefung=branchentest.offene_pruefung(db(), lead_id),
                            demo=SETTINGS["DEMO_MODE"])
 
 
@@ -637,11 +641,21 @@ def chat(lead_id):
                    cost_eur=money(spent))
 
 
+def _gesperrt_bis_pruefung(lead):
+    """Kontakt erst nach bestandener Lead-Prüfung (Branchentest, Lernstufe)."""
+    if branchentest.kontakt_frei(lead):
+        return None
+    return jsonify(error="Erst die Lead-Prüfung abwarten." if lead.get("pruef_status") == "wartet" else
+                   "Dieser Lead wurde bei der Prüfung abgelehnt."), 409
+
+
 @bp.post("/leads/<int:lead_id>/send")
 @login_required
 def send(lead_id):
     _save_draft(lead_or_404(lead_id))
     lead = lead_or_404(lead_id)
+    if _gesperrt_bis_pruefung(lead):
+        return _gesperrt_bis_pruefung(lead)
     if lead["status"] not in ("entwurf", "passt", "aussortiert"):
         return jsonify(error="Diese Nachricht ist schon raus."), 400
     if not (lead["body"] or "").strip():
@@ -672,6 +686,8 @@ def _approved_signal(lead, channel):
 def mark_sent(lead_id):
     _save_draft(lead_or_404(lead_id))
     lead = lead_or_404(lead_id)
+    if _gesperrt_bis_pruefung(lead):
+        return _gesperrt_bis_pruefung(lead)
     channel = request.form.get("channel")
     labels = {"brief": "per Brief", "telefon": "am Telefon", "email": "per Mail (selbst verschickt)"}
     if channel not in labels:
@@ -744,6 +760,7 @@ def verdict(lead_id):
         leaddb.update_lead(db(), lead_id, unread=0)
         leaddb.add_event(db(), lead_id, "status", "Beim Prüfen als gut markiert, ins CRM.", author=who())
         crm.claim(db(), lead_id, me())
+        branchentest.eingang(db(), lead_id, me())
         leaddb.add_signal(db(), "gut", f"Das Team findet {lead['name']} ({lead['branche']} / {lead['category_label']}, "
                           f"{lead['fit_score']} Punkte) passend.", lead_id)
     else:

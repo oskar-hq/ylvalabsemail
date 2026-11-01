@@ -4,7 +4,7 @@ from datetime import date
 
 from flask import Blueprint, Response, abort, g, jsonify, render_template, request
 
-from . import agent, crm, leaddb, mailbox, regions, team
+from . import agent, branchentest, crm, leaddb, mailbox, regions, team
 from .leads_views import db, lead_or_404, me, status_payload, who
 from .main import SETTINGS, login_required
 
@@ -124,6 +124,7 @@ def create():
     if not lead_id:
         return jsonify(error=f"Nicht angelegt: {reason}."), 400
     crm.claim(db(), lead_id, me())
+    branchentest.eingang(db(), lead_id, me())
     return jsonify(ok=True, lead_id=lead_id)
 
 

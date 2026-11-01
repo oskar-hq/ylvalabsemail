@@ -6,7 +6,7 @@ from datetime import datetime
 from markupsafe import Markup, escape
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from . import aufgaben, crm, firma, leaddb, mailbox
+from . import aufgaben, branchentest, crm, firma, leaddb, mailbox
 from .leads_views import db, me
 from .main import SETTINGS, darf, login_required, safe_next
 
@@ -69,12 +69,15 @@ def mein_tag():
         akquise = {"wiedervorlagen": crm.due_count(c, key) if darf("crm") else 0,
                    "antworten": mailbox.unread_count(c, key) if darf("crm") else 0,
                    "pruefen": leaddb.tab_counts(c).get("entwurf", 0) if darf("leads") else 0}
+    pruefungen = branchentest.pruefungen(c, key) if darf("leads") else []
+    meine_leads = branchentest.recherche_kpis(c, key) if darf("leads") else None
     person = firma.person(c, key)
     wochentag = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
     monat = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober",
              "November", "Dezember"]
     jetzt = datetime.now()
     html = render_template("mein_tag.html", account=g.account, t=tag, gruss=gruss, akquise=akquise,
+                           pruefungen=pruefungen, meine_leads=meine_leads,
                            vorname=(person["name"] if person else "Team").split(" ")[0],
                            datum=f"{wochentag[jetzt.weekday()]}, {jetzt.day}. {monat[jetzt.month - 1]}",
                            **_form_kontext(), demo=SETTINGS["DEMO_MODE"])

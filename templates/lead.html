@@ -157,6 +157,36 @@
         </form>
       </div>
 
+      <div class="side-block" id="branchentest">
+        <span class="label">Branchentest <a class="muted" href="{{ url_for('branchentest.uebersicht') }}">· Auswertung</a></span>
+        {% if lead.pruef_status == 'wartet' %}<p class="note warn small">In Prüfung{% if pruefung %} bei {{ people.get(pruefung.pruefer, pruefung.pruefer) }}{% endif %}. Bis dahin nicht kontaktieren.{% if pruefung and pruefung.pruefer == account.team %} <a href="{{ url_for('branchentest.pruefen') }}">Jetzt prüfen</a>{% endif %}</p>
+        {% elif lead.pruef_status == 'abgelehnt' %}<p class="note err small">Bei der Lead-Prüfung abgelehnt.</p>
+        {% elif lead.pruef_status == 'angenommen' %}<p class="small muted">Prüfung bestanden.</p>{% endif %}
+        <form method="post" action="{{ url_for('branchentest.lead_test', lead_id=lead.id) }}" data-os-fetch="reload" class="task-form">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <select name="testbranche" aria-label="Testbranche"><option value="">Keine Testbranche</option>
+            {% for b in testbranchen %}<option value="{{ b.key }}" {{ 'selected' if lead.testbranche == b.key }}>{{ b.name }}</option>{% endfor %}</select>
+          <div class="row">
+            <select name="herkunft" aria-label="Herkunft"><option value="kalt" {{ 'selected' if lead.herkunft != 'warm' }}>Kalt (zählt)</option><option value="warm" {{ 'selected' if lead.herkunft == 'warm' }}>Warm, Oskars Kontakt (zählt nicht)</option></select>
+            <button class="btn small">Speichern</button>
+          </div>
+        </form>
+        {% if lead.pruef_status not in ('wartet', 'abgelehnt') %}
+        <form method="post" action="{{ url_for('branchentest.kontakt', lead_id=lead.id) }}" data-os-fetch="reload" class="task-form">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+          <input type="text" name="notiz" maxlength="500" placeholder="Kontakt: z. B. „Inhaber erreicht, will Unterlagen“">
+          <div class="row">
+            <select name="kanal" aria-label="Kontaktweg">{% for k, l in kanaele %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select>
+            <button class="btn small">Kontakt protokollieren</button>
+          </div>
+        </form>
+        {% endif %}
+        <form method="post" action="{{ url_for('branchentest.preisgespraech', lead_id=lead.id) }}" data-os-fetch="reload">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="an" value="{{ '0' if lead.preisgespraech_am else '1' }}">
+          <button class="btn small {{ 'primary' if lead.preisgespraech_am else '' }}">{{ 'Ernsthaftes Preisgespräch ✓' if lead.preisgespraech_am else 'Ernsthaftes Preisgespräch geführt' }}</button>
+        </form>
+      </div>
+
       <div class="side-block">
         <span class="label">Wiedervorlagen</span>
         {% if tasks %}

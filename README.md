@@ -189,6 +189,19 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
   Recht selbst nehmen oder sich selbst sperren. Notfall auf dem Server: siehe Einstellungen → Zugang und Sicherheit.
 - **Anmeldung mit dem Postfach**: nur noch Mailer, und wählbar sind nur Personen, die noch kein Passwort haben.
 
+## Branchentest (Stufe 2)
+
+- **Branchentest** (Leads → Branchentest, oder aus „Mein Tag“): je Testbranche Betriebe (Ziel 50), Kontakte,
+  Antworten, Gespräche, ernsthafte Preisgespräche, Abschlüsse, nur kalte Kontakte; Ampel ab 3 Preisgesprächen.
+  Warme Kontakte (Oskars Bekannte) werden in der Akte markiert und stehen getrennt.
+- **Testbranchen** anlegen und ändern (Name, Nischen, wer recherchiert, Ziel). Leads aus diesen Nischen landen
+  automatisch in der Branche, passende lassen sich in der Branche mit einem Klick übernehmen.
+- **Lead-Prüfung**: Wer einen Lead ins CRM bringt, ist die recherchierende Person. Je nach Lernstufe wird er
+  geprüft (Stufe 1 jeder, 2 jeder 5., 3 jeder 10.); Omids Leads prüft Hamza, Hamzas Leads Oskar, und jeder 5.
+  bestandene Lead geht als Stichprobe eine Ebene höher. Ablehnen nur mit Grund; bis zur Prüfung kein Kontakt.
+- **In der Akte**: Testbranche und warm/kalt, „Kontakt protokollieren“ (Telefon, Brief, LinkedIn, vor Ort),
+  „Ernsthaftes Preisgespräch geführt“.
+
 ## Team: Konten, eigenes CRM, Vorlage, Zahlen
 
 - **Anmelden mit Name und Passwort**. Passwörter liegen nur als scrypt-Hash in der Datenbank, nach Fehlversuchen
@@ -340,6 +353,8 @@ app/firma.py           Firmen-OS: Protokoll (log), Personen, Rollen und Rechte, 
 app/aufgaben.py        Aufgaben, Anfragen, Kommentare mit @-Erwähnung, Meldungen an eine Person
 app/aufgaben_views.py  Seiten „Mein Tag“, „Aufgaben“, Kommentare
 app/personen_views.py  Einstellungen → Personen, Rollen, Bereiche, Protokoll; Einladungslink
+app/branchentest.py    Testbranchen, Lead-Prüfung (Freigaben), Kontakte, Preisgespräche, Auswertung
+app/branchentest_views.py  Seiten Branchentest, Testbranche, Leads prüfen; Knöpfe in der Akte
 app/scoring.py         Bewertung nach Regeln und Einordnen von Antworten, beides ohne KI
 app/regions.py         Kreise: Grenzen, Statistik je Kreis, Wachstumsregionen
 app/agent.py           Hintergrund-Arbeiter: suchen, bewerten, Antworten lesen, Entwürfe auf Wunsch

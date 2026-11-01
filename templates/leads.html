@@ -6,6 +6,7 @@
   <div class="leads-head">
     <h1 class="title">Leads <span class="muted" style="font-size:.45em;font-weight:500">{{ c.values()|sum - c.kandidaten - c.grobfilter }}</span></h1>
     <div class="btn-row head-btns">
+      <a class="btn" href="{{ url_for('branchentest.uebersicht') }}">Branchentest{% if pruefungen_offen() %} · {{ pruefungen_offen() }} prüfen{% endif %}</a>
       <a class="btn primary" href="{{ url_for('leads.search') }}">Neue Betriebe finden</a>
     </div>
   </div>
@@ -16,7 +17,7 @@
     {% if auto_on %}<span><b>Automatisch an</b>{% for k in ['frei', 'ki'] if sched[k].cfg.enabled %} · {{ 'Kostenlos' if k == 'frei' else 'KI' }}: {{ sched[k].summary }}{% if sched[k].next %}, nächster Lauf {{ sched[k].next[8:10] }}.{{ sched[k].next[5:7] }}. {{ sched[k].next[11:16] }}{% endif %}{% endfor %}</span>
     {% else %}<span><b>Automatisch suchen: aus</b> · einschalten</span>{% endif %}
     <span class="chev">›</span></a>
-  {% if st.last_run and not st.run %}<p class="last-run small"><a href="{{ url_for('leads.costs') }}">Letzter Lauf {{ st.last_run.started_at|kurzdatum }}{% if st.last_run.started_by and st.last_run.started_by.startswith('Automatik') %} (automatisch){% endif %}:</a> {{ st.last_run.message }}</p>{% endif %}
+  {% if st.last_run and not st.run %}<p class="last-run small"><a href="{{ url_for('leads.costs') if darf('kosten') else url_for('leads.search') }}">Letzter Lauf {{ st.last_run.started_at|kurzdatum }}{% if st.last_run.started_by and st.last_run.started_by.startswith('Automatik') %} (automatisch){% endif %}:</a> {{ st.last_run.message }}</p>{% endif %}
 
   <div class="kpis">
     <a class="kpi {{ 'act' if c.entwurf }}" href="{{ url_for('leads.overview', tab='entwurf') }}"><span>Zur Freigabe</span><b>{{ c.entwurf }}</b><em>Nachricht fertig</em></a>

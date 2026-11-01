@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Branchentest · Ylva Labs{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Akquise</span>
+    <h1 class="os-title-l">Branchentest</h1>
+    <p class="os-sub os-lead">Gleiche Bedingungen, nur Fremde. Gezählt werden Preisgespräche und Abschlüsse, nicht Antworten. Weiterverfolgt wird eine Branche ab {{ regeln.preisgespraeche }} ernsthaften Preisgesprächen.</p>
+  </header>
+
+  <div class="os-tiles" aria-label="Gesamt, nur kalt">
+    <div class="os-tile {{ 'zero' if not gesamt.betriebe }}"><span>Betriebe</span><b>{{ gesamt.betriebe }}<span class="os-sub" style="display:inline;font-size:15px"> / {{ ziel }}</span></b></div>
+    {% for k, label in kennzahlen %}<div class="os-tile {{ 'zero' if not gesamt[k] }}"><span>{{ label }}</span><b>{{ gesamt[k] }}</b></div>{% endfor %}
+  </div>
+
+  {% if offen or (verwalten and alle_offen) %}
+  <ul class="os-list" style="margin-top:8px">
+    <li><a class="os-row" href="{{ url_for('branchentest.pruefen', alle='1' if verwalten and not offen else None) }}"><span class="os-ico red">{{ offen or alle_offen }}</span>
+      <span class="os-txt"><b>{{ 'Leads prüfen' if offen else 'Offene Prüfungen im Team' }}</b><span>{{ 'Warten auf deine Entscheidung' if offen else 'Bei anderen Personen' }}</span></span>
+      <span class="os-chev">{{ i('chev') }}</span></a></li>
+  </ul>
+  {% endif %}
+
+  <section class="os-section">
+    <h2 class="os-headline">Branchen</h2>
+    <p class="os-sub">Nur kalte Kontakte. Warme stehen getrennt in der Branche.</p>
+    <ul class="os-list anim">
+      {% for z in zeilen %}<li style="--i:{{ loop.index0 }}"><a class="os-row" href="{{ url_for('branchentest.branche', key=z.key) }}">
+        <span class="os-ampel {{ z.ampel }}" title="{{ {'gruen': 'Weiterverfolgen', 'gelb': 'Erste Preisgespräche', 'grau': 'Noch kein Preisgespräch'}[z.ampel] }}"></span>
+        <span class="os-txt"><b>{{ z.name }}{% if not z.aktiv %} <span class="os-tag muted">pausiert</span>{% endif %}</b>
+          <span>{{ z.person_name or 'Noch niemand zugeordnet' }} · {{ z.kalt.betriebe }} von {{ z.ziel }} · {{ z.kalt.kontakte }} Kontakte · {{ z.kalt.preisgespraeche }} Preisgespräche · {{ z.kalt.abschluesse }} Abschlüsse</span>
+          <span class="os-bar" aria-hidden="true"><i style="width:{{ z.fortschritt }}%"></i></span></span>
+        <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
+    </ul>
+  </section>
+
+  <section class="os-section">
+    <h2 class="os-headline">Im Vergleich</h2>
+    <div class="os-scroll">
+      <table class="os-table">
+        <thead><tr><th>Branche</th><th>Betriebe</th>{% for k, label in kennzahlen %}<th>{{ label }}</th>{% endfor %}<th>Antwortquote</th></tr></thead>
+        <tbody>{% for z in zeilen if z.aktiv %}<tr><td>{{ z.name }}</td><td>{{ z.kalt.betriebe }}</td>
+          {% for k, label in kennzahlen %}<td class="{{ 'hl' if k == 'preisgespraeche' and z.ampel == 'gruen' }}">{{ z.kalt[k] }}</td>{% endfor %}
+          <td>{{ (z.antwortquote ~ ' %') if z.antwortquote is not none else '–' }}</td></tr>{% endfor %}</tbody>
+      </table>
+    </div>
+    <p class="os-caption" style="margin-top:16px">Das zeigt nur eine Richtung und ist keine genaue Prognose. Gebaut wird erst nach einem Abschluss.</p>
+  </section>
+
+  <section class="os-section" id="regeln">
+    <h2 class="os-headline">Regeln</h2>
+    <p class="os-sub">Lernstufe 1: Jeder Lead wird geprüft. Geprüft wird von der verantwortlichen Person der Akquise, bei ihr selbst eine Ebene höher. Lernstufe 4: keine Prüfung.</p>
+    <form method="post" action="{{ url_for('branchentest.regeln') }}" style="margin-top:24px" data-os-fetch="reload">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      {% for k, (label, _d, lo, hi) in regel_labels.items() %}
+      <label class="os-field"><span>{{ label }}</span><input type="number" name="{{ k }}" min="{{ lo }}" max="{{ hi }}" value="{{ regeln[k] }}" {{ 'disabled' if not verwalten }}></label>
+      {% endfor %}
+      {% if verwalten %}<button class="os-btn small quiet">Regeln speichern</button>{% endif %}
+    </form>
+  </section>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('aufgaben.mein_tag') }}" aria-label="Zurück">{{ i('back') }}</a>
+  {% if verwalten %}<button type="button" class="os-btn" data-sheet="sheet-branche-neu"><span>Neue Branche</span>{{ i('plus') }}</button>{% endif %}
+</div>
+{% if verwalten %}{% include "_testbranche_sheet.html" %}{% endif %}
+{% endblock %}

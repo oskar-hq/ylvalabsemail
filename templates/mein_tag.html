@@ -19,6 +19,7 @@
     <a class="os-tile {{ 'alert' if t.ueberfaellig else 'zero' }}" href="#ueberfaellig"><span>Überfällig</span><b>{{ t.ueberfaellig|length }}</b></a>
     <a class="os-tile {{ 'zero' if not t.heute }}" href="#heute"><span>Heute</span><b>{{ t.heute|length }}</b></a>
     <a class="os-tile {{ 'zero' if not t.anfragen }}" href="#anfragen"><span>Anfragen</span><b>{{ t.anfragen|length }}</b></a>
+    {% if pruefungen %}<a class="os-tile alert" href="{{ url_for('branchentest.pruefen') }}"><span>Leads prüfen</span><b>{{ pruefungen|length }}</b></a>{% endif %}
     <a class="os-tile {{ 'zero' if not n_spaeter }}" href="#woche"><span>Diese Woche</span><b>{{ n_spaeter }}</b></a>
     {% if akquise and darf('crm') %}<a class="os-tile {{ 'zero' if not akquise.wiedervorlagen }}" href="{{ url_for('crm.board') }}"><span>Wieder&shy;vorlagen</span><b>{{ akquise.wiedervorlagen }}</b></a>
     <a class="os-tile {{ 'zero' if not akquise.antworten }}" href="{{ url_for('crm.inbox') }}"><span>Antworten</span><b>{{ akquise.antworten }}</b></a>{% endif %}
@@ -32,6 +33,18 @@
       <li style="--i:{{ loop.index0 }}"><a class="os-row" href="{{ url_for('aufgaben.detail', aid=a.id) }}">
         {{ avatar(a.anfrage_von_name) }}
         <span class="os-txt"><b>{{ a.titel }}</b><span>von {{ a.anfrage_von_name }} · {{ a.bereich_name }} · gewünscht {{ a.tag }}</span></span>
+        <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if pruefungen %}
+  <section class="os-section" id="pruefen">
+    <h2 class="os-headline">Leads prüfen</h2>
+    <p class="os-sub">Bis du entscheidest, werden sie nicht kontaktiert.</p>
+    <ul class="os-list anim">{% for f in pruefungen[:5] %}
+      <li style="--i:{{ loop.index0 }}"><a class="os-row" href="{{ url_for('branchentest.pruefen') }}">{{ avatar(f.von_name) }}
+        <span class="os-txt"><b>{{ f.name }}</b><span>{{ 'Stichprobe' if f.stufe == 'stichprobe' else 'von ' ~ (f.von_name or '') }} · {{ f.branche_name or 'ohne Testbranche' }}</span></span>
         <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
     </ul>
   </section>
@@ -74,13 +87,17 @@
   </section>
   {% endif %}
 
-  {% if akquise and darf('leads') and (akquise.wiedervorlagen or akquise.antworten or akquise.pruefen) %}
+  {% if akquise and darf('leads') %}
   <section class="os-section">
     <h2 class="os-headline">Akquise</h2>
     <ul class="os-list">
+      <li><a class="os-row" href="{{ url_for('branchentest.uebersicht') }}"><span class="os-ico">{{ i('bereich') }}</span>
+        <span class="os-txt"><b>Branchentest</b><span>{% if meine_leads and (meine_leads.entschieden or meine_leads.offen) %}Deine Leads: {{ meine_leads.angenommen_woche }} angenommen diese Woche{% if meine_leads.anteil is not none %} · {{ meine_leads.anteil }} % angenommen{% endif %}{% else %}Auswertung je Branche, Leads prüfen{% endif %}</span></span>
+        <span class="os-chev">{{ i('chev') }}</span></a></li>
+      {% if akquise.wiedervorlagen or akquise.antworten or akquise.pruefen %}
       <li><a class="os-row" href="{{ url_for('leads.home') }}"><span class="os-ico">{{ i('lead') }}</span>
         <span class="os-txt"><b>Akquise heute</b><span>{{ akquise.antworten }} neue Antworten · {{ akquise.wiedervorlagen }} Wiedervorlagen · {{ akquise.pruefen }} Entwürfe</span></span>
-        <span class="os-chev">{{ i('chev') }}</span></a></li>
+        <span class="os-chev">{{ i('chev') }}</span></a></li>{% endif %}
     </ul>
   </section>
   {% endif %}

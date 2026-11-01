@@ -753,3 +753,9 @@ dd.social-links{margin-left:0}
 .bell-notices{max-height:min(34vh,260px)}
 .bell-head-mail{border-top:1px solid var(--line);margin-top:4px}
 .top nav .bell-list a.is-new .bell-top b::before{content:"";display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--blue);margin-right:6px;vertical-align:1px}
+/* Branchentest in der Lead-Akte */
+#branchentest form{margin:10px 0 0}
+#branchentest .row{display:flex;gap:8px;align-items:center;margin-top:8px}
+#branchentest .row select{flex:1;min-width:0}
+#branchentest .row .btn{flex:none}
+#branchentest input[type=text],#branchentest select{width:100%}

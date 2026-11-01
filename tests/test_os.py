@@ -268,7 +268,7 @@ class KommentarTest(unittest.TestCase):
         self.assertEqual(len(aufgaben.kommentare(c, "aufgabe", aid)), 2)
 
 
-class WebTest(unittest.TestCase):
+class WebBasis(unittest.TestCase):
     """Seiten und Rechte über den Browser-Weg (gemeinsame Test-Datenbank, Änderungen werden zurückgesetzt)."""
 
     def setUp(self):
@@ -289,6 +289,9 @@ class WebTest(unittest.TestCase):
 
     def post(self, url, data=None, **kw):
         return self.client.post(url, data={"_csrf": "tok", **(data or {})}, **kw)
+
+
+class WebTest(WebBasis):
 
     def test_seiten_rendern(self):
         html = self.client.get("/mein-tag").get_data(as_text=True)
@@ -383,6 +386,166 @@ class WebTest(unittest.TestCase):
                                                                   "forget_device", "healthz", "personen.einladung"):
                 continue
             self.assertIsNotNone(main.modul_der_seite(ep), ep)
+
+
+# ---------------------------------------------------------------- Stufe 2: Branchentest
+
+
+def lead_anlegen(c, name, niche=None, **felder):
+    cur = c.execute("INSERT INTO leads (name, created_at, updated_at, status, niche) VALUES (?,?,?, 'passt', ?)",
+                    (name, HEUTE, HEUTE, niche))
+    c.commit()
+    if felder:
+        leaddb.update_lead(c, cur.lastrowid, **felder)
+    return cur.lastrowid
+
+
+class BranchentestTest(unittest.TestCase):
+    def setUp(self):
+        from app import branchentest as bt
+        self.bt = bt
+        self.c = frische_db()
+        self.omid = firma.person_anlegen(self.c, "oskar", "Omid Beispiel", "recherche", bereiche_neu=["akquise"],
+                                         lernstufe=1)
+
+    def test_startwerte_und_pruefer(self):
+        bt, c = self.bt, self.c
+        self.assertEqual([b["key"] for b in bt.branchen(c)], ["video", "design", "handwerk", "verwaltung"])
+        self.assertEqual(bt.branche(c, "video")["person"], "hamza")
+        self.assertIsNone(bt.branche(c, "handwerk")["person"])  # Omid trägt Oskar in der App ein
+        self.assertEqual(bt.pruefer_fuer(c, self.omid), ("hamza", "oskar"))
+        self.assertEqual(bt.pruefer_fuer(c, "hamza"), ("oskar", None))
+        self.assertEqual(bt.pruefer_fuer(c, "oskar"), (None, None))
+
+    def test_pruefung_omid_hamza_stichprobe_oskar(self):
+        bt, c = self.bt, self.c
+        leaddb.kv_set(c, "regel:branchentest", {"stufe2": 5, "stufe3": 10, "stichprobe": 2, "preisgespraeche": 3})
+        ids = [lead_anlegen(c, f"Sanitär {n}", "sanitaer") for n in range(3)]
+        for lid in ids:
+            felder = bt.eingang(c, lid, self.omid)
+            self.assertEqual(felder["testbranche"], "handwerk")  # nach Nische
+            self.assertEqual(felder["pruef_status"], "wartet")  # Lernstufe 1: jeder Lead
+        bt.eingang(c, ids[0], self.omid)  # zweimal schadet nicht
+        offen = bt.pruefungen(c, "hamza")
+        self.assertEqual(len(offen), 3)
+        self.assertIn("Lead prüfen: Sanitär 0", [r["title"] for r in leaddb.notices(c, "h", 20, "hamza")[0]])
+        lead = leaddb.get_lead(c, ids[0])
+        with self.assertRaises(bt.BranchentestError):  # Kontakt erst nach der Prüfung
+            bt.kontakt(c, self.omid, ids[0], "telefon")
+        self.assertFalse(bt.darf_entscheiden(c, self.omid, offen[0]))
+        self.assertTrue(bt.darf_entscheiden(c, "hamza", offen[0]))
+        bt.entscheiden(c, "hamza", offen[0]["id"], True)
+        bt.entscheiden(c, "hamza", offen[1]["id"], True)  # 2. bestandener: Stichprobe an Oskar (Quote 2)
+        with self.assertRaises(bt.BranchentestError):
+            bt.entscheiden(c, "hamza", offen[2]["id"], False, "")  # Ablehnen nur mit Grund
+        bt.entscheiden(c, "hamza", offen[2]["id"], False, "Kein eigener Betrieb, nur Filiale")
+        self.assertEqual(leaddb.get_lead(c, ids[2])["status"], "aussortiert")
+        self.assertIn("Lead abgelehnt: Sanitär 2", [r["title"] for r in leaddb.notices(c, "o", 20, self.omid)[0]])
+        stich = bt.pruefungen(c, "oskar")
+        self.assertEqual([(p["objekt_id"], p["stufe"]) for p in stich], [(ids[1], "stichprobe")])
+        self.assertTrue(bt.kontakt_frei(leaddb.get_lead(c, ids[1])))  # Stichprobe hält den Kontakt nicht auf
+        bt.entscheiden(c, "oskar", stich[0]["id"], False, "Zu klein")
+        empf = [r["title"] for r in leaddb.notices(c, "h", 30, "hamza")[0]]
+        self.assertIn("Lead abgelehnt: Sanitär 1", empf)  # Hamza lernt aus Oskars Stichprobe
+        kpi = bt.recherche_kpis(c, self.omid)
+        self.assertEqual((kpi["entschieden"], kpi["anteil"], kpi["offen"]), (3, 67, 0))
+        bt.kontakt(c, self.omid, ids[0], "telefon", "Inhaber erreicht")
+        self.assertEqual(leaddb.get_lead(c, ids[0])["stage"], "kontaktiert")
+        self.assertTrue(firma.protokoll(c, art="pruefung"))
+        del lead
+
+    def test_lernstufen(self):
+        bt, c = self.bt, self.c
+        firma.person_aendern(c, "oskar", self.omid, "Omid Beispiel", "recherche", bereiche_neu=["akquise"], lernstufe=2)
+        geprueft = []
+        for n in range(6):
+            lid = lead_anlegen(c, f"Lead {n}")
+            geprueft.append(bt.eingang(c, lid, self.omid).get("pruef_status") == "wartet")
+        self.assertEqual(geprueft, [True, False, False, False, False, True])  # Stufe 2: jeder 5.
+        firma.person_aendern(c, "oskar", self.omid, "Omid Beispiel", "recherche", bereiche_neu=["akquise"], lernstufe=4)
+        self.assertNotIn("pruef_status", bt.eingang(c, lead_anlegen(c, "Frei"), self.omid))
+        self.assertNotIn("pruef_status", bt.eingang(c, lead_anlegen(c, "Gründer"), "oskar"))  # ohne Lernstufe
+
+    def test_auswertung_nur_kalt(self):
+        bt, c = self.bt, self.c
+        k1 = lead_anlegen(c, "Studio A", "video", testbranche="video", herkunft="kalt", stage="kontaktiert",
+                          sent_at=HEUTE)
+        k2 = lead_anlegen(c, "Studio B", "video", testbranche="video", stage="gespraech", sent_at=HEUTE,
+                          replied_at=HEUTE)
+        lead_anlegen(c, "Freund C", "video", testbranche="video", herkunft="warm", stage="kunde", sent_at=HEUTE)
+        lead_anlegen(c, "Abgelehnt D", "video", testbranche="video", pruef_status="abgelehnt")
+        self.assertTrue(bt.preisgespraech(c, "oskar", k2))
+        self.assertFalse(bt.preisgespraech(c, "oskar", k2))  # schon markiert
+        video = next(z for z in bt.auswertung(c) if z["key"] == "video")
+        self.assertEqual((video["kalt"]["betriebe"], video["kalt"]["kontakte"], video["kalt"]["antworten"],
+                          video["kalt"]["gespraeche"], video["kalt"]["preisgespraeche"], video["kalt"]["abschluesse"]),
+                         (2, 2, 1, 1, 1, 0))
+        self.assertEqual((video["warm"]["betriebe"], video["warm"]["abschluesse"]), (1, 1))
+        self.assertEqual((video["ampel"], video["antwortquote"]), ("gelb", 50))
+        for n in range(2):
+            bt.preisgespraech(c, "oskar", lead_anlegen(c, f"P{n}", testbranche="video", stage="angebot"))
+        self.assertEqual(next(z for z in bt.auswertung(c) if z["key"] == "video")["ampel"], "gruen")
+        bt.herkunft_setzen(c, "oskar", k1, "warm", "video")
+        self.assertEqual(leaddb.get_lead(c, k1)["herkunft"], "warm")
+
+    def test_kontakt_regeln(self):
+        bt, c = self.bt, self.c
+        lid = lead_anlegen(c, "Elektro E", "elektro")
+        with self.assertRaises(bt.BranchentestError):  # § 7 UWG: kein Erstkontakt per Mail
+            bt.kontakt(c, "oskar", lid, "email")
+        with self.assertRaises(bt.BranchentestError):
+            bt.kontakt(c, "oskar", lid, "fax")
+        bt.kontakt(c, "oskar", lid, "brief")
+        lead = leaddb.get_lead(c, lid)
+        self.assertEqual((lead["stage"], lead["owner"], lead["channel"]), ("kontaktiert", "oskar", "brief"))
+        self.assertTrue(lead["sent_at"])
+
+    def test_branche_und_regeln_speichern(self):
+        bt, c = self.bt, self.c
+        bt.branche_speichern(c, "oskar", "handwerk", "Handwerk", ["sanitaer", "elektro", "gibtsnicht"], self.omid, 40)
+        b = bt.branche(c, "handwerk")
+        self.assertEqual((b["person"], b["ziel"], b["nischen"]), (self.omid, 40, ["sanitaer", "elektro"]))
+        key = bt.branche_speichern(c, "oskar", None, "Steuerbüros", [], None, 50)
+        self.assertEqual(key, "steuerbueros")
+        with self.assertRaises(bt.BranchentestError):
+            bt.branche_speichern(c, "oskar", None, "", [], None, 50)
+        with self.assertRaises(bt.BranchentestError):
+            bt.regeln_speichern(c, "oskar", {"stufe2": "0", "stufe3": "10", "stichprobe": "5", "preisgespraeche": "3"})
+        bt.regeln_speichern(c, "oskar", {"stufe2": "3", "stufe3": "10", "stichprobe": "5", "preisgespraeche": "4"})
+        self.assertEqual(bt.regeln(c)["preisgespraeche"], 4)
+        lid = lead_anlegen(c, "Kandidat", "elektro")
+        self.assertEqual([k["id"] for k in bt.kandidaten(c, "handwerk")], [lid])
+
+
+class BranchentestWebTest(WebBasis):
+    def test_seiten_rendern(self):
+        from app import branchentest as bt
+        c = self.c
+        lid = lead_anlegen(c, "Webtest Sanitär", "sanitaer")
+        self.addCleanup(lambda: (c.execute("DELETE FROM leads WHERE id=?", (lid,)),
+                                 c.execute("DELETE FROM freigaben WHERE objekt_id=?", (lid,)), c.commit()))
+        c.execute("UPDATE team SET lernstufe=1 WHERE key='hamza'")
+        c.commit()
+        self.addCleanup(lambda: (c.execute("UPDATE team SET lernstufe=1 WHERE key='hamza'"), c.commit()))
+        bt.eingang(c, lid, "hamza")  # Hamza auf Lernstufe 1: Oskar prüft
+        for url in ("/branchentest", "/branchentest/handwerk", "/branchentest/pruefen", f"/leads/{lid}", "/mein-tag",
+                    "/leads"):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+        self.assertIn("Webtest Sanitär", self.client.get("/branchentest/pruefen").get_data(as_text=True))
+        self.assertIn("Leads prüfen", self.client.get("/mein-tag").get_data(as_text=True))
+        self.assertEqual(self.post(f"/leads/{lid}/mark-sent", {"channel": "telefon"}).status_code, 409)
+        fid = bt.offene_pruefung(c, lid)["id"]
+        self.als("hamza")
+        self.assertEqual(self.post(f"/branchentest/pruefung/{fid}", {"angenommen": "1"}).status_code, 403)
+        self.assertEqual(self.post("/branchentest/regeln", {"stufe2": "5"}).status_code, 403)  # nur Verwalten
+        self.als("oskar")
+        r = self.post(f"/branchentest/pruefung/{fid}", {"angenommen": "1"}, headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"])
+        r = self.post(f"/leads/{lid}/kontakt", {"kanal": "telefon", "notiz": "erreicht"},
+                      headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"], r.get_data(as_text=True))
+        self.post(f"/leads/{lid}/preisgespraech", {"an": "1"})
+        self.assertTrue(leaddb.get_lead(c, lid)["preisgespraech_am"])
 
 
 if __name__ == "__main__":

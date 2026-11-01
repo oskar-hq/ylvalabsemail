@@ -1,6 +1,6 @@
 # Ylva Labs Firmen-OS – Bauplan
 
-**Stand:** 01.11.2026 · Stufe 1 gebaut, als Nächstes Stufe 2 oder 3 · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
+**Stand:** 01.11.2026 · Stufe 1 und 2 gebaut, als Nächstes Stufe 3 (Kalender) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
 
 Aus dem Ylva Labs Mailer (Akquise, CRM, Mailer) wird das Betriebssystem der Firma. Diese Datei hält fest, **was**
 gebaut werden soll und **nach welchen Prinzipien**, damit alle, die am Code arbeiten (Menschen und KI), dasselbe
@@ -502,9 +502,23 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
     automatisch angelegte Aufgaben aus Ereignissen folgen mit den Stufen, die diese Ereignisse erzeugen.
   - Design nach [DESIGN.md](DESIGN.md): neue Seiten mit Sheets, schwebenden Knöpfen, Federn; die älteren Seiten
     haben die neuen Farben bekommen, ihr Aufbau ist noch der alte.
-- [ ] **Stufe 2 – Branchentest**
+- [x] **Stufe 2 – Branchentest** (gebaut 01.11.2026, Abweichungen unten)
   Vier Testbranchen, warm/kalt, Zuordnung Hamza/Omid, Lead-Prüfung als Freigabe (Omid → Hamza → Stichprobe Oskar),
   Auswertung je Branche. *Zeitkritisch, weil der Test als Nächstes läuft.*
+  *Umsetzung und Abweichungen:*
+  - Testbranchen in `testbranchen` (Name, Nischen, Recherche-Person, Ziel, aktiv), in der App anleg- und änderbar.
+    Startwerte wie in den Rollen; Handwerk und Verwaltung haben noch niemanden, weil Omid erst in der App angelegt
+    wird. Neue Leads kommen über ihre Nische automatisch in die passende Branche.
+  - Leads bekommen `testbranche`, `herkunft` (warm/kalt), `recherche_von`, `pruef_status`, `preisgespraech_am`.
+  - Lead-Prüfung ist die erste Freigabe-Art in der Tabelle `freigaben` (aus Abschnitt 5, wird in Stufe 6
+    verallgemeinert). Wer prüft, ergibt sich aus den Bereichen: verantwortliche Person der Akquise, bei ihr selbst
+    eine Ebene höher. Prüfquoten je Lernstufe und die Stichprobe der nächsten Ebene sind Regeln in der App
+    (Branchentest → Regeln). Kontakt (Brief, Telefon, Mail) ist bis zur bestandenen Prüfung gesperrt.
+  - Kontakt mit einem Klick in der Akte (Telefon, Brief, LinkedIn, vor Ort; Mail nur als Antwort, § 7 UWG).
+    „Ernsthaftes Preisgespräch“ ist ein Knopf in der Akte; Termin-Ergebnisse folgen mit Stufe 3.
+  - Auswertung zählt Betriebe, Kontakte, Antworten, Gespräche, Preisgespräche, Abschlüsse je Branche, nur kalt;
+    Ampel ab der eingestellten Zahl Preisgespräche. KPIs „angenommene Leads pro Woche“ und „Anteil angenommen“
+    je Person auf „Leads prüfen“ und „Mein Tag“ (das Cockpit kommt mit Stufe 4).
 - [ ] **Stufe 3 – Kalender und Termine**
   Termine im OS, eigenen Google-Kalender verbinden (frei/belegt, Termine eintragen), Kundentermine mit Meet-Link
   und Einladung über das Google-Konto der zuständigen Person (Freigabe C), Terminvorschläge um alle herum,

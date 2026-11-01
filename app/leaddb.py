@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import aufgaben, firma  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
+from . import aufgaben, branchentest, firma  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
 
 ROOT = Path(__file__).resolve().parent.parent
 BRAIN_SEED = Path(__file__).resolve().parent / "brain_seed.md"
@@ -153,6 +153,12 @@ MIGRATIONS = [
     # Meldungen und Push nur für eine Person (NULL = für alle)
     "ALTER TABLE notices ADD COLUMN fuer TEXT",
     "ALTER TABLE push_subs ADD COLUMN person TEXT",
+    # Firmen-OS Stufe 2, Branchentest: Testbranche, warm/kalt, wer recherchiert hat, Prüfstand, Preisgespräch
+    "ALTER TABLE leads ADD COLUMN testbranche TEXT",
+    "ALTER TABLE leads ADD COLUMN herkunft TEXT",
+    "ALTER TABLE leads ADD COLUMN recherche_von TEXT",
+    "ALTER TABLE leads ADD COLUMN pruef_status TEXT",
+    "ALTER TABLE leads ADD COLUMN preisgespraech_am TEXT",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.
@@ -178,6 +184,7 @@ DATA_MIGRATIONS = [
     "INSERT OR IGNORE INTO team (key, name, sort) VALUES ('oskar', 'Oskar Jacobsen', 3)",
     *firma.SEED,
     aufgaben.UEBERNAHME,
+    *branchentest.SEED,
 ]
 
 FOLLOWUP_DAYS = 7  # wird beim Start aus LEADS_FOLLOWUP_DAYS gesetzt, 0 = aus
@@ -207,6 +214,7 @@ def connect(path):
     conn.executescript(reports.SCHEMA)
     conn.executescript(firma.SCHEMA)
     conn.executescript(aufgaben.SCHEMA)
+    conn.executescript(branchentest.SCHEMA)
     for stmt in MIGRATIONS:
         try:
             conn.execute(stmt)

@@ -58,6 +58,10 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   Einladungslink, Rollen und Rechte, Bereiche, Firmen-Protokoll. Nach dem Update: unter Einstellungen → Personen
   Omid anlegen und ihm den Einladungslink schicken; Hamza bekommt dort ebenfalls einen Link, falls er noch kein
   Passwort hat. `ADMIN_USERS` in der `.env` gilt nicht mehr (nur, falls in der App niemand Personen verwalten darf).
+- **Firmen-OS Stufe 2 (01.11.2026):** Branchentest mit Auswertung je Branche, Lead-Prüfung als Freigabe,
+  Kontakte und Preisgespräche in der Akte. Nach dem Update: Omid als Recherche-Person bei „Handwerk“ und
+  „Hausverwaltungen und Ingenieurbüros“ eintragen (Branchentest → Branche → Bearbeiten) und seine Lernstufe auf 1
+  setzen (Einstellungen → Personen). Hamza steht auf Lernstufe 1, Oskar prüft also jeden seiner Leads.
 
 - Die automatischen Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.
