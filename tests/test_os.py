@@ -1730,5 +1730,173 @@ class PortalWebTest(WebBasis):
         self.assertEqual(self.client.get("/einstellungen/kunden-bereich").status_code, 403)
 
 
+# ---------------------------------------------------------------- Stufe 8: Finanzen
+
+FIRMENDATEN = {"firma_name": "Ylva Labs", "firma_anschrift": "Hauptstraße 1\n24103 Kiel", "steuernummer": "19/123/45678",
+               "iban": "DE02 1203 0000 0000 2020 51", "steuer": "klein", "ust_satz": "19", "zahlungsziel": "14",
+               "nummer_format": "RE-{jahr}-{n:04}", "versand": "1", "monat_tag": "1", "personalkosten_neu": "0",
+               "betreff": "Rechnung {nummer} von {firma}",
+               "text": "Guten Tag {name},\n\nanbei die Rechnung {nummer} über {betrag}, zahlbar bis {faellig}."}
+
+
+def pdf_text(daten):
+    import re
+    import zlib
+    return b"".join(zlib.decompress(m) for m in re.findall(rb"stream\n(.*?)\nendstream", daten, re.S)).decode("cp1252")
+
+
+class FinanzenTest(unittest.TestCase):
+    def setUp(self):
+        from app import finanzen, projekte
+        self.f, self.pj = finanzen, projekte
+        self.c = frische_db()
+        self.post = PostfachMock(self)
+        self.daten = tempfile.mkdtemp()
+        self.pid = projekt_anlegen(self.c, "Tischlerei Finanz", "rechnung@tischlerei.de")
+        projekte.aendern(self.c, "oskar", self.pid, preis_einmal="2.000", pauschale_monat="249")
+
+    def test_rechnung_freigabe_nummer_pdf_mail_storno_export(self):
+        import zipfile
+        from app import freigaben, portal
+        f, c = self.f, self.c
+        rid = f.einmal_anlegen(c, "oskar", self.pid)
+        r = f.get(c, rid)
+        self.assertEqual((r["status"], r["nummer"], r["brutto"], r["ust"]), ("entwurf", None, 2000.0, 0))
+        self.assertIn("Tischlerei Finanz", r["empfaenger"])
+        with self.assertRaises(f.FinanzError):
+            f.einmal_anlegen(c, "oskar", self.pid)  # nur einmal
+        with self.assertRaises(f.FinanzError):
+            f.zur_freigabe(c, "oskar", rid)  # Firmendaten fehlen
+        f.regeln_speichern(c, "oskar", FIRMENDATEN)
+        self.assertEqual(f.regeln(c)["iban"], "DE02120300000000202051")
+        f.bearbeiten(c, "oskar", rid, positionen=[("Einrichtung", "1", "2.000,00"), ("Schulung", "2", "150"), ("", "", "")])
+        self.assertEqual(f.get(c, rid)["brutto"], 2300.0)
+        f.zur_freigabe(c, "oskar", rid)
+        with self.assertRaises(f.FinanzError):
+            f.bearbeiten(c, "oskar", rid, empfaenger="x")  # nicht mehr Entwurf
+        offen = [x for x in freigaben.offen(c, "oskar") if x["art"] == "rechnung"]
+        self.assertEqual((len(offen), offen[0]["stufe"]), (1, "C"))
+        with self.assertRaises(freigaben.FreigabeError):
+            freigaben.entscheiden(c, "hamza", "rechnung", offen[0]["oid"], True)
+        f.entscheiden(c, "oskar", rid, True, data_dir=self.daten)
+        r = f.get(c, rid)
+        jahr = date.today().year
+        self.assertEqual((r["status"], r["nummer"]), ("offen", f"RE-{jahr}-0001"))
+        self.assertTrue(r["faellig"] > r["datum"])
+        text = pdf_text((Path(self.daten) / "rechnungen" / r["pdf"]).read_bytes())
+        for teil in ("Rechnung", f"RE-{jahr}-0001", "Gemäß § 19 UStG", "2.300,00 €", "Steuernummer 19/123/45678"):
+            self.assertIn(teil, text)
+        mail = self.post.mails[0]
+        self.assertEqual(mail["Subject"], f"Rechnung RE-{jahr}-0001 von Ylva Labs")
+        self.assertEqual([a.get_filename() for a in mail.iter_attachments()], [f"RE-{jahr}-0001.pdf"])
+        self.assertTrue(r["verschickt_am"])
+        self.assertEqual([d["art"] for d in portal.dokumente(c, self.pid, nur_sichtbar=True)], ["rechnung"])
+        f.bezahlt(c, "oskar", rid)
+        self.assertEqual(f.get(c, rid)["status"], "bezahlt")
+        with self.assertRaises(f.FinanzError):
+            f.stornieren(c, "oskar", rid, "")
+        sid = f.stornieren(c, "oskar", rid, "Doppelt berechnet", self.daten)
+        st = f.get(c, sid)
+        self.assertEqual((st["nummer"], st["brutto"], st["art"], st["status"]), (f"RE-{jahr}-0002", -2300.0, "storno",
+                                                                                 "storniert"))
+        self.assertEqual(f.get(c, rid)["status"], "storniert")
+        self.assertIn("Stornorechnung", pdf_text(f.pdf_bytes(c, sid)))
+        self.assertEqual(f.umsatz(c, date.today().replace(day=1).isoformat(), "2999-01-01"), 0)  # gleicht aus
+        f.einmal_anlegen(c, "oskar", self.pid)  # nach dem Storno wieder möglich
+        daten, name = f.export_zip(c, date.today().replace(day=1).isoformat(),
+                                   (date.today() + timedelta(days=1)).isoformat(), self.daten)
+        z = zipfile.ZipFile(io_bytes(daten))
+        self.assertIn(f"rechnungen/RE-{jahr}-0001.pdf", z.namelist())
+        csv_text = z.read("rechnungen.csv").decode("utf-8-sig")
+        self.assertIn(f"RE-{jahr}-0002;", csv_text)
+        self.assertIn("-2300,00", csv_text)
+        self.assertTrue(name.endswith(".zip"))
+
+    def test_monatsrechnung_takt_regelsteuer_zurueck(self):
+        from datetime import datetime as dt
+        from app import freigaben
+        f, pj, c = self.f, self.pj, self.c
+        f.regeln_speichern(c, "oskar", dict(FIRMENDATEN, steuer="regel"))
+        c.execute("UPDATE projekte SET status='live' WHERE id=?", (self.pid,))
+        aid = pj.aenderung_anlegen(c, "oskar", self.pid, "Logo austauschen")
+        monat = date.today().replace(day=1)
+        vormonat = (monat - timedelta(days=1)).replace(day=10)
+        c.execute("UPDATE aenderungen SET status='erledigt', abrechnung='pauschale', erledigt_am=? WHERE id=?",
+                  (vormonat.isoformat() + "T10:00:00", aid))
+        c.commit()
+        self.assertEqual(f.takt(c, dt.combine(monat, dt.min.time()).replace(hour=3)), 0)  # zu früh am Tag
+        self.assertEqual(f.takt(c, dt.combine(monat, dt.min.time()).replace(hour=7)), 1)
+        self.assertEqual(f.takt(c, dt.combine(monat, dt.min.time()).replace(hour=8)), 0)  # einmal je Monat
+        r = f.liste(c, projekt_id=self.pid)[0]
+        preis = pj.regeln(c)["pauschale_klein"]
+        self.assertEqual((r["art"], r["status"], len(r["positionen"])), ("monat", "wartet", 2))
+        self.assertEqual(r["netto"], 249 + preis)
+        self.assertEqual(r["brutto"], round((249 + preis) * 1.19, 2))
+        fid = next(x["oid"] for x in freigaben.offen(c, "oskar") if x["art"] == "rechnung")
+        freigaben.entscheiden(c, "oskar", "rechnung", fid, False, "Pauschale ist diesen Monat kostenlos")
+        r = f.get(c, r["id"])
+        self.assertEqual((r["status"], r["grund"]), ("entwurf", "Pauschale ist diesen Monat kostenlos"))
+        self.assertIsNone(f.monat_anlegen(c, "oskar", self.pid, monat.strftime("%Y-%m")))  # Entwurf gibt es schon
+        f.loeschen(c, "oskar", r["id"])
+        self.assertTrue(f.monat_anlegen(c, "oskar", self.pid, monat.strftime("%Y-%m")))
+
+    def test_kosten_kasse_kennzahlen_geldregel(self):
+        f, c = self.f, self.c
+        with self.assertRaises(f.FinanzError):
+            f.kosten_speichern(c, "oskar", None, "", "10")
+        kid = f.kosten_speichern(c, "oskar", None, "Server", "39,90", "server", "2026-01-01")
+        f.kosten_speichern(c, "oskar", None, "Alte Lizenz", "20", "lizenz", "2025-01-01", "2025-12-31")
+        self.assertEqual(f.fixkosten(c), 39.9)
+        f.kosten_speichern(c, "oskar", kid, "Server", "60", "server", "2026-01-01")
+        k = f.kennzahlen(c)
+        self.assertEqual((k["fixkosten"], k["mrr"], k["ampel"], k["kasse"]), (60.0, 0, "grau", None))
+        c.execute("UPDATE projekte SET status='betrieb' WHERE id=?", (self.pid,))
+        c.commit()
+        f.kasse_eintragen(c, "oskar", "12.000", "2026-10-31")
+        f.regeln_speichern(c, "oskar", dict(FIRMENDATEN, personalkosten_neu="1000"))
+        k = f.kennzahlen(c)
+        self.assertEqual((k["mrr"], k["gewinnschwelle"], k["kasse"]), (249.0, True, 12000.0))
+        self.assertEqual(k["ziel_kasse"], round(6 * (k["monatskosten"] + 1000), 2))
+        self.assertEqual((k["bed_uebrig"], k["bed_kasse"], k["ampel"]), (False, True, "gelb"))  # kein Umsatz bisher
+        with self.assertRaises(f.FinanzError):
+            f.regeln_speichern(c, "oskar", dict(FIRMENDATEN, nummer_format="RE-{jahr}"))
+
+
+def io_bytes(daten):
+    import io
+    return io.BytesIO(daten)
+
+
+class FinanzenWebTest(WebBasis):
+    def test_seiten_rechte_pdf_export(self):
+        from app import finanzen
+        c = self.c
+        pid = projekt_anlegen(c, "Web Finanz Kunde", "web@finanz.de")
+        c.execute("UPDATE projekte SET preis_einmal=990 WHERE id=?", (pid,))
+        c.commit()
+        self.addCleanup(lambda: (c.execute("DELETE FROM rechnungen WHERE projekt_id=?", (pid,)),
+                                 c.execute("DELETE FROM projekte WHERE id=?", (pid,)), c.commit()))
+        r = self.post("/finanzen/rechnung/neu", {"projekt_id": pid, "art": "einmal"})
+        rid = int(r.headers["Location"].rsplit("/", 1)[1])
+        for url in ("/finanzen", "/finanzen/kosten", "/einstellungen/finanzen", f"/finanzen/rechnung/{rid}",
+                    f"/kunden/{pid}", "/einstellungen", "/freigaben"):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+        r = self.client.get(f"/finanzen/rechnung/{rid}.pdf")
+        self.assertEqual((r.status_code, r.mimetype), (200, "application/pdf"))
+        self.assertIn("ENTWURF", pdf_text(r.data))
+        r = self.post(f"/finanzen/rechnung/{rid}", {"was": "speichern", "empfaenger": "Web Finanz Kunde\nKiel",
+                                                    "email": "web@finanz.de", "leistung": "11/2026",
+                                                    "pos_text": ["Einrichtung", ""], "pos_menge": ["1", "1"],
+                                                    "pos_einzel": ["990", ""]}, headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"], r.get_data(as_text=True))
+        self.assertEqual(finanzen.get(c, rid)["leistung"], "11/2026")
+        self.post("/finanzen/kasse", {"stand": "1.000", "datum": "2026-10-01"})
+        r = self.client.get("/finanzen/export?von=2026-01-01&bis=2027-01-01")
+        self.assertEqual((r.status_code, r.mimetype), (200, "application/zip"))
+        self.als("hamza")
+        self.assertEqual(self.client.get("/finanzen").status_code, 403)
+        self.assertNotIn("/finanzen/rechnung/", self.client.get("/mein-tag").get_data(as_text=True))
+
+
 if __name__ == "__main__":
     unittest.main()

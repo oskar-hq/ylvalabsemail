@@ -96,8 +96,10 @@ AKTIONEN = [
     _a("wochenbericht", "Wochenbericht an Kunden", "B", ["B", "C"],
        "Aus Projektstand, Änderungen und Terminen, am eingestellten Tag (Einstellungen → Kunden-Bereich). Vor dem "
        "Versand am Projekt bearbeitbar."),
-    _a("angebot", "Angebot verschicken", "C", ["C", "D"], kommt_mit=8),
-    _a("rechnung", "Rechnung verschicken", "C", ["B", "C"], kommt_mit=8),
+    _a("angebot", "Angebot verschicken", "C", ["C", "D"], kommt_mit="später"),
+    _a("rechnung", "Rechnung ausstellen und verschicken", "C", ["B", "C"],
+       "Bekommt erst mit der Freigabe ihre Nummer, dann PDF, Kunden-Bereich und Mail. Monatsrechnungen bereitet das OS "
+       "am eingestellten Tag vor (Einstellungen → Finanzen)."),
 ]
 AKTION = {a["key"]: a for a in AKTIONEN}
 FRIST_STANDARD = 24  # Stunden, Einspruchsfrist auf Stufe B (Einstellungen → Freigabe-Stufen)
@@ -355,7 +357,7 @@ def _betrag(v):
     if v in (None, ""):
         return None
     s = str(v).strip().replace(" ", "").replace("€", "")
-    if "," in s:
+    if "," in s or re.fullmatch(r"\d{1,3}(\.\d{3})+", s):  # deutsch: 1.200,50 oder 1.200
         s = s.replace(".", "").replace(",", ".")
     try:
         b = round(float(s), 2)
@@ -577,6 +579,26 @@ def _entscheide_erinnerung(c, wer, f, ok, grund):
         raise FreigabeError(str(exc)) from exc
 
 
+def _rechnung(c, f):
+    from . import finanzen
+    r = finanzen.get(c, int(f["objekt_id"]))
+    if not r:
+        return None
+    return {"titel": f"{r['kunde']}: {finanzen.euro(r['brutto'])}",
+            "text": f"{r['art_label']} · {len(r['positionen'])} Position{'en' if len(r['positionen']) != 1 else ''}"
+                    + (f" · an {r['email']}" if r["email"] else " · ohne Mailadresse"),
+            "eyebrow": "Rechnung", "url": f"/finanzen/rechnung/{r['id']}", "frage": "Was muss an der Rechnung anders?",
+            "folge": "Die Rechnung geht zurück in den Entwurf.", "ja": "Ausstellen", "nein": "Zurück"}
+
+
+def _entscheide_rechnung(c, wer, f, ok, grund):
+    from . import finanzen
+    try:
+        finanzen.entscheiden(c, wer, int(f["objekt_id"]), ok, grund)
+    except finanzen.FinanzError as exc:
+        raise FreigabeError(str(exc)) from exc
+
+
 def _darf_selbst(c, wer, f):
     return wer == f["pruefer"]
 
@@ -595,6 +617,8 @@ ARTEN = {
                       "entscheiden": _entscheide_bericht, "darf": _darf_alle},
     "erinnerung_kunde": {"label": "Erinnerungen an Kunden", "modul": "kalender", "beschreiben": _erinnerung_kunde,
                          "entscheiden": _entscheide_erinnerung, "darf": _darf_alle},
+    "rechnung": {"label": "Rechnungen", "modul": "finanzen", "beschreiben": _rechnung,
+                 "entscheiden": _entscheide_rechnung, "darf": _darf_alle},
 }
 # Aus den Daten abgeleitet (keine Zeile in `freigaben`): nur mit Link zum Ort, wo entschieden wird
 ABGELEITET = {"anforderung": "Anforderungen im Projekt", "erstkontakt": "Erstkontakt-Entwürfe"}

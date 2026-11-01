@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}{{ r.nummer or 'Entwurf' }} · Rechnung{% endblock %}
+{% block content %}
+{% macro datum(v) %}{{ v[8:10] }}.{{ v[5:7] }}.{{ v[:4] }}{% endmacro %}
+{% macro knopf(was, label, cls='os-btn small quiet', confirm='', fetch=True) -%}
+<form method="post" action="{{ url_for('finanzen.rechnung_aktion', rid=r.id) }}" {% if fetch %}data-os-fetch="reload"{% endif %} style="display:inline">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="{{ was }}">
+  <button class="{{ cls }}" {% if confirm %}data-confirm="{{ confirm }}"{% endif %}>{{ label }}</button></form>
+{%- endmacro %}
+{% set entwurf = r.status == 'entwurf' %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">{{ r.art_label }} · {{ r.status_label }}</span>
+    <h1 class="os-title-l">{{ r.nummer or 'Entwurf' }}: {{ euro(r.brutto) }}</h1>
+    <p class="os-sub os-lead">{{ r.kunde }}{% if r.projekt_id %} · <a href="{{ url_for('kunden.detail', pid=r.projekt_id) }}">Projekt</a>{% endif %}{% if r.datum %} · vom {{ datum(r.datum) }}{% endif %}{% if r.faellig and r.status == 'offen' %} · fällig {{ datum(r.faellig) }}{% endif %}{% if r.bezahlt_am %} · bezahlt am {{ datum(r.bezahlt_am) }}{% endif %}</p>
+  </header>
+  {% if r.grund and entwurf %}<p class="os-caption" style="color:var(--accent-text)">Zurück in den Entwurf: {{ r.grund }}</p>{% endif %}
+  {% if r.ueberfaellig %}<p class="os-caption" style="color:var(--negative)">Überfällig seit {{ datum(r.faellig) }}.</p>{% endif %}
+  {% if storno %}<p class="os-caption">Storno zu <a href="{{ url_for('finanzen.rechnung', rid=storno.id) }}">{{ storno.nummer }}</a>: {{ r.grund }}</p>{% endif %}
+  {% if storniert_durch %}<p class="os-caption">Storniert durch <a href="{{ url_for('finanzen.rechnung', rid=storniert_durch.id) }}">{{ storniert_durch.nummer }}</a>{% if r.grund %}: {{ r.grund }}{% endif %}</p>{% endif %}
+
+  <div class="os-btns">
+    <a class="os-btn small quiet" href="{{ url_for('finanzen.pdf', rid=r.id) }}" target="_blank" rel="noopener">{{ 'Vorschau als PDF' if entwurf else 'PDF' }}</a>
+    {% if entwurf and darf('finanzen', 2) %}{{ knopf('freigabe', 'Zur Freigabe', 'os-btn small ink') }}{{ knopf('loeschen', 'Löschen', 'os-link danger', 'Entwurf löschen?', False) }}{% endif %}
+    {% if r.status == 'wartet' %}<a class="os-btn small ink" href="{{ url_for('freigaben.zentrale') }}#f-rechnung-{{ r.id }}">In der Freigabe-Zentrale</a>{% endif %}
+    {% if r.status == 'offen' and freigeben %}{{ knopf('bezahlt', 'Bezahlt', 'os-btn small ink') }}{% if r.email %}{{ knopf('versenden', 'Nochmal schicken' if r.verschickt_am else 'Per Mail schicken') }}{% endif %}{% endif %}
+    {% if r.status == 'bezahlt' and freigeben %}{{ knopf('offen', 'Doch nicht bezahlt', 'os-link') }}{% endif %}
+    {% if r.status in ('offen', 'bezahlt') and r.art != 'storno' and darf('finanzen', 4) %}<button type="button" class="os-link danger" data-sheet="sheet-storno">Stornieren</button>{% endif %}
+  </div>
+  {% if r.verschickt_am %}<p class="os-caption">Verschickt am {{ datum(r.verschickt_am) }} an {{ r.email }}.</p>{% endif %}
+  {% if entwurf and fehlt %}<p class="os-caption" style="color:var(--accent-text)">Vor der Freigabe in Einstellungen → Finanzen ergänzen: {{ fehlt|join(', ') }}.</p>{% endif %}
+
+  {% if entwurf and darf('finanzen', 2) %}
+  <form method="post" action="{{ url_for('finanzen.rechnung_aktion', rid=r.id) }}" data-os-fetch="reload" class="os-section">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="speichern">
+    <h2 class="os-headline">Positionen</h2>
+    {% for p in r.positionen + [{'text': '', 'menge': 1, 'einzel': ''}] %}
+    <div class="os-pos">
+      <label class="os-field"><span>Leistung</span><input name="pos_text" value="{{ p.text }}" maxlength="200" placeholder="{{ '' if p.text else 'Weitere Position' }}"></label>
+      <label class="os-field"><span>Menge</span><input name="pos_menge" inputmode="decimal" value="{{ '%g'|format(p.menge) }}"></label>
+      <label class="os-field"><span>Einzelpreis €</span><input name="pos_einzel" inputmode="decimal" value="{{ ('%.2f'|format(p.einzel)).replace('.', ',') if p.einzel != '' else '' }}"></label>
+    </div>{% endfor %}
+    <p class="os-caption">Leer gelassene Zeilen fallen weg. {{ 'Kleinunternehmer: keine Umsatzsteuer.' if regeln.steuer == 'klein' else 'Umsatzsteuer ' ~ regeln.ust_satz ~ ' % kommt dazu.' }}</p>
+    <h2 class="os-headline" style="margin-top:24px">Empfänger</h2>
+    <label class="os-field" style="margin-top:12px"><span>Name und Anschrift</span><textarea name="empfaenger" rows="4" required>{{ r.empfaenger }}</textarea></label>
+    <div class="os-grid2">
+      <label class="os-field"><span>Mail für den Versand</span><input name="email" type="email" value="{{ r.email or '' }}"></label>
+      <label class="os-field"><span>Leistungszeitraum</span><input name="leistung" maxlength="60" value="{{ r.leistung or '' }}" placeholder="z. B. 11/2026"></label>
+    </div>
+    <button class="os-btn small quiet">Speichern</button>
+  </form>
+  {% else %}
+  <section class="os-section">
+    <h2 class="os-headline">Positionen</h2>
+    <ul class="os-list">{% for p in r.positionen %}<li class="os-row" style="min-height:0;padding:12px 0"><span class="os-txt"><b style="font-weight:500">{{ p.text }}</b><span>{{ '%g'|format(p.menge) }} × {{ euro(p.einzel) }}</span></span><span class="os-end"><span class="os-wert">{{ euro(p.betrag) }}</span></span></li>{% endfor %}</ul>
+    <dl class="os-kv" style="margin-top:16px">
+      {% if r.ust_satz %}<dt>Netto</dt><dd>{{ euro(r.netto) }}</dd><dt>Umsatzsteuer {{ '%g'|format(r.ust_satz) }} %</dt><dd>{{ euro(r.ust) }}</dd>{% endif %}
+      <dt>Gesamt</dt><dd>{{ euro(r.brutto) }}</dd>
+      <dt>Empfänger</dt><dd style="white-space:pre-line">{{ r.empfaenger }}</dd>
+    </dl>
+  </section>
+  {% endif %}
+
+  <section class="os-section">
+    <h2 class="os-headline">Verlauf</h2>
+    <ul class="os-list">{% for e in verlauf %}<li class="os-row" style="min-height:0;padding:10px 0"><span class="os-txt"><span style="color:var(--text-primary)">{{ e.text }}</span><span>{{ datum(e.at) }} {{ e.at[11:16] }} · {{ e.wer }}</span></span></li>{% endfor %}</ul>
+  </section>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('finanzen.uebersicht') }}" aria-label="Zu den Finanzen">{{ i('back') }}</a>
+</div>
+<dialog class="os-sheet" id="sheet-storno" aria-label="Rechnung stornieren">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('finanzen.rechnung_aktion', rid=r.id) }}" data-os-require="textarea">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="stornieren">
+      <span class="os-eyebrow">{{ r.nummer }} stornieren</span>
+      <textarea class="os-ask" name="grund" rows="3" maxlength="300" placeholder="Warum wird storniert?" required></textarea>
+      <p class="os-caption">Es entsteht eine Stornorechnung mit eigener Nummer und negativen Beträgen. Die Rechnung selbst bleibt erhalten.</p>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Stornieren</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endblock %}

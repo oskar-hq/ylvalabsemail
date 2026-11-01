@@ -263,6 +263,19 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
   vorher am Projekt bearbeitbar. **Termin-Erinnerung** an Kunden 24 Stunden vorher.
 - **Einstellungen → Kunden-Bereich**: Gültigkeit, Mailtexte, Berichtstag, was Kunden sehen.
 
+## Finanzen (Stufe 8)
+
+- **Rechnungen**: am Projekt „Rechnung Einmalbetrag“ oder „Monatsrechnung“, auf der Seite Finanzen auch frei. Der
+  Entwurf hat noch keine Nummer; nach der Freigabe (Freigabe-Zentrale) bekommt er sie, das PDF entsteht, liegt im
+  Kunden-Bereich und geht per Mail an den Kunden. Monatsrechnungen bereitet das OS am Monatsersten vor. Storno
+  erzeugt eine Stornorechnung. Bezahlt von Hand markieren.
+- **Laufende Kosten** und **Kassenstand** von Hand, KI-Kosten automatisch.
+- **Kennzahlen**: Pauschalen im Monat, Monatskosten, offene und überfällige Rechnungen, Gewinnschwelle und die
+  Geld-Regel für die nächste Einstellung als Ampel.
+- **Export für den Steuerberater**: ZIP mit CSV und PDFs für einen Zeitraum.
+- **Einstellungen → Finanzen**: Firmendaten für die Rechnung, Umsatzsteuer (Kleinunternehmer oder 19 %),
+  Nummernkreis, Zahlungsziel, Mailtext, Tag der Monatsrechnungen, Personalkosten für die Geld-Regel.
+
 ## Team: Konten, eigenes CRM, Vorlage, Zahlen
 
 - **Anmelden mit Name und Passwort**. Passwörter liegen nur als scrypt-Hash in der Datenbank, nach Fehlversuchen

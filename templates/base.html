@@ -80,7 +80,8 @@
         {% if darf('cockpit') %}<a href="{{ url_for('cockpit.cockpit') }}">Cockpit</a>
         <a href="{{ url_for('cockpit.wochengespraech') }}">Wochengespräch</a>{% endif %}
         {% if not mit_person or darf('mailer') %}<a href="{{ url_for('history') }}">Verlauf des Mailers</a>{% endif %}
-        {% if darf('kosten') %}<a href="{{ url_for('leads.costs') }}">Kosten</a>{% endif %}
+        {% if darf('finanzen') %}<a href="{{ url_for('finanzen.uebersicht') }}">Finanzen</a>{% endif %}
+        {% if darf('kosten') %}<a href="{{ url_for('leads.costs') }}">KI-Kosten</a>{% endif %}
         {% if darf('einstellungen') %}<a href="{{ url_for('leads.system') }}">Systemcheck</a>{% endif %}
         <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button>Abmelden</button></form>
       </div>

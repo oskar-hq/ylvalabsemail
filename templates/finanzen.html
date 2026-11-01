@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Finanzen · Ylva Labs{% endblock %}
+{% block content %}
+{% macro eur(v) %}{{ v|kpi('euro') }}{% endmacro %}
+{% macro rund(v) %}{{ ('{:,.0f} €'.format(v)).replace(',', '.') }}{% endmacro %}
+{% macro datum(v) %}{{ v[8:10] }}.{{ v[5:7] }}.{{ v[:4] }}{% endmacro %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Finanzen</span>
+    <h1 class="os-title-l">{% if k.kasse is not none %}{{ eur(k.kasse) }}{% else %}Finanzen{% endif %}</h1>
+    <p class="os-sub os-lead">{% if k.kasse is not none %}Kassenstand am {{ datum(k.kasse_datum) }}{% if k.reichweite %}, reicht {{ k.reichweite|kpi }} Monate{% endif %}.{% else %}Noch kein Kassenstand eingetragen.{% endif %} Buchhaltung bleibt beim Steuerberater; hier steht, was ihr für Entscheidungen braucht.</p>
+  </header>
+  {% if k.fehlt %}<p class="os-caption" style="color:var(--accent-text)">Für Rechnungen fehlen noch: {{ k.fehlt|join(', ') }}. {% if darf('finanzen', 4) %}<a href="{{ url_for('finanzen.einstellungen') }}">Einstellungen → Finanzen</a>{% endif %}</p>{% endif %}
+
+  <div class="os-tiles" aria-label="Kennzahlen">
+    <a class="os-tile" href="#rechnungen"><span>Pauschalen im Monat</span><b>{{ rund(k.mrr) }}</b></a>
+    <a class="os-tile" href="{{ url_for('finanzen.kosten') }}"><span>Kosten im Monat</span><b>{{ rund(k.monatskosten) }}</b></a>
+    <a class="os-tile {{ 'alert' if k.ueberfaellig_n }}" href="{{ url_for('finanzen.uebersicht', status='offen') }}#rechnungen"><span>Offen</span><b>{{ rund(k.offen) }}</b></a>
+    <a class="os-tile {{ 'alert' if k.ueberfaellig_n else 'zero' }}" href="{{ url_for('finanzen.uebersicht', status='ueberfaellig') }}#rechnungen"><span>Überfällig</span><b>{{ k.ueberfaellig_n }}</b></a>
+  </div>
+
+  <section class="os-section">
+    <h2 class="os-headline">Trägt sich die Firma?</h2>
+    <ul class="os-list">
+      <li class="os-row"><span class="os-ampel {{ 'gruen' if k.gewinnschwelle else 'rot' }}"></span><span class="os-txt"><b>Gewinnschwelle</b><span>{% if k.gewinnschwelle %}Wiederkehrender Umsatz deckt die laufenden Kosten ({{ eur(k.mrr) }} zu {{ eur(k.monatskosten) }}).{% else %}Es fehlen {{ eur(k.luecke) }} im Monat an wiederkehrendem Umsatz ({{ eur(k.mrr) }} zu {{ eur(k.monatskosten) }}).{% endif %}</span></span></li>
+      <li class="os-row"><span class="os-ampel {{ k.ampel }}"></span><span class="os-txt"><b>Geld-Regel für die nächste Einstellung</b>
+        {% if not k.personal %}<span>Erst die Personalkosten der nächsten Stelle eintragen (Einstellungen → Finanzen).</span>
+        {% else %}<span>{{ 'Erfüllt' if k.bed_uebrig else 'Nicht erfüllt' }}: drei Monate in Folge mindestens {{ eur(1.5 * k.personal) }} übrig.</span>
+        <span>{{ 'Erfüllt' if k.bed_kasse else 'Nicht erfüllt' }}: {{ eur(k.ziel_kasse) }} auf dem Konto (6 Monatskosten inklusive der neuen Stelle).</span>{% endif %}</span></li>
+    </ul>
+    <ul class="os-list" style="margin-top:8px">{% for m in k.monate %}<li class="os-row" style="min-height:0;padding:12px 0"><span class="os-txt"><b>{{ m.monat[5:7] }}/{{ m.monat[:4] }}</b><span>{{ eur(m.umsatz) }} Umsatz · {{ eur(m.kosten) }} Kosten</span></span><span class="os-end"><span class="os-wert" style="{{ 'color:var(--negative)' if m.uebrig < 0 }}">{{ eur(m.uebrig) }}</span></span></li>{% endfor %}</ul>
+    <p class="os-caption" style="margin-top:8px">Umsatz: ausgestellte Rechnungen nach Datum, netto. Kosten: laufende Kosten plus KI (automatisch).</p>
+  </section>
+
+  <section class="os-section" id="rechnungen">
+    <h2 class="os-headline">Rechnungen</h2>
+    <div class="os-chips" style="margin-top:12px">
+      <a href="{{ url_for('finanzen.uebersicht') }}#rechnungen" class="{{ 'on' if not status }}">Alle</a>
+      {% for key, label in status_label.items() %}<a href="{{ url_for('finanzen.uebersicht', status=key) }}#rechnungen" class="{{ 'on' if status == key }}">{{ label }}</a>{% endfor %}
+      <a href="{{ url_for('finanzen.uebersicht', status='ueberfaellig') }}#rechnungen" class="{{ 'on' if status == 'ueberfaellig' }}">Überfällig</a>
+    </div>
+    <ul class="os-list">{% for r in rechnungen %}<li><a class="os-row" href="{{ url_for('finanzen.rechnung', rid=r.id) }}">
+      <span class="os-ampel {{ 'gruen' if r.status == 'bezahlt' else 'rot' if r.ueberfaellig else 'gelb' if r.status in ('offen', 'wartet') else 'grau' }}"></span>
+      <span class="os-txt"><b>{{ r.kunde }}{% if r.nummer %} · {{ r.nummer }}{% endif %}</b><span>{{ r.art_label }} · {{ r.status_label }}{% if r.ueberfaellig %}, fällig seit {{ datum(r.faellig) }}{% elif r.status == 'offen' and r.faellig %}, fällig {{ datum(r.faellig) }}{% endif %}{% if r.datum %} · {{ datum(r.datum) }}{% endif %}</span></span>
+      <span class="os-end"><span class="os-wert">{{ eur(r.brutto) }}</span></span></a></li>
+    {% else %}<li class="os-empty">Keine Rechnungen{% if status %} mit diesem Stand{% endif %}.</li>{% endfor %}</ul>
+    {% if darf('finanzen', 2) and projekte %}<form method="post" action="{{ url_for('finanzen.neu') }}" style="margin-top:16px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="os-grid2">
+        <label class="os-field"><span>Kunde</span><select name="projekt_id">{% for p in projekte %}<option value="{{ p.id }}">{{ p.name }}</option>{% endfor %}</select></label>
+        <label class="os-field"><span>Art</span><select name="art"><option value="einmal">Einmalbetrag</option><option value="monat">Monatsrechnung (dieser Monat)</option><option value="sonstig">Frei (Positionen selbst)</option></select></label>
+      </div>
+      <button class="os-btn small quiet">Rechnung anlegen</button>
+    </form>{% endif %}
+  </section>
+
+  <section class="os-section" id="kasse">
+    <h2 class="os-headline">Kassenstand</h2>
+    <ul class="os-list">{% for x in kasse %}<li class="os-row" style="min-height:0;padding:12px 0"><span class="os-txt"><b>{{ eur(x.stand) }}</b><span>{{ datum(x.datum) }}{% if x.wer_name %} · {{ x.wer_name }}{% endif %}{% if x.notiz %} · {{ x.notiz }}{% endif %}</span></span></li>
+    {% else %}<li class="os-empty">Noch nichts eingetragen.</li>{% endfor %}</ul>
+    {% if darf('finanzen', 2) %}<form method="post" action="{{ url_for('finanzen.kasse') }}" data-os-fetch="reload" style="margin-top:12px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="os-grid2">
+        <label class="os-field"><span>Kontostand in €</span><input name="stand" inputmode="decimal" required placeholder="z. B. 4.250,00"></label>
+        <label class="os-field"><span>Am</span><input type="date" name="datum" value="{{ heute }}"></label>
+      </div>
+      <label class="os-field"><span>Notiz (optional)</span><input name="notiz" maxlength="300"></label>
+      <button class="os-btn small quiet">Eintragen</button>
+    </form>{% endif %}
+  </section>
+
+  <section class="os-section" id="export">
+    <h2 class="os-headline">Export für den Steuerberater</h2>
+    <p class="os-sub">ZIP mit Rechnungen (CSV und PDF), laufenden Kosten und Kassenständen des Zeitraums.</p>
+    <form method="get" action="{{ url_for('finanzen.export') }}" style="margin-top:12px">
+      <div class="os-grid2">
+        <label class="os-field"><span>Von</span><input type="date" name="von" value="{{ export_von }}" required></label>
+        <label class="os-field"><span>Bis (ausschließlich)</span><input type="date" name="bis" value="{{ heute }}" required></label>
+      </div>
+      <button class="os-btn small quiet">Herunterladen</button>
+    </form>
+  </section>
+  <div class="os-btns" style="margin-top:32px"><a class="os-btn small quiet" href="{{ url_for('finanzen.kosten') }}">Laufende Kosten</a>{% if darf('finanzen', 4) %}<a class="os-btn small quiet" href="{{ url_for('finanzen.einstellungen') }}">Einstellungen</a>{% endif %}</div>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('aufgaben.mein_tag') }}" aria-label="Zu Mein Tag">{{ i('back') }}</a>
+</div>
+{% endblock %}

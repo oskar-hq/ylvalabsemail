@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Laufende Kosten · Finanzen{% endblock %}
+{% block content %}
+{% macro datum(v) %}{{ v[8:10] }}.{{ v[5:7] }}.{{ v[:4] }}{% endmacro %}
+{% macro form(x) -%}
+<form method="post" action="{{ url_for('finanzen.kosten_speichern') }}" data-os-fetch="reload">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="id" value="{{ x.id or '' }}">
+  <div class="os-grid2">
+    <label class="os-field"><span>Wofür</span><input name="titel" maxlength="120" value="{{ x.titel or '' }}" required placeholder="z. B. Server bei Hetzner"></label>
+    <label class="os-field"><span>Betrag pro Monat in €</span><input name="betrag" inputmode="decimal" value="{{ ('%.2f'|format(x.betrag_monat)).replace('.', ',') if x.betrag_monat is defined else '' }}" required></label>
+    <label class="os-field"><span>Kategorie</span><select name="kategorie">{% for k, label in kategorien %}<option value="{{ k }}" {{ 'selected' if x.kategorie == k }}>{{ label }}</option>{% endfor %}</select></label>
+    <label class="os-field"><span>Seit</span><input type="date" name="seit" value="{{ x.seit or heute }}"></label>
+    <label class="os-field"><span>Bis (leer = läuft weiter)</span><input type="date" name="bis" value="{{ x.bis or '' }}"></label>
+    <label class="os-field"><span>Notiz</span><input name="notiz" maxlength="500" value="{{ x.notiz or '' }}"></label>
+  </div>
+  <button class="os-btn small quiet">Speichern</button>
+</form>
+{%- endmacro %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Finanzen</span>
+    <h1 class="os-title-l">{{ euro(k.monatskosten) }} im Monat</h1>
+    <p class="os-sub os-lead">Laufende Kosten {{ euro(k.fixkosten) }} plus KI im Schnitt der letzten drei Monate {{ euro(k.ki_monat) }} (automatisch aus der Nutzung). Jahresbeträge bitte durch zwölf teilen.</p>
+  </header>
+  <ul class="os-list">{% for x in liste %}<li><details>
+    <summary class="os-row" style="cursor:pointer;list-style:none"><span class="os-ampel {{ 'gruen' if x.aktiv else 'grau' }}"></span><span class="os-txt"><b>{{ x.titel }}</b><span>{{ x.kategorie_label }} · seit {{ datum(x.seit) }}{% if x.bis %} · bis {{ datum(x.bis) }}{% endif %}{% if x.notiz %} · {{ x.notiz }}{% endif %}</span></span><span class="os-end"><span class="os-wert">{{ euro(x.betrag_monat) }}</span></span></summary>
+    {% if darf('finanzen', 2) %}<div style="padding:8px 0 16px">{{ form(x) }}</div>{% endif %}
+  </details></li>{% else %}<li class="os-empty">Noch keine laufenden Kosten eingetragen.</li>{% endfor %}</ul>
+  {% if darf('finanzen', 2) %}<section class="os-section"><h2 class="os-headline">Neuer Posten</h2><div style="margin-top:12px">{{ form({}) }}</div></section>{% endif %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('finanzen.uebersicht') }}" aria-label="Zu den Finanzen">{{ i('back') }}</a>
+</div>
+{% endblock %}

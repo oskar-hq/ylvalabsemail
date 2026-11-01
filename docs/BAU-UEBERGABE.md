@@ -1,18 +1,18 @@
-# Übergabe für den Weiterbau (ab Stufe 8)
+# Übergabe für den Weiterbau (ab Stufe 9)
 
-**Stand:** 01.11.2026 · Stufe 1 bis 7 gebaut und gemergt · nächste: **Stufe 8**
+**Stand:** 01.11.2026 · Stufe 1 bis 8 gebaut und gemergt · nächste: **Stufe 9**
 
 Diese Datei ist für die nächste Sitzung (Mensch oder KI), die am Firmen-OS weiterbaut. Sie fasst zusammen, was
-steht, wie hier gearbeitet wird und was in Stufe 8 zu tun ist. Ausführlich steht alles in
+steht, wie hier gearbeitet wird und was in Stufe 9 zu tun ist. Ausführlich steht alles in
 [FIRMEN-OS.md](FIRMEN-OS.md) (Bauplan, je Stufe „Umsetzung und Abweichungen“).
 
-## 1. Arbeitsweise (bewährt in Stufe 1 bis 7)
+## 1. Arbeitsweise (bewährt in Stufe 1 bis 8)
 
 1. `CLAUDE.md`, [FIRMEN-OS.md](FIRMEN-OS.md), [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md) und
    [DESIGN.md](DESIGN.md) lesen, dann den betroffenen Code.
-2. Kurzen Plan für die Stufe mit Oskar abstimmen. Oskar hat für Stufe 2 bis 7 gesagt: Plan kurz abstimmen, dann bauen,
+2. Kurzen Plan für die Stufe mit Oskar abstimmen. Oskar hat für Stufe 2 bis 8 gesagt: Plan kurz abstimmen, dann bauen,
    testen, im Browser ansehen, Doku nachziehen, Pull Request und mergen.
-3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 166 Tests, alle grün). Neue Tests für das OS
+3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 170 Tests, alle grün). Neue Tests für das OS
    kommen in `tests/test_os.py` (die Reihenfolge der Testdateien ist wichtig: `test_leads.py` setzt die
    Umgebung, Dateien davor dürfen `app.main` nicht importieren).
 4. Seiten im Browser ansehen (Playwright ist vorinstalliert): Handy 390 px und Desktop, hell und dunkel.
@@ -36,6 +36,7 @@ Requests gehen dorthin. Nach einem Merge den Arbeits-Branch neu von dort abzweig
 | 5 Kunden | `projekte.py` (Journey, Abnahme, Änderungen, Zeit, Kosten) | Kunden, Projekt, Einstellungen → Projekte |
 | 6 Freigaben | `freigaben.py` (Zentrale mit Registry `ARTEN`, Stufen A–D, Entscheidungsrechte, Log), `notfall.py` | Freigaben, Entscheidungs-Log, Notfall, Einstellungen → Freigaben und Entscheidungen |
 | 7 Kunden-Bereich | `portal.py` (Einmal-Link, Ansicht für Kunden, Dokumente, Wochenbericht, Termin-Erinnerung) | `/portal` (Kunden), Projekt → Kunden-Bereich/Dokumente/Wochenberichte, Einstellungen → Kunden-Bereich |
+| 8 Finanzen | `finanzen.py` (Rechnungen mit Nummernkreis und Storno, Kosten, Kasse, Kennzahlen, Geld-Regel, Export), `pdf.py` | Finanzen, Rechnung, Laufende Kosten, Einstellungen → Finanzen, Projekt → Rechnungen |
 
 Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module wieder nutzen sollten:
 
@@ -49,7 +50,7 @@ Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module
 - **Regeln als Einstellung:** je Modul ein `REGELN`-Dict, gespeichert in `kv` unter `regel:<modul>`, mit
   `regeln()`/`regeln_speichern()` und einer Einstellungsseite.
 - **Takt:** Hintergrund-Arbeiter `agent.tick()` ruft `kalender.takt`, `kpis.takt`, `projekte.takt`,
-  `freigaben.takt`, `portal.takt` auf (je mit eigenem try/except).
+  `freigaben.takt`, `portal.takt`, `finanzen.takt` auf (je mit eigenem try/except).
 - **Freigaben:** Was ein Mensch freigeben muss, als Zeile in `freigaben` anlegen und die Art in `freigaben.ARTEN`
   eintragen; dann erscheint es in der Zentrale, im Zähler und auf Mein Tag. Stufe der Aktion über
   `freigaben.stufe(c, key)` lesen (Katalog `freigaben.AKTIONEN`). Regeländerungen mit
@@ -57,35 +58,29 @@ Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module
 - **Design:** Bausteine in `static/os.css`, `static/os.js`, `templates/_os.html` (Listenzeilen, Sheets mit
   `data-sheet`, schwebende Knöpfe `os-float`, Formulare mit `data-os-fetch="reload"`, Toasts per `flash`).
 
-## 3. Stufe 8: Finanzen
+## 3. Stufe 9: Ein Posteingang
 
-Aus dem Bauplan (Abschnitt 4.10): *Rechnungen, laufende Kosten, Kassenstand, Geld-Regel als Ampel, Export für
-Steuerberater.* Dazu, was in früheren Stufen ausdrücklich auf Stufe 8 verschoben wurde.
+Aus dem Bauplan (Abschnitt 4.8): *Alle Kanäle an einer Stelle; Unipile für WhatsApp/LinkedIn, sobald Budget da
+ist.* Dazu, was in früheren Stufen verschoben wurde.
 
 **Ausgangslage:**
 
-- Was abzurechnen ist, steht schon in `projekte.py`: Einmalbetrag (`preis_einmal`), monatliche Pauschale
-  (`pauschale_monat`), kleine Änderungen mit Abrechnung „Pauschale“ (`aenderungen.abrechnung`), Umsatz und Kosten je
-  Kunde (`projekte.kosten`). Beim Auftrag legt das OS heute eine Aufgabe „Rechnung Einmalbetrag“ an.
-- KI-Kosten stehen je Person und Lead in `ai_usage` (Seite „Kosten“), der Serveranteil in den Projekte-Regeln.
-- Freigabe-Stufen „Angebot verschicken“ (C/D) und „Rechnung verschicken“ (B/C) sind in `freigaben.AKTIONEN` mit
-  `kommt_mit=8` gesperrt. Mit Stufe 8 freischalten und über `freigaben.stufe(c, key)` steuern; neue Arten in
-  `freigaben.ARTEN` (Muster: `wochenbericht` in `portal.py`).
-- Dokumente am Projekt und im Kunden-Bereich gibt es (`portal.dokumente`); Rechnungen als PDF können dort erscheinen.
-  Mails an Kunden über `portal.mail_an_kunde` (Akte, Sperrliste, Absender der verantwortlichen Person).
+- Mails über das Akquise-Postfach (IMAP/SMTP) mit Zuordnung zu Leads: `mailbox.py` (Tabelle `messages`),
+  Postfach-Seite im CRM, Glocke für neue Mails. Mails an Kunden aus dem OS (Kunden-Bereich, Wochenbericht,
+  Rechnungen) landen über `agent.record_reply` schon in der Akte.
+- Wünsche aus dem Kunden-Bereich kommen als Änderungswunsch an (`quelle='portal'`), Wünsche per Mail noch nicht
+  (Stufe 5 hat das auf 7/9 verschoben).
+- Kommentare mit @-Erwähnung an Aufgaben, Kunden und Projekten gibt es (`aufgaben.kommentare`).
 
 **Vorschlag für den Umfang (mit Oskar abstimmen):**
 
-1. **Rechnungen** aus Vorlage mit Nummernkreis (einstellbar), Positionen aus dem Projekt (Einmalbetrag, Pauschale
-   je Monat, kleine Änderungen des Monats), Status offen/bezahlt, Fälligkeit; als PDF im Kunden-Bereich.
-   Versand über die Freigabe-Stufe „Rechnung“. Mahnung nur als Vorschlag (C).
-2. **Laufende Kosten** als Liste mit Monatsbetrag (Server, Lizenzen), KI-Kosten automatisch aus `ai_usage`.
-3. **Kassenstand** von Hand gepflegt (mit Datum), Verlauf.
-4. **Kennzahlen und Ampel:** Gewinnschwelle, Fixkosten, Geld-Regel für Einstellungen (3 Monate das 1,5-fache der
-   Personalkosten übrig, 6 Monatskosten auf dem Konto) im Cockpit; KPI-Katalog ergänzen.
-5. **Export für den Steuerberater** (CSV, Rechnungen als PDF gesammelt) je Monat oder Quartal.
-6. **Einstellungen** dazu: Firmendaten für die Rechnung (Anschrift, Steuernummer, Bank, Kleinunternehmer ja/nein),
-   Nummernkreis, Zahlungsziel, Texte. Rechte: neues Modul „Finanzen“ (Gründer verwalten, Recherche ohne Zugriff).
+1. **Ein Posteingang für alle Kanäle** mit Spalte `kanal` (mail, brief, telefon, linkedin, whatsapp, portal):
+   jede Nachricht an einer Akte, zuständige Person, „wartet auf Antwort seit“, Filter je Person.
+2. **Mehrere Postfächer** (z. B. persönliche Adressen) in den Einstellungen anlegen, nicht nur das Akquise-Postfach.
+3. **Wünsche per Mail** an eine feste Adresse oder mit Stichwort → Änderungswunsch am Projekt.
+4. **Telefon und Brief** von Hand als Nachricht festhalten (eine Zeile, mit Akte).
+5. **Unipile** (WhatsApp, LinkedIn) nur vorbereiten oder anbinden, je nach Budget; Zugang in den Einstellungen.
+6. KPI „Antwortzeit“ und „wartet auf Antwort“ im Cockpit.
 
 ## 4. Offen und gut zu wissen
 

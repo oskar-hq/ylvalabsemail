@@ -70,7 +70,7 @@ def neu():
 def detail(pid):
     c = db()
     p = _projekt_or_404(pid)
-    from . import aufgaben, portal
+    from . import aufgaben, finanzen, portal
     return render_template("projekt.html", account=g.account, p=p, status=projekte.STATUS,
                            aenderungen=projekte.aenderungen(c, pid), zeiten=projekte.zeiten(c, pid, 20),
                            kosten=projekte.kosten(c, pid), regeln=projekte.regeln(c),
@@ -83,7 +83,8 @@ def detail(pid):
                            demo=SETTINGS["DEMO_MODE"], zugaenge=portal.zugaenge(c, pid),
                            dokumente=portal.dokumente(c, pid), dok_arten=portal.DOK_ARTEN,
                            berichte=portal.berichte(c, pid), portal_darf=portal.darf_zugang(c, me(), p),
-                           portal_link=session.pop("portal_link", None))
+                           portal_link=session.pop("portal_link", None),
+                           rechnungen=finanzen.liste(c, projekt_id=pid) if darf("finanzen") else [])
 
 
 @bp.get("/kunden/aenderung/<int:aid>")
