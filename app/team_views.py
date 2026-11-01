@@ -5,7 +5,7 @@ from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, rende
 
 from . import agent, emailbuild, leaddb, pixel, team
 from .leads_views import db, me, status_payload, who
-from .main import SETTINGS, login_required, remember_member, safe_next, update_session
+from .main import SETTINGS, darf, login_required, remember_member, safe_next, update_session
 
 bp = Blueprint("team", __name__)
 
@@ -20,12 +20,17 @@ def _guard_demo():
 def who_am_i():
     """Nach der Anmeldung mit dem Postfach: Wer bist du? Danach gilt alles für diese Person."""
     nxt = safe_next(request.values.get("next", "")) or url_for("index")
-    people = team.members(db())
+    # Wer schon ein Passwort hat, meldet sich mit Namen an. Mit dem Postfach wählbar sind nur Personen ohne Passwort.
+    people = [p for p in team.members(db()) if not p["has_password"] or p["key"] == g.account.get("team")]
     if request.method == "POST":
         key = request.form.get("member", "")
         member = team.get(db(), key)
-        if not member:
+        if not member or (member.get("status") or "aktiv") != "aktiv":
             abort(400)
+        if member["pw_hash"] and key != g.account.get("team") and not g.account.get("demo"):
+            flash(f"{member['name']} hat schon ein Passwort. Bitte melde dich als {member['name'].split(' ')[0]} "
+                  "mit Namen und Passwort an.")
+            return redirect(url_for("team.who_am_i", next=nxt))
         update_session(team=key, name=member["name"])
         agent.log.info("%s arbeitet als %s", g.account.get("user"), member["name"])
         if not member["pw_hash"] and not g.account.get("demo"):
@@ -57,9 +62,8 @@ def profile():
 @bp.post("/profil/passwort")
 @login_required
 def password():
-    """Eigenes Passwort ändern (mit dem bisherigen). Für eine Person ohne Passwort darf jede im Team das erste
-    festlegen; ein bestehendes fremdes Passwort neu setzen dürfen nur Admins."""
-    from .settings_views import is_admin
+    """Eigenes Passwort ändern (mit dem bisherigen). Passwörter anderer setzt nur, wer Personen verwalten darf
+    (sonst: Einladungslink unter Einstellungen → Personen)."""
     _guard_demo()
     c = db()
     key = request.form.get("member") or me()
@@ -70,8 +74,9 @@ def password():
     if key == me() and member["pw_hash"] and not team.check_password(c, key, request.form.get("current", "")):
         flash("Nicht geändert: Das bisherige Passwort stimmt nicht.")
         return redirect(url_for("team.profile"))
-    if key != me() and member["pw_hash"] and not is_admin(g.account):
-        abort(403, "Ein bestehendes Passwort einer anderen Person ändern nur Admins.")
+    if key != me() and not g.account.get("demo") and not darf("personen", 4):
+        abort(403, "Passwörter anderer Personen setzt nur, wer Personen verwalten darf. Einfacher: Einladungslink "
+                   "unter Einstellungen → Personen.")
     if new != again:
         flash("Nicht geändert: Die beiden Passwörter sind nicht gleich.")
         return redirect(url_for("team.profile"))

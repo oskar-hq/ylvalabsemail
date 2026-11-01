@@ -126,8 +126,8 @@ def board(conn, who="alle", me=None):
     """Betriebe in der Pipeline, gruppiert nach Stufe, mit nächster Wiedervorlage. `who`: "alle" oder eine Person."""
     where, args = owner_sql(who, me)
     rows = conn.execute(f"""
-        SELECT l.*, (SELECT MIN(due) FROM tasks t WHERE t.lead_id = l.id AND t.done_at IS NULL) AS next_due,
-               (SELECT COUNT(*) FROM tasks t WHERE t.lead_id = l.id AND t.done_at IS NULL) AS open_tasks
+        SELECT l.*, (SELECT MIN(t.faellig) {OPEN_TASK_SUB}) AS next_due,
+               (SELECT COUNT(*) {OPEN_TASK_SUB}) AS open_tasks
         FROM leads l WHERE l.stage IS NOT NULL AND {where}
         ORDER BY l.unread DESC, IFNULL(l.stage_at, l.updated_at) DESC""", args).fetchall()
     columns = {k: [] for k in STAGE_KEYS}
@@ -140,46 +140,63 @@ def board(conn, who="alle", me=None):
 # ---------------------------------------------------------------- Wiedervorlagen
 
 
-def add_task(conn, lead_id, due, text, author):
+def add_task(conn, lead_id, due, text, author, person=None, wer=None):
+    """Wiedervorlage an einem Lead: eine Aufgabe im Bereich für Wiedervorlagen (Einstellungen → Bereiche), für die
+    angegebene Person, sonst die zuständige Person des Leads, sonst die verantwortliche Person des Bereichs."""
+    from . import aufgaben
     due = due if isinstance(due, str) else due.isoformat()
     date.fromisoformat(due)  # prüft das Format
-    cur = conn.execute("INSERT INTO tasks (lead_id, due, text, created_at, created_by) VALUES (?,?,?,?,?)",
-                       (lead_id, due, text.strip(), leaddb.now(), author))
-    conn.commit()
+    lead = leaddb.get_lead(conn, lead_id)
+    task_id = aufgaben.anlegen(conn, wer or author, text, aufgaben.wiedervorlage_bereich(conn), due,
+                               person=person or (lead or {}).get("owner"), objekt_typ="lead", objekt_id=lead_id,
+                               quelle="wiedervorlage", streng=False)
     leaddb.add_event(conn, lead_id, "task", f"Wiedervorlage am {fmt_day(due)}: {text.strip()}", author=author)
-    return cur.lastrowid
+    return task_id
 
 
-def complete_task(conn, task_id, author):
-    task = conn.execute("SELECT * FROM tasks WHERE id=?", (task_id,)).fetchone()
-    if not task or task["done_at"]:
+def complete_task(conn, task_id, author, wer=None):
+    from . import aufgaben
+    task = aufgaben.get(conn, task_id)
+    if not task or task["status"] != "offen" or task["objekt_typ"] != "lead":
         return None
-    conn.execute("UPDATE tasks SET done_at=?, done_by=? WHERE id=?", (leaddb.now(), author, task_id))
-    conn.commit()
-    leaddb.add_event(conn, task["lead_id"], "task", f"Erledigt: {task['text']}", author=author)
-    return task["lead_id"]
+    aufgaben.erledigen(conn, wer or author, task_id)
+    leaddb.add_event(conn, task["objekt_id"], "task", f"Erledigt: {task['titel']}", author=author)
+    return task["objekt_id"]
+
+
+# Wiedervorlagen sind Aufgaben mit Bezug auf einen Lead; die Spalten heißen hier wie früher (due, text, lead_id)
+TASKS_SQL = """SELECT a.id, a.objekt_id AS lead_id, a.faellig AS due, a.titel AS text, a.person, a.erstellt_von AS created_by,
+                      a.erstellt_am AS created_at, l.name, l.stage
+               FROM aufgaben a JOIN leads l ON l.id = a.objekt_id
+               WHERE a.objekt_typ = 'lead' AND a.status = 'offen'"""
+OPEN_TASK_SUB = "FROM aufgaben t WHERE t.objekt_typ = 'lead' AND t.objekt_id = l.id AND t.status = 'offen'"
 
 
 def open_tasks(conn, until=None, lead_id=None, who="alle", me=None):
-    owner_where, args = owner_sql(who, me)
-    where = ["t.done_at IS NULL", owner_where]
+    """Offene Wiedervorlagen. `who`: "alle" oder eine Person (dann nur ihre)."""
+    if who == "meine":
+        who = me
+    where, args = [], []
+    if who and who != "alle":
+        where.append("a.person = ?")
+        args.append(who)
     if until:
-        where.append("t.due <= ?")
+        where.append("a.faellig <= ?")
         args.append(until)
     if lead_id:
-        where.append("t.lead_id = ?")
+        where.append("a.objekt_id = ?")
         args.append(lead_id)
     return [dict(r) for r in conn.execute(
-        f"SELECT t.*, l.name, l.stage FROM tasks t JOIN leads l ON l.id = t.lead_id WHERE {' AND '.join(where)} "
-        "ORDER BY t.due, t.id", args)]
+        TASKS_SQL + "".join(f" AND {w}" for w in where) + " ORDER BY a.faellig, a.id", args)]
 
 
 def due_count(conn, me=None):
     """Fällige Wiedervorlagen: ohne Person alle, sonst nur die eigenen."""
-    where, args = owner_sql(me or "alle")
-    return conn.execute(f"SELECT COUNT(*) FROM tasks t JOIN leads l ON l.id = t.lead_id "
-                        f"WHERE t.done_at IS NULL AND t.due <= ? AND {where}",
-                        [date.today().isoformat(), *args]).fetchone()[0]
+    args = [date.today().isoformat()]
+    extra = ""
+    if me:
+        extra, args = " AND a.person = ?", [*args, me]
+    return conn.execute(f"SELECT COUNT(*) FROM ({TASKS_SQL} AND a.faellig <= ?{extra})", args).fetchone()[0]
 
 
 def fmt_day(value):
@@ -332,7 +349,7 @@ def _cell(value):
 def export_csv(conn, everything=False):
     """CSV für Excel (Semikolon, UTF-8 mit BOM). Standard: alle Betriebe in der Pipeline."""
     where = "1" if everything else "stage IS NOT NULL"
-    rows = conn.execute(f"""SELECT l.*, (SELECT MIN(due) FROM tasks t WHERE t.lead_id=l.id AND t.done_at IS NULL)
+    rows = conn.execute(f"""SELECT l.*, (SELECT MIN(t.faellig) {OPEN_TASK_SUB})
                             AS next_due FROM leads l WHERE {where} ORDER BY name""").fetchall()
     out = io.StringIO()
     writer = csv.writer(out, delimiter=";", quoting=csv.QUOTE_MINIMAL)

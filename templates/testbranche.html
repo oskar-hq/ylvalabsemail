@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}{{ b.name }} · Branchentest{% endblock %}
+{% block content %}
+{% set kalt = leads|rejectattr('herkunft', 'equalto', 'warm')|list %}
+{% set warm = leads|selectattr('herkunft', 'equalto', 'warm')|list %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Branchentest{% if not b.aktiv %} · pausiert{% endif %}</span>
+    <h1 class="os-title-l">{{ b.name }}</h1>
+    {% if b.beschreibung %}<p class="os-sub os-lead">{{ b.beschreibung }}</p>{% endif %}
+  </header>
+
+  <dl class="os-kv">
+    <dt>Recherche</dt><dd>{{ b.person_name or 'Noch niemand' }}</dd>
+    <dt>Betriebe (kalt)</dt><dd>{{ b.kalt.betriebe }} von {{ b.ziel }}</dd>
+    {% for k, label in kennzahlen %}<dt>{{ label }}</dt><dd class="{{ 'late' if k == 'preisgespraeche' and b.ampel == 'grau' and b.kalt.kontakte >= 20 }}">{{ b.kalt[k] }}{% if k == 'preisgespraeche' %} <span class="os-ampel {{ b.ampel }}"></span>{% endif %}</dd>{% endfor %}
+    <dt>Antwortquote</dt><dd>{{ (b.antwortquote ~ ' %') if b.antwortquote is not none else '–' }}</dd>
+    {% if b.kalt.in_pruefung %}<dt>In Prüfung</dt><dd>{{ b.kalt.in_pruefung }}</dd>{% endif %}
+    <dt>Warm (zählt nicht)</dt><dd>{{ b.warm.betriebe }} · {{ b.warm.abschluesse }} Abschlüsse</dd>
+  </dl>
+
+  <section class="os-section">
+    <h2 class="os-headline">Betriebe</h2>
+    <p class="os-sub">{{ kalt|length }} kalt{% if warm %}, {{ warm|length }} warm{% endif %}.</p>
+    <ul class="os-list">
+      {% for l in kalt + warm %}<li><a class="os-row" href="{{ url_for('leads.detail', lead_id=l.id) }}">
+        <span class="os-ico {{ 'off' if l.pruef_status == 'abgelehnt' or l.stage == 'verloren' }}">{{ l.name[:1] }}</span>
+        <span class="os-txt"><b>{{ l.name }}</b><span>{{ stufen.get(l.stage, 'Nicht in der Pipeline') }}{% if l.city %} · {{ l.city }}{% endif %}{% if l.recherche_name %} · {{ l.recherche_name.split(' ')[0] }}{% endif %}</span></span>
+        {% if l.herkunft == 'warm' %}<span class="os-tag muted">warm</span>{% endif %}
+        {% if l.pruef_status == 'wartet' %}<span class="os-tag">in Prüfung</span>{% elif l.pruef_status == 'abgelehnt' %}<span class="os-tag red">abgelehnt</span>{% endif %}
+        {% if l.preisgespraech_am %}<span class="os-tag red">Preis</span>{% endif %}
+        <span class="os-chev">{{ i('chev') }}</span></a></li>
+      {% else %}<li class="os-empty">Noch keine Betriebe. Unten passende übernehmen oder in der Akte eines Leads diese Branche wählen.</li>{% endfor %}
+    </ul>
+  </section>
+
+  {% if kandidaten %}
+  <section class="os-section">
+    <h2 class="os-headline">Passende übernehmen</h2>
+    <p class="os-sub">Betriebe aus den Nischen dieser Branche, die noch keiner Testbranche gehören. Die besten zuerst. Wer übernimmt, gilt als recherchierende Person; je nach Lernstufe wird der Lead geprüft.</p>
+    <form method="post" action="{{ url_for('branchentest.uebernehmen', key=b.key) }}" style="margin-top:16px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <ul class="os-list">{% for k in kandidaten %}<li><label class="os-row" style="cursor:pointer">
+        <span class="os-toggle"><input type="checkbox" name="id" value="{{ k.id }}"><span></span></span>
+        <span class="os-txt"><b>{{ k.name }}</b><span>{{ k.city or '' }}{% if k.fit_score is not none %} · {{ k.fit_score }} Punkte{% endif %}</span></span></label></li>{% endfor %}</ul>
+      <button class="os-btn small ink" style="margin-top:16px">Übernehmen</button>
+    </form>
+  </section>
+  {% endif %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('branchentest.uebersicht') }}" aria-label="Zurück zum Branchentest">{{ i('back') }}</a>
+  {% if verwalten %}<button type="button" class="os-btn ink" data-sheet="sheet-branche-{{ b.key }}"><span>Bearbeiten</span>{{ i('chev') }}</button>{% endif %}
+</div>
+{% if verwalten %}{% include "_testbranche_sheet.html" %}{% endif %}
+{% endblock %}

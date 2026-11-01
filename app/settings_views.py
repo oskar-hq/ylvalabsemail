@@ -8,7 +8,7 @@ from datetime import datetime
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from . import agent, backups, config_store, leaddb, updater
+from . import agent, backups, config_store, firma, leaddb, updater
 from .main import DB_PATH, SETTINGS, login_required
 
 bp = Blueprint("settings", __name__)
@@ -19,17 +19,32 @@ def who():
 
 
 def is_admin(account):
+    """Darf Einstellungen ändern, Updates einspielen und Sicherungen zurückspielen: Recht „Einstellungen: Verwalten“
+    (Einstellungen → Rollen). Nur solange in der App noch niemand Personen verwalten darf, gilt ADMIN_USERS."""
     if account.get("demo"):
         return False
+    from . import firma
+    from .leads_views import db
+    if firma.verwalter(db()):
+        return bool(account.get("team")) and firma.darf(db(), account["team"], "einstellungen", firma.VERWALTEN)
     admins = SETTINGS["ADMIN_USERS"]
     # Postfach-Anmeldung: die Adresse; Anmeldung mit Name: der Kurzname (finn) oder der volle Name aus ADMIN_USERS
     names = {(account.get(k) or "").lower() for k in ("address", "user", "team", "name")} - {""}
     return not admins or bool(names & set(admins))
 
 
+def _log(art, text, daten=None):
+    """Ins Firmen-Protokoll (Einstellungen → Protokoll): wer hat wann was geändert."""
+    c = leaddb.connect(DB_PATH)
+    try:
+        firma.log(c, g.account.get("team") or who(), art, "system", None, text, daten)
+    finally:
+        c.close()
+
+
 def require_admin():
     if not is_admin(g.account):
-        abort(403, "Nur für Admins (ADMIN_USERS in der .env).")
+        abort(403, "Dafür brauchst du das Recht „Einstellungen: Verwalten“ (Einstellungen → Rollen und Rechte).")
 
 
 def restart_soon(environ):
@@ -107,6 +122,8 @@ def settings():
                 c.close()
         names = ", ".join(config_store.FIELDS[k]["label"] for k in [*changes, *removals])
         agent.log.info("Einstellungen geändert von %s: %s", who(), ", ".join([*changes, *removals]))
+        _log("einstellung", f"Einstellungen geändert: {names}.", {"geaendert": sorted(changes),
+                                                                  "zurueckgesetzt": sorted(removals)})
         if restart_soon(request.environ):
             return render_template("restarting.html", account=g.account, what=f"Gespeichert: {names}.")
         flash(f"Gespeichert: {names}. Wirksam nach einem Neustart der App.")
@@ -192,6 +209,7 @@ def software_request(kind):
         return jsonify(error=f"Der Austauschordner ist nicht beschreibbar ({exc}). Auf dem Server "
                              "„sudo bash deploy/install-updater.sh“ ausführen."), 500
     agent.log.info("Software-Auftrag „%s“ von %s", kind, who())
+    _log("software", {"update": "Update gestartet.", "check": "Nach Updates gesucht."}.get(kind, f"Auftrag {kind}."))
     return jsonify(ok=True, message="Wird nach Updates gesucht …" if kind == "check" else
                    "Update startet. Die App ist gleich kurz weg und kommt von selbst wieder.")
 
@@ -215,6 +233,7 @@ def backup_download():
     data = backups.create(SETTINGS["DATA_DIR"])
     name = f"ylva-mailer_{datetime.now():%Y-%m-%d_%H%M}.tar.gz"
     agent.log.info("Sicherung heruntergeladen von %s", who())
+    _log("sicherung", "Sicherung heruntergeladen.")
     return Response(data, mimetype="application/gzip",
                     headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
 
@@ -248,6 +267,7 @@ def backup_restore():
         return redirect(url_for("settings.backup_page"))
     backups.mark(SETTINGS["DATA_DIR"], who(), file.filename[:120])
     agent.log.info("Sicherung %s wird zurückgespielt (von %s)", file.filename, who())
+    _log("sicherung", f"Sicherung „{file.filename[:120]}“ zum Zurückspielen bereitgelegt.")
     return _restart_or_flash(f"Sicherung „{file.filename}“ geprüft ({info['leads']} Betriebe)."
                              + (" Enthält auch die Einstellungen aus der App." if info["settings"] else ""))
 

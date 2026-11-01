@@ -1,0 +1,120 @@
+{# Bausteine des Firmen-OS nach docs/DESIGN.md. Klassen in static/os.css, Verhalten in static/os.js. #}
+
+{% macro i(name) -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{%- if name == 'chev' %}<path d="m9 5 7 7-7 7"/>
+{%- elif name == 'back' %}<path d="m15 5-7 7 7 7"/>
+{%- elif name == 'plus' %}<path d="M12 5v14M5 12h14"/>
+{%- elif name == 'check' %}<path d="M5 12.5 10 17l9-10"/>
+{%- elif name == 'pfeil' %}<path d="M5 12h14M13 6l6 6-6 6"/>
+{%- elif name == 'anfrage' %}<path d="M7 17 17 7M9 7h8v8"/>
+{%- elif name == 'person' %}<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>
+{%- elif name == 'schloss' %}<rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+{%- elif name == 'bereich' %}<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>
+{%- elif name == 'protokoll' %}<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>
+{%- elif name == 'aufgabe' %}<path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/>
+{%- elif name == 'glocke' %}<path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/>
+{%- elif name == 'link' %}<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>
+{%- elif name == 'at' %}<circle cx="12" cy="12" r="4"/><path d="M16 8v5a3 3 0 0 0 6 0v-1a10 10 0 1 0-4 8"/>
+{%- elif name == 'lead' %}<path d="M3 21h18M5 21V7l7-4 7 4v14M9 21v-6h6v6"/>
+{%- endif %}</svg>
+{%- endmacro %}
+
+{# Meldungen nach einer Aktion (flash) erscheinen als Toast oben #}
+{% macro toasts() -%}
+{% with messages = get_flashed_messages() %}{% for m in messages %}<span hidden data-os-toast="{{ m }}" data-os-error="{{ '1' if m.startswith('Nicht') or 'abgelaufen' in m or 'gesperrt' in m else '0' }}"></span>{% endfor %}{% endwith %}
+{%- endmacro %}
+
+{% macro avatar(name, cls='') -%}<span class="os-ico {{ cls }}" aria-hidden="true">{{ (name or '?')[:1]|upper }}</span>{%- endmacro %}
+
+{# Eine Aufgabe als Listenzeile: links abhaken, Titel, darunter Bereich · Termin · Person #}
+{% macro aufgabe_zeile(a, me, loop_index=0, zeige_person=True, next='') -%}
+<li class="os-row" style="--i:{{ loop_index }}">
+  {% if a.status == 'offen' %}
+  <form method="post" action="{{ url_for('aufgaben.erledigt', aid=a.id) }}" data-os-check="remove">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ next }}">
+    <button class="os-check" aria-label="Erledigt: {{ a.titel }}">{{ i('check') }}</button>
+  </form>
+  {% elif a.status == 'angefragt' %}<span class="os-ico off" title="Angefragt">{{ i('anfrage') }}</span>
+  {% elif a.status == 'erledigt' %}<span class="os-check done" aria-label="Erledigt">{{ i('check') }}</span>
+  {% else %}<span class="os-ico red" title="Abgelehnt">–</span>{% endif %}
+  <a class="os-txt" href="{{ url_for('aufgaben.detail', aid=a.id) }}" style="text-decoration:none;color:inherit">
+    <b>{{ a.titel }}</b>
+    <span>{% if a.ueberfaellig %}<span class="os-late">{{ a.tag }}</span>{% else %}{{ a.tag }}{% endif %}
+      · {{ a.bereich_name }}{% if zeige_person and a.person != me %} · {{ a.person_name }}{% endif %}
+      {%- if a.objekt_name %} · {{ a.objekt_name }}{% endif %}
+      {%- if a.status == 'angefragt' %} · wartet auf {{ a.person_name.split(' ')[0] if a.person_name else 'den Bereich' }}{% endif %}
+      {%- if a.status == 'abgelehnt' %} · abgelehnt{% endif %}</span>
+  </a>
+  {% if a.prio == 1 and a.status in ('offen', 'angefragt') %}<span class="os-tag red">Hoch</span>{% endif %}
+  <span class="os-chev">{{ i('chev') }}</span>
+</li>
+{%- endmacro %}
+
+{# Sheet „Neue Aufgabe / Anfrage“. Eine große Frage oben, darunter nur das Nötige. #}
+{% macro sheet_neu(bereiche, personen, meine_bereiche, me, heute, next='') -%}
+<dialog class="os-sheet" id="sheet-neu" aria-labelledby="neuTitel">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('aufgaben.neu') }}" data-os-fetch="reload" data-os-require=".os-ask" data-os-art>
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ next }}">
+      <span class="os-eyebrow" id="neuTitel">Neu</span>
+      <div class="os-chips" role="radiogroup" aria-label="Art">
+        <label><input type="radio" name="art" value="aufgabe" checked>Aufgabe</label>
+        <label><input type="radio" name="art" value="anfrage">Anfrage an einen Bereich</label>
+      </div>
+      <textarea class="os-ask" name="titel" rows="2" maxlength="200" placeholder="Was ist zu tun?" required></textarea>
+      <label class="os-field"><span>Bereich</span>
+        <select name="bereich" required>
+          {% for b in bereiche %}<option value="{{ b.key }}" {{ 'selected' if b.key == (meine_bereiche[0] if meine_bereiche else '') }}>{{ b.voll }} · {{ b.verantwortlich_name }}</option>{% endfor %}
+        </select></label>
+      <label class="os-field" data-nur-aufgabe><span>Wer macht es?</span>
+        <select name="person">
+          <option value="">Wer für den Bereich verantwortlich ist</option>
+          {% for p in personen %}<option value="{{ p.key }}" {{ 'selected' if p.key == me }}>{{ p.name }}{{ ' (ich)' if p.key == me }}</option>{% endfor %}
+        </select></label>
+      <p class="os-caption" data-nur-anfrage hidden style="margin:-8px 0 24px">Die Anfrage landet bei der verantwortlichen Person des Bereichs. Sie nimmt an und setzt den Termin, oder lehnt mit Grund ab.</p>
+      <div class="os-field"><span data-nur-aufgabe>Bis wann?</span><span data-nur-anfrage hidden>Bis wann bräuchtest du es?</span>
+        <div class="os-chips" data-os-quick>
+          <label><input type="radio" name="schnell" value="heute">Heute</label>
+          <label><input type="radio" name="schnell" value="morgen" checked>Morgen</label>
+          <label><input type="radio" name="schnell" value="woche">Nächste Woche</label>
+          <label><input type="radio" name="schnell" value="2w">In 2 Wochen</label>
+        </div>
+        <input type="date" name="faellig" value="{{ heute }}" min="2000-01-01" aria-label="Datum"></div>
+      <details class="os-field"><summary class="os-link">Priorität und Notiz</summary>
+        <div style="margin-top:16px">
+          <div class="os-chips" role="radiogroup" aria-label="Priorität">
+            <label><input type="radio" name="prio" value="1">Hoch</label>
+            <label><input type="radio" name="prio" value="2" checked>Normal</label>
+            <label><input type="radio" name="prio" value="3">Niedrig</label>
+          </div>
+          <label class="os-field"><span>Notiz</span><textarea name="notiz" rows="3" maxlength="4000" placeholder="Was muss man wissen?"></textarea></label>
+        </div></details>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span data-cta-label>Anlegen</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{%- endmacro %}
+
+{# Kommentare mit @-Erwähnung, an einer Aufgabe oder einem Lead #}
+{% macro kommentare(liste, typ, oid, personen) -%}
+<section class="os-section" id="kommentare">
+  <h2 class="os-headline">Kommentare</h2>
+  <p class="os-sub">Mit @Name holst du jemanden dazu. Die Person bekommt eine Meldung.</p>
+  {% if liste %}<ul class="os-comments">
+    {% for k in liste %}<li class="os-comment">{{ avatar(k.wer_name) }}<div class="os-txt">
+      <span class="os-meta">{{ k.wer_name }} · {{ k.at|kurzdatum }}</span>
+      <p>{{ k.text|erwaehnung }}</p></div></li>{% endfor %}
+  </ul>{% endif %}
+  <form method="post" action="{{ url_for('aufgaben.kommentar', typ=typ, oid=oid) }}" data-os-fetch="reload" data-os-require="textarea">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <label class="os-field"><span class="sr-only">Kommentar</span>
+      <textarea name="text" rows="3" maxlength="4000" placeholder="Kommentar schreiben, z. B. @Finn kannst du kurz drauf schauen?" data-os-mention="{{ personen|mention_json }}"></textarea></label>
+    <button type="submit" class="os-btn small ink">Kommentieren</button>
+  </form>
+</section>
+{%- endmacro %}

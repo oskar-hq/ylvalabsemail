@@ -4,7 +4,10 @@
 <main class="page narrow">
   <a class="back" href="{{ url_for('settings.settings') }}">‹ Einstellungen</a>
   <h1 class="title">Zugang und Sicherheit</h1>
-  <p class="muted">Nur in der <code>.env</code> auf dem Server änderbar, damit sich niemand aus Versehen aussperrt.</p>
+  <p class="muted">Wer was darf, steht jetzt in der App: <a href="{{ url_for('personen.liste') }}">Personen</a> und <a href="{{ url_for('personen.rollen') }}">Rollen und Rechte</a>. Mindestens eine aktive Person darf immer Personen und Rechte verwalten; niemand kann sich dieses Recht selbst nehmen.</p>
+  <p class="muted">Mit dem Postfach angemeldet kann man nur Personen wählen, die noch kein Passwort haben. Alle anderen melden sich mit Namen an.</p>
+  <p class="muted"><b>Notfall</b> (niemand kommt mehr rein): auf dem Server <code>cd /opt/ylva-mailer && sudo -u mailer bash -c 'set -a; . ./.env; .venv/bin/python -m app.firma notfall oskar'</code>. Das macht die Person wieder aktiv, gibt ihr die Rolle „Gründer“ und zeigt einen Einladungslink zum neuen Passwort.</p>
+  <p class="muted">Die folgenden Werte stehen nur in der <code>.env</code> (Start und Rückfall). <code>ADMIN_USERS</code> gilt nur noch, solange in der App niemand Personen verwalten darf.</p>
   <dl class="facts small kv">
     {% for k, v in read_only.items() %}<dt><code>{{ k }}</code></dt><dd>{{ v or '–' }}</dd>{% endfor %}
   </dl>

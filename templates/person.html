@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, avatar %}
+{% block title %}{{ p.name }} · Personen{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Person{% if p.status != 'aktiv' %} · {{ {'gesperrt': 'Gesperrt', 'archiviert': 'Archiviert'}[p.status] }}{% endif %}</span>
+    <h1 class="os-title-l">{{ p.name }}</h1>
+    <p class="os-sub os-lead">{{ rolle.name if rolle else 'Ohne Rolle' }}{% if p.lernstufe %} · Lernstufe {{ p.lernstufe }}{% endif %}
+      · {{ 'hat ein Passwort' if p.has_password else 'noch kein Passwort' }}</p>
+  </header>
+
+  {% if link %}
+  <section class="os-section" style="margin-top:0">
+    <h2 class="os-headline">Einladungslink</h2>
+    <p class="os-sub">Wird nur jetzt angezeigt. Schick ihn {{ p.name.split(' ')[0] }}, gilt {{ einladung_tage }} Tage und genau einmal.</p>
+    <div class="os-copy" style="margin-top:16px"><input class="os-input" id="einladungLink" value="{{ link }}" readonly>
+      <button type="button" class="os-btn small ink" data-os-copy="einladungLink">Kopieren</button></div>
+  </section>
+  {% endif %}
+
+  <section class="os-section">
+    <h2 class="os-headline">Rechte</h2>
+    <p class="os-sub">Aus der Rolle{% if p.eigene_rechte %}, einzelne Module für {{ p.name.split(' ')[0] }} angepasst{% endif %}.</p>
+    <dl class="os-kv" style="margin-top:24px">
+      {% for k, label in module %}<dt>{{ label }}</dt><dd>{{ stufen[rechte[k]][1] }}{% if k in p.eigene_rechte %} <span class="os-tag">eigen</span>{% endif %}</dd>{% endfor %}
+    </dl>
+  </section>
+
+  {% if verwalten %}
+  <section class="os-section">
+    <h2 class="os-headline">Bearbeiten</h2>
+    <form method="post" action="{{ url_for('personen.speichern', key=p.key) }}" style="margin-top:24px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <label class="os-field"><span>Name</span><input name="name" value="{{ p.name }}" maxlength="80" required></label>
+      <div class="os-grid2">
+        <label class="os-field"><span>Rolle</span><select name="rolle">{% for r in rollen %}<option value="{{ r.key }}" {{ 'selected' if r.key == p.rolle }}>{{ r.name }}</option>{% endfor %}</select></label>
+        <label class="os-field"><span>Lernstufe</span><select name="lernstufe"><option value="">–</option>
+          {% for v, l in lernstufen %}<option value="{{ v }}" {{ 'selected' if v == p.lernstufe }}>{{ l }}</option>{% endfor %}</select></label>
+      </div>
+      <label class="os-field"><span>E-Mail</span><input type="email" name="email" value="{{ p.email or '' }}"></label>
+      <div class="os-field"><span>Bereiche</span>
+        <div class="os-chips">{% for b in bereiche %}<label><input type="checkbox" name="bereiche" value="{{ b.key }}" {{ 'checked' if b.key in p.bereiche }}>{{ b.name }}{% if b.key in verantwortet %} · verantwortlich{% endif %}</label>{% endfor %}</div></div>
+      <details class="os-field" {{ 'open' if p.eigene_rechte }}><summary class="os-link">Rechte nur für {{ p.name.split(' ')[0] }} anpassen</summary>
+        <p class="os-caption" style="margin:12px 0">„Wie Rolle“ übernimmt die Rechte der Rolle. Alles andere gilt nur für diese Person.</p>
+        <table class="os-matrix"><tbody>
+          {% for k, label in module %}<tr><td>{{ label }}</td><td><select class="os-input" name="r_{{ k }}" aria-label="{{ label }}">
+            <option value="">Wie Rolle ({{ stufen[rolle.rechte[k] if rolle else 0][1] }})</option>
+            {% for v, l in stufen %}<option value="{{ v }}" {{ 'selected' if k in p.eigene_rechte and p.eigene_rechte[k] == v }}>{{ l }}</option>{% endfor %}</select></td></tr>{% endfor %}
+        </tbody></table>
+      </details>
+      <button class="os-btn small ink">Speichern</button>
+    </form>
+  </section>
+
+  <section class="os-section">
+    <h2 class="os-headline">Zugang</h2>
+    <ul class="os-list">
+      {% if p.status == 'aktiv' %}
+      <li><form method="post" action="{{ url_for('personen.einladen', key=p.key) }}">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="os-row" style="width:100%;border:0;background:none;text-align:left;cursor:pointer" {% if p.has_password %}data-confirm="{{ p.name }} hat schon ein Passwort. Mit dem neuen Link kann {{ p.name.split(' ')[0] }} es neu setzen. Weiter?"{% endif %}>
+          <span class="os-ico">{{ i('link') }}</span><span class="os-txt"><b>{{ 'Neuen Einladungslink erzeugen' if p.einladung_bis else 'Einladungslink erzeugen' }}</b>
+          <span>{{ 'Zum Zurücksetzen des Passworts' if p.has_password else 'Damit die Person ihr Passwort setzt' }}</span></span><span class="os-chev">{{ i('chev') }}</span></button></form></li>
+      {% endif %}
+      {% if not ist_ich %}
+      {% if p.status == 'aktiv' %}
+      <li><form method="post" action="{{ url_for('personen.status', key=p.key) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="os-row danger" name="status" value="gesperrt" style="width:100%;border:0;background:none;text-align:left;cursor:pointer" data-confirm="{{ p.name }} sperren? Die Person wird sofort abgemeldet.">
+          <span class="os-ico red">{{ i('schloss') }}</span><span class="os-txt"><b>Sperren</b><span>Keine Anmeldung mehr, bleibt in den Listen</span></span></button></form></li>
+      {% else %}
+      <li><form method="post" action="{{ url_for('personen.status', key=p.key) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="os-row" name="status" value="aktiv" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">
+          <span class="os-ico">{{ i('person') }}</span><span class="os-txt"><b>Wieder aktivieren</b><span>Anmeldung wieder erlaubt</span></span><span class="os-chev">{{ i('chev') }}</span></button></form></li>
+      {% endif %}
+      {% if p.status != 'archiviert' %}
+      <li><form method="post" action="{{ url_for('personen.status', key=p.key) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="os-row danger" name="status" value="archiviert" style="width:100%;border:0;background:none;text-align:left;cursor:pointer" data-confirm="{{ p.name }} archivieren? Die Daten bleiben erhalten.">
+          <span class="os-ico red">{{ i('protokoll') }}</span><span class="os-txt"><b>Archivieren</b><span>Verschwindet aus allen Listen, Daten bleiben</span></span></button></form></li>
+      {% endif %}
+      {% else %}
+      <li class="os-caption">Dich selbst kannst du nicht sperren oder archivieren, und dir nicht selbst das Recht nehmen, Personen zu verwalten.</li>
+      {% endif %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if verlauf and darf('protokoll') %}
+  <section class="os-section">
+    <h2 class="os-headline">Verlauf</h2>
+    <ul class="os-list">{% for e in verlauf %}<li class="os-row" style="min-height:0;padding:8px 0">
+      <span class="os-txt"><span>{{ e.at|kurzdatum }} · {{ e.wer }}</span><b style="font-weight:500;font-size:17px">{{ e.text }}</b></span></li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('personen.liste') }}" aria-label="Zurück zu den Personen">{{ i('back') }}</a>
+</div>
+{% endblock %}

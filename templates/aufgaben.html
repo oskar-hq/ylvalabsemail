@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, aufgabe_zeile, sheet_neu %}
+{% block title %}Aufgaben · Ylva Labs{% endblock %}
+{% block content %}
+{% set me = account.team %}
+{% set hier = url_for('aufgaben.liste', ansicht=ansicht, bereich=bereich, erledigt='1' if erledigt else None) %}
+<main class="os-page">
+  {{ toasts() }}
+  <span class="os-eyebrow">Aufgaben</span>
+  <nav class="os-tabs" aria-label="Ansicht">
+    {% for key, label in ansichten %}<a href="{{ url_for('aufgaben.liste', ansicht=key, erledigt='1' if erledigt else None) }}" class="{{ 'on' if ansicht == key and not bereich }}" {{ 'aria-current=page' if ansicht == key and not bereich }}>{{ label }}</a>{% endfor %}
+  </nav>
+  <div class="os-chips" aria-label="Filter">
+    <a href="{{ url_for('aufgaben.liste', ansicht=ansicht) }}" class="{{ 'on' if not erledigt and not bereich }}">Offen</a>
+    <a href="{{ url_for('aufgaben.liste', ansicht=ansicht, erledigt='1') }}" class="{{ 'on' if erledigt and not bereich }}">Erledigt (30 Tage)</a>
+    {% for b in bereiche %}<a href="{{ url_for('aufgaben.liste', ansicht='alle', bereich=b.key, erledigt='1' if erledigt else None) }}" class="{{ 'on' if bereich == b.key }}">{{ b.name }}</a>{% endfor %}
+  </div>
+
+  {% if rows %}
+  <ul class="os-list anim">{% for a in rows %}{{ aufgabe_zeile(a, me, loop.index0, ansicht != 'meine', hier) }}{% endfor %}</ul>
+  {% else %}
+  <p class="os-empty">{% if erledigt %}In den letzten 30 Tagen ist hier nichts erledigt worden.
+    {% elif ansicht == 'meine' %}Du hast keine offenen Aufgaben. Was nicht im OS steht, ist keine Aufgabe: Leg sie an.
+    {% elif ansicht == 'vergeben' %}Du hast gerade nichts an andere vergeben.
+    {% else %}Hier ist nichts offen.{% endif %}</p>
+  {% endif %}
+</main>
+<div class="os-float">
+  <button type="button" class="os-btn" data-sheet="sheet-neu" data-set-art="aufgabe"><span>Neue Aufgabe</span>{{ i('plus') }}</button>
+</div>
+{{ sheet_neu(bereiche, personen, meine_bereiche, me, heute, hier) }}
+{% endblock %}

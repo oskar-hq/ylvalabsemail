@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Bereiche · Einstellungen{% endblock %}
+{% block content %}
+{% set aktiv = bereiche|rejectattr('archiviert')|list %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Einstellungen</span>
+    <h1 class="os-title-l">Bereiche</h1>
+    <p class="os-sub os-lead">Jede Aufgabe gehört zu genau einem Bereich. Anfragen landen bei der verantwortlichen Person. Wächst das Team, teilt ihr hier einen Bereich auf.</p>
+  </header>
+  <ul class="os-list anim">
+    {% for b in bereiche %}<li style="--i:{{ loop.index0 }}"><a class="os-row" href="#" data-sheet="sheet-bereich-{{ b.key }}">
+      <span class="os-ico {{ 'off' if b.archiviert }}">{{ i('bereich') }}</span>
+      <span class="os-txt"><b>{{ b.name }}</b><span>{{ b.verantwortlich_name or 'niemand' }}{% if b.eltern_name %} · Teil von {{ b.eltern_name }}{% endif %} · {{ offen.get(b.key, 0) }} offen</span></span>
+      {% if b.archiviert %}<span class="os-tag muted">Archiviert</span>{% endif %}
+      <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
+  </ul>
+
+  {% if verwalten %}
+  <section class="os-section">
+    <h2 class="os-headline">Regeln</h2>
+    <form method="post" action="{{ url_for('personen.bereich_regeln') }}" style="margin-top:16px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <label class="os-field"><span>Wiedervorlagen an Leads gehören zum Bereich</span>
+        <select name="wiedervorlage">{% for b in aktiv %}<option value="{{ b.key }}" {{ 'selected' if b.key == wiedervorlage }}>{{ b.voll }}</option>{% endfor %}</select>
+        <p class="os-caption">Ohne zuständige Person am Lead landet die Wiedervorlage bei der verantwortlichen Person dieses Bereichs.</p></label>
+      <button class="os-btn small quiet">Speichern</button>
+    </form>
+  </section>
+  {% endif %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('personen.liste') }}" aria-label="Zurück zu den Personen">{{ i('back') }}</a>
+  {% if verwalten %}<button type="button" class="os-btn" data-sheet="sheet-bereich-neu"><span>Neuer Bereich</span>{{ i('plus') }}</button>{% endif %}
+</div>
+
+{% for b in bereiche + [{'key': 'neu', 'name': '', 'verantwortlich': '', 'eltern': '', 'beschreibung': '', 'archiviert': 0}] %}
+<dialog class="os-sheet" id="sheet-bereich-{{ b.key }}" aria-label="{{ b.name or 'Neuer Bereich' }}">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('personen.bereich_speichern') }}" data-os-fetch="reload" data-os-require=".os-ask">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="key" value="{{ '' if b.key == 'neu' else b.key }}">
+      <span class="os-eyebrow">{{ 'Neuer Bereich' if b.key == 'neu' else 'Bereich' }}</span>
+      <input class="os-ask" name="name" value="{{ b.name }}" maxlength="80" placeholder="Name des Bereichs" {{ 'readonly' if not verwalten }} required>
+      <label class="os-field"><span>Verantwortlich</span><select name="verantwortlich" {{ 'disabled' if not verwalten }}>
+        {% for p in personen %}<option value="{{ p.key }}" {{ 'selected' if p.key == b.verantwortlich }}>{{ p.name }}</option>{% endfor %}</select></label>
+      <label class="os-field"><span>Teil von (optional)</span><select name="eltern" {{ 'disabled' if not verwalten }}><option value="">–</option>
+        {% for e in aktiv if e.key != b.key and not e.eltern %}<option value="{{ e.key }}" {{ 'selected' if e.key == b.eltern }}>{{ e.name }}</option>{% endfor %}</select></label>
+      <label class="os-field"><span>Wofür der Bereich da ist</span><textarea name="beschreibung" rows="3" maxlength="500" {{ 'readonly' if not verwalten }}>{{ b.beschreibung or '' }}</textarea></label>
+      {% if verwalten %}<div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Speichern</span>{{ i('check') }}</button>
+      </div>{% endif %}
+    </form>
+    {% if verwalten and b.key != 'neu' %}
+    <form method="post" action="{{ url_for('personen.bereich_archiv', key=b.key) }}" style="margin-top:24px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      {% if b.archiviert %}<button class="os-link" name="archiv" value="0">Zurückholen</button>
+      {% else %}<button class="os-link danger" name="archiv" value="1" data-confirm="Bereich „{{ b.name }}“ archivieren? Offene Aufgaben bleiben erhalten.">Archivieren</button>{% endif %}
+    </form>
+    {% endif %}
+  </div>
+</dialog>
+{% endfor %}
+{% endblock %}

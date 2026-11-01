@@ -54,7 +54,7 @@
     <h2>Das Team</h2>
     <ul class="team-list">
       {% for p in others %}<li><span><b>{{ p.name }}</b> <span class="muted small">· {{ 'hat ein Passwort' if p.has_password else 'noch kein Passwort' }}</span></span>
-        {% if (not p.has_password or admin) and not account.demo %}
+        {% if darf('personen', 4) and not account.demo %}
         <details class="pw-other"><summary class="btn small">{{ 'Passwort neu setzen' if p.has_password else 'Erstes Passwort festlegen' }}</summary>
           <form method="post" action="{{ url_for('team.password') }}" autocomplete="off">
             <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="member" value="{{ p.key }}">
@@ -64,7 +64,7 @@
           </form>
         </details>{% endif %}</li>{% endfor %}
     </ul>
-    <p class="muted small">Ein erstes Passwort für jemanden ohne Passwort kann jede im Team festlegen. Ein bestehendes fremdes Passwort ändern nur Admins.</p>
+    <p class="muted small">Neue Personen bekommen einen Einladungslink und setzen ihr Passwort selbst ({% if darf('personen') %}<a href="{{ url_for('personen.liste') }}">Einstellungen → Personen</a>{% else %}frag eine Person, die Personen verwaltet{% endif %}).</p>
   </section>
 </main>
 {% endblock %}

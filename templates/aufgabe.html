@@ -1,0 +1,137 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, kommentare, avatar %}
+{% block title %}{{ a.titel }} · Aufgaben{% endblock %}
+{% block content %}
+{% set me = account.team %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">{{ 'Anfrage' if a.art == 'anfrage' else 'Aufgabe' }} · {{ a.bereich_name }}</span>
+    <h1 class="os-title-m">{{ a.titel }}</h1>
+    {% if a.notiz %}<p class="os-sub os-lead" style="white-space:pre-wrap">{{ a.notiz }}</p>{% endif %}
+  </header>
+
+  <dl class="os-kv">
+    <dt>Status</dt><dd>{{ a.status_label }}</dd>
+    <dt>{{ 'Gewünscht bis' if a.status == 'angefragt' else 'Fällig' }}</dt><dd class="{{ 'late' if a.ueberfaellig }}">{{ a.tag }}</dd>
+    <dt>{{ 'Entscheidet' if a.status == 'angefragt' else 'Wer' }}</dt><dd>{{ a.person_name or '–' }}</dd>
+    <dt>Bereich</dt><dd>{{ a.bereich_name }}</dd>
+    <dt>Priorität</dt><dd>{{ a.prio_label }}</dd>
+    {% if a.anfrage_von %}<dt>Angefragt von</dt><dd>{{ a.anfrage_von_name }}</dd>{% endif %}
+    {% if a.objekt_url %}<dt>Bezug</dt><dd><a href="{{ a.objekt_url }}">{{ a.objekt_name }}</a></dd>{% endif %}
+    <dt>Angelegt</dt><dd>{{ a.erstellt_am|kurzdatum }} · {{ namen.get(a.erstellt_von, a.erstellt_von_name or 'OS') }}</dd>
+    {% if a.status in ('erledigt', 'abgelehnt') %}<dt>{{ 'Erledigt' if a.status == 'erledigt' else 'Abgelehnt' }}</dt><dd>{{ a.erledigt_am|kurzdatum }} · {{ namen.get(a.erledigt_von, a.erledigt_von) }}</dd>{% endif %}
+    {% if a.antwort %}<dt>Grund</dt><dd>{{ a.antwort }}</dd>{% endif %}
+  </dl>
+
+  {% if a.status == 'angefragt' and darf_entscheiden %}
+  <section class="os-section">
+    <h2 class="os-headline">Deine Entscheidung</h2>
+    <p class="os-sub">Nimm die Anfrage an und setz einen Termin, den dein Bereich halten kann. Oder lehn ab und sag warum.</p>
+    <div class="os-btns">
+      <button type="button" class="os-btn small" data-sheet="sheet-annehmen">Annehmen</button>
+      <button type="button" class="os-btn small quiet" data-sheet="sheet-ablehnen">Ablehnen</button>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if darf_aendern and a.status in ('offen', 'angefragt') %}
+  <section class="os-section">
+    <ul class="os-list">
+      <li><a class="os-row" href="#" data-sheet="sheet-aendern"><span class="os-ico">{{ i('aufgabe') }}</span>
+        <span class="os-txt"><b>Bearbeiten</b><span>Termin, Person, Bereich, Priorität, Notiz</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>
+    </ul>
+  </section>
+  {% endif %}
+
+  {{ kommentare(komm, 'aufgabe', a.id, personen) }}
+
+  {% if verlauf %}
+  <section class="os-section">
+    <h2 class="os-headline">Verlauf</h2>
+    <ul class="os-list">{% for e in verlauf %}<li class="os-row" style="min-height:0;padding:8px 0">
+      <span class="os-txt"><span>{{ e.at|kurzdatum }} · {{ namen.get(e.wer, e.wer) }}</span><b style="font-weight:500;font-size:17px">{{ e.text }}</b></span></li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+</main>
+
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('aufgaben.liste') }}" aria-label="Zurück zu den Aufgaben">{{ i('back') }}</a>
+  {% if a.status == 'offen' %}
+  <form method="post" action="{{ url_for('aufgaben.erledigt', aid=a.id) }}" data-os-fetch="{{ url_for('aufgaben.liste') }}" style="display:contents">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button type="submit" class="os-btn"><span>Erledigt</span>{{ i('check') }}</button>
+  </form>
+  {% elif a.status == 'erledigt' %}
+  <form method="post" action="{{ url_for('aufgaben.erledigt', aid=a.id) }}" data-os-fetch="reload" style="display:contents">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="zurueck" value="1">
+    <button type="submit" class="os-btn ink"><span>Wieder öffnen</span>{{ i('back') }}</button>
+  </form>
+  {% endif %}
+</div>
+
+{% if darf_aendern and a.status in ('offen', 'angefragt') %}
+<dialog class="os-sheet" id="sheet-aendern" aria-label="Aufgabe bearbeiten">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('aufgaben.aendern', aid=a.id) }}" data-os-fetch="reload" data-os-require=".os-ask">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <span class="os-eyebrow">Bearbeiten</span>
+      <textarea class="os-ask" name="titel" rows="2" maxlength="200" required>{{ a.titel }}</textarea>
+      <div class="os-grid2">
+        <label class="os-field"><span>Fällig</span><input type="date" name="faellig" value="{{ a.faellig }}" required></label>
+        <label class="os-field"><span>Priorität</span><select name="prio">{% for v, l in prios %}<option value="{{ v }}" {{ 'selected' if v == a.prio }}>{{ l }}</option>{% endfor %}</select></label>
+      </div>
+      <label class="os-field"><span>Bereich</span><select name="bereich">{% for b in bereiche %}<option value="{{ b.key }}" {{ 'selected' if b.key == a.bereich }}>{{ b.voll }}</option>{% endfor %}</select></label>
+      {% if a.status == 'offen' %}<label class="os-field"><span>Wer macht es?</span><select name="person">{% for p in personen %}<option value="{{ p.key }}" {{ 'selected' if p.key == a.person }}>{{ p.name }}</option>{% endfor %}</select></label>{% endif %}
+      <label class="os-field"><span>Notiz</span><textarea name="notiz" rows="4" maxlength="4000">{{ a.notiz or '' }}</textarea></label>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Speichern</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endif %}
+
+{% if a.status == 'angefragt' and darf_entscheiden %}
+<dialog class="os-sheet" id="sheet-annehmen" aria-label="Anfrage annehmen">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('aufgaben.annehmen', aid=a.id) }}" data-os-fetch="reload">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <span class="os-eyebrow">Annehmen</span>
+      <h2 class="os-title-m" style="margin-bottom:32px">Bis wann schafft ihr „{{ a.titel }}“?</h2>
+      <div class="os-field">
+        <div class="os-chips" data-os-quick>
+          <label><input type="radio" name="schnell" value="heute">Heute</label>
+          <label><input type="radio" name="schnell" value="morgen">Morgen</label>
+          <label><input type="radio" name="schnell" value="woche">Nächste Woche</label>
+          <label><input type="radio" name="schnell" value="2w">In 2 Wochen</label>
+        </div>
+        <input type="date" name="faellig" value="{{ a.faellig }}" aria-label="Datum" required></div>
+      <label class="os-field"><span>Wer macht es?</span><select name="person">{% for p in personen %}<option value="{{ p.key }}" {{ 'selected' if p.key == a.person }}>{{ p.name }}</option>{% endfor %}</select></label>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Annehmen</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+<dialog class="os-sheet" id="sheet-ablehnen" aria-label="Anfrage ablehnen">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('aufgaben.ablehnen', aid=a.id) }}" data-os-fetch="reload" data-os-require="textarea">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <span class="os-eyebrow">Ablehnen</span>
+      <textarea class="os-ask" name="grund" rows="3" maxlength="1000" placeholder="Warum geht es nicht?" required></textarea>
+      <p class="os-caption">{{ a.anfrage_von_name }} bekommt den Grund als Meldung. Ein Vorschlag hilft: später, anders, oder wer es stattdessen kann.</p>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Ablehnen</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endif %}
+{% endblock %}

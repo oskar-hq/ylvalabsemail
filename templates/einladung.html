@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Willkommen · Ylva Labs{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <form method="post" data-os-require="input[name=new]">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <span class="os-eyebrow">Ylva Labs</span>
+    <h1 class="os-title-m" style="margin-bottom:48px">Willkommen, {{ p.name.split(' ')[0] }}. Leg dein Passwort fest.</h1>
+    <input type="text" name="username" value="{{ p.name }}" autocomplete="username" hidden>
+    <label class="os-field"><span>Passwort, mindestens {{ min_pw }} Zeichen</span><input type="password" name="new" minlength="{{ min_pw }}" autocomplete="new-password" required autofocus></label>
+    <label class="os-field"><span>Noch einmal</span><input type="password" name="again" minlength="{{ min_pw }}" autocomplete="new-password" required></label>
+    <p class="os-caption">Danach meldest du dich mit deinem Namen und diesem Passwort an. Dieses Gerät merkt sich dich.</p>
+    <div class="os-float"><button type="submit" class="os-btn"><span>Los geht's</span>{{ i('check') }}</button></div>
+  </form>
+</main>
+{% endblock %}

@@ -142,10 +142,16 @@ def notify(c, title, body, url="/leads", push=False):
     den jemand von Hand gestartet hat (und der Test), damit das Handy nicht ständig klingelt. Per Mail kommen keine
     Benachrichtigungen mehr, sie landeten sonst zusätzlich in Apple Mail oder Gmail."""
     leaddb.add_notice(c, title, body, url)
-    if not push:
-        return
+    if push:
+        push_to(c, None, title, body, url)
+
+
+def push_to(c, person, title, body, url):
+    """Push aufs Handy: an alle Geräte (person=None) oder nur an die Geräte einer Person (Erwähnung, Anfrage)."""
     subject = "mailto:" + (S("NOTIFY_EMAILS")[0] if S("NOTIFY_EMAILS") else "info@ylvalabs.de")
-    for row in c.execute("SELECT endpoint, data FROM push_subs").fetchall():
+    rows = c.execute("SELECT endpoint, data FROM push_subs" + (" WHERE person=?" if person else ""),
+                     (person,) if person else ()).fetchall()
+    for row in rows:
         try:
             if not webpush.send(vapid(), json.loads(row["data"]), {"title": title, "body": body, "url": url}, subject):
                 c.execute("DELETE FROM push_subs WHERE endpoint=?", (row["endpoint"],))

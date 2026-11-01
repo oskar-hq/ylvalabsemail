@@ -144,7 +144,7 @@ class SettingsViewsTest(unittest.TestCase):
             sess["sid"] = "test-admin"
             sess["csrf"] = "tok"
         main._sessions["test-admin"] = {"user": "oskar@ylvalabs.de", "password": "x", "since": 9e18,
-                                        "address": "oskar@ylvalabs.de"}
+                                        "address": "oskar@ylvalabs.de", "team": "oskar", "name": "Oskar Jacobsen"}
         self.addCleanup(main._sessions.pop, "test-admin", None)
         self.store = Path(main.SETTINGS["DATA_DIR"]) / config_store.STORE
         self.addCleanup(lambda: self.store.unlink(missing_ok=True))
@@ -195,8 +195,11 @@ class SettingsViewsTest(unittest.TestCase):
         self.assertIn("bereitgelegt", self.client.get("/einstellungen/sicherung").get_data(as_text=True))
         import shutil
         shutil.rmtree(Path(main.SETTINGS["DATA_DIR"]) / backups.PENDING)
-        with mock.patch.dict(main.SETTINGS, {"ADMIN_USERS": ["chef@ylvalabs.de"]}):
+        main._sessions["test-admin"]["team"] = "hamza"  # Recherche: keine Einstellungen
+        try:
             self.assertEqual(self.client.get("/einstellungen/sicherung/herunterladen").status_code, 403)
+        finally:
+            main._sessions["test-admin"]["team"] = "oskar"
 
     def test_restart_only_under_gunicorn(self):
         from app import settings_views
@@ -209,10 +212,20 @@ class SettingsViewsTest(unittest.TestCase):
             kill.assert_called_once()
 
     def test_admin_only(self):
-        with mock.patch.dict(main.SETTINGS, {"ADMIN_USERS": ["chef@ylvalabs.de"]}):
-            self.assertEqual(self.post("/einstellungen", {"ORG_NAME": "X"}).status_code, 403)
+        """Ändern dürfen nur Personen mit „Einstellungen: Verwalten“ (Rollen in der App, nicht mehr ADMIN_USERS)."""
+        from app import leaddb
+        c = leaddb.connect(main.DB_PATH)
+        self.addCleanup(lambda: (c.execute("UPDATE team SET rechte=NULL WHERE key='hamza'"), c.commit(), c.close()))
+        main._sessions["test-admin"]["team"] = "hamza"
+        self.addCleanup(main._sessions["test-admin"].update, team="oskar")
+        self.assertEqual(self.client.get("/einstellungen").status_code, 403)  # Recherche sieht keine Einstellungen
+        c.execute("""UPDATE team SET rechte='{"einstellungen": 1}' WHERE key='hamza'""")  # eigenes Recht: sehen
+        c.commit()
+        self.assertIn("Ändern darf nur", self.client.get("/einstellungen").get_data(as_text=True))
+        self.assertEqual(self.post("/einstellungen", {"ORG_NAME": "X"}).status_code, 403)
+        self.assertEqual(self.post("/einstellungen/software/update").status_code, 403)
+        with mock.patch.dict(main.SETTINGS, {"ADMIN_USERS": ["hamza"]}):  # gilt nicht mehr, solange es Verwalter gibt
             self.assertEqual(self.post("/einstellungen/software/update").status_code, 403)
-            self.assertIn("nur Admins", self.client.get("/einstellungen").get_data(as_text=True))
 
     def test_software_requests(self):
         self.assertIn("nicht eingerichtet", self.client.get("/einstellungen/software").get_data(as_text=True))

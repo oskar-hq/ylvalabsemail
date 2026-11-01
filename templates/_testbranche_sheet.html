@@ -1,0 +1,32 @@
+{# Sheet zum Anlegen oder Ändern einer Testbranche. Erwartet: b (oder nichts für neu), personen, nischen, gruppen. #}
+{% from "_os.html" import i %}
+{% set tb = b if b is defined and b else {'key': '', 'name': '', 'beschreibung': '', 'nischen': [], 'person': '', 'ziel': 50, 'aktiv': 1} %}
+<dialog class="os-sheet" id="sheet-branche-{{ tb.key or 'neu' }}" aria-label="{{ tb.name or 'Neue Testbranche' }}">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('branchentest.speichern') }}" data-os-fetch="reload" data-os-require=".os-ask">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="key" value="{{ tb.key }}">
+      <span class="os-eyebrow">{{ 'Testbranche' if tb.key else 'Neue Testbranche' }}</span>
+      <input class="os-ask" name="name" value="{{ tb.name }}" maxlength="80" placeholder="Name der Branche" required>
+      <div class="os-grid2">
+        <label class="os-field"><span>Recherche</span><select name="person"><option value="">Noch niemand</option>
+          {% for p in personen %}<option value="{{ p.key }}" {{ 'selected' if p.key == tb.person }}>{{ p.name }}</option>{% endfor %}</select></label>
+        <label class="os-field"><span>Ziel (Betriebe)</span><input type="number" name="ziel" min="1" max="1000" value="{{ tb.ziel }}"></label>
+      </div>
+      <label class="os-field"><span>Warum diese Branche</span><textarea name="beschreibung" rows="2" maxlength="500">{{ tb.beschreibung or '' }}</textarea></label>
+      <div class="os-field"><span>Nischen (neue Leads dieser Nischen kommen automatisch in diese Branche)</span>
+        {% for gk, glabel in gruppen %}{% set ns = nischen.values()|selectattr('branche', 'equalto', gk)|list %}{% if ns %}
+        <details {{ 'open' if ns|selectattr('key', 'in', tb.nischen)|list }} style="margin:8px 0"><summary class="os-link">{{ glabel }}</summary>
+          <div class="os-chips" style="margin:8px 0 0">{% for n in ns %}<label><input type="checkbox" name="nischen" value="{{ n.key }}" {{ 'checked' if n.key in tb.nischen }}>{{ n.label }}</label>{% endfor %}</div>
+        </details>{% endif %}{% endfor %}
+      </div>
+      <label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <span style="margin:0">Aktiv im Test</span>
+        <span class="os-toggle"><input type="checkbox" name="aktiv" value="1" {{ 'checked' if tb.aktiv }}><span></span></span></label>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Speichern</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>

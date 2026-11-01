@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, avatar %}
+{% block title %}Firmen-Protokoll · Einstellungen{% endblock %}
+{% block content %}
+<main class="os-page">
+  <header class="os-head">
+    <span class="os-eyebrow">Einstellungen</span>
+    <h1 class="os-title-l">Firmen-Protokoll</h1>
+    <p class="os-sub os-lead">Jede Änderung im OS: wer, wann, was. Daraus entstehen später die Zahlen.</p>
+  </header>
+  <div class="os-chips">
+    <a href="{{ url_for('personen.protokoll', wer=wer) }}" class="{{ 'on' if not art }}">Alles</a>
+    {% for a in arten %}<a href="{{ url_for('personen.protokoll', art=a, wer=wer) }}" class="{{ 'on' if art == a }}">{{ art_labels.get(a, a) }}</a>{% endfor %}
+  </div>
+  <div class="os-chips">
+    <a href="{{ url_for('personen.protokoll', art=art) }}" class="{{ 'on' if not wer }}">Alle Personen</a>
+    {% for p in personen %}<a href="{{ url_for('personen.protokoll', art=art, wer=p.key) }}" class="{{ 'on' if wer == p.key }}">{{ p.name.split(' ')[0] }}</a>{% endfor %}
+  </div>
+  <ul class="os-list">
+    {% for e in rows %}<li class="os-row">
+      {{ avatar(namen.get(e.wer, e.wer)) }}
+      <span class="os-txt"><b style="font-weight:500;font-size:17px">{{ e.text or art_labels.get(e.art, e.art) }}</b>
+        <span>{{ namen.get(e.wer, e.wer) }} · {{ e.at|kurzdatum }} {{ e.at[11:16] }} · {{ art_labels.get(e.art, e.art) }}</span></span></li>
+    {% else %}<li class="os-empty">Noch keine Einträge.</li>{% endfor %}
+  </ul>
+  {% if weiter %}<p style="margin-top:24px"><a class="os-link" href="{{ url_for('personen.protokoll', art=art, wer=wer, vor=weiter) }}">Ältere Einträge</a></p>{% endif %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('personen.liste') }}" aria-label="Zurück">{{ i('back') }}</a>
+</div>
+{% endblock %}

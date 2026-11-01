@@ -167,13 +167,47 @@ Gestaltet wie das Outreach Cockpit (ruhig, eine Sache pro Bildschirm). Hell, Dun
 Einstellungen, Verlauf, Kosten und Systemcheck liegen im Konto-Menü (Kreis oben rechts). Die Einstellungen sind wie
 in einer App aufgebaut: Bereich → Unterseite mit wenigen Werten.
 
+## Firmen-OS: Mein Tag, Aufgaben, Personen und Rechte (Stufe 1)
+
+Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/DESIGN.md).
+
+- **Mein Tag** (Startseite): Anfragen an meinen Bereich, überfällige, heutige und diese Woche fällige Aufgaben,
+  Erwähnungen, Akquise in Kürze. Unten „Aufgabe“ und „Anfrage“.
+- **Aufgaben**: Pflicht sind Titel, Bereich, Person und Termin (ohne Person: verantwortlich für den Bereich).
+  Ansichten *Meine*, *Bereich*, *Vergeben*, *Alle*, Filter je Bereich, erledigte der letzten 30 Tage. Abhaken direkt
+  in der Liste. Die Wiedervorlagen an Leads sind normale Aufgaben mit Bezug auf den Lead.
+- **Anfragen an andere Bereiche**: landen bei der verantwortlichen Person; sie nimmt an (mit Termin) oder lehnt mit
+  Grund ab. Die anfragende Person bekommt jeweils eine Meldung.
+- **Kommentare mit @-Erwähnung** an Aufgaben und in der Lead-Akte. `@Finn` erzeugt eine Meldung in Finns Glocke und
+  einen Push auf Finns Geräte.
+- **Einstellungen → Personen**: anlegen (mit Einladungslink, die Person setzt ihr Passwort selbst), Rolle, Bereiche,
+  Lernstufe, eigene Rechte je Modul, sperren, archivieren (Daten bleiben). **Rollen und Rechte**: je Modul *Kein
+  Zugriff, Sehen, Bearbeiten, Freigeben, Verwalten*. Startwerte: Oskar und Finn „Gründer“ (alles), Hamza
+  „Recherche“ (Aufgaben, Leads, CRM, Mailer; keine Einstellungen, Personen, Kosten, Protokoll). **Bereiche** mit
+  verantwortlicher Person; dort auch, in welchen Bereich Wiedervorlagen gehen. **Firmen-Protokoll**: jede Änderung.
+- **Schutz gegen Aussperren**: Mindestens eine aktive Person darf immer Personen verwalten; niemand kann sich dieses
+  Recht selbst nehmen oder sich selbst sperren. Notfall auf dem Server: siehe Einstellungen → Zugang und Sicherheit.
+- **Anmeldung mit dem Postfach**: nur noch Mailer, und wählbar sind nur Personen, die noch kein Passwort haben.
+
+## Branchentest (Stufe 2)
+
+- **Branchentest** (Leads → Branchentest, oder aus „Mein Tag“): je Testbranche Betriebe (Ziel 50), Kontakte,
+  Antworten, Gespräche, ernsthafte Preisgespräche, Abschlüsse, nur kalte Kontakte; Ampel ab 3 Preisgesprächen.
+  Warme Kontakte (Oskars Bekannte) werden in der Akte markiert und stehen getrennt.
+- **Testbranchen** anlegen und ändern (Name, Nischen, wer recherchiert, Ziel). Leads aus diesen Nischen landen
+  automatisch in der Branche, passende lassen sich in der Branche mit einem Klick übernehmen.
+- **Lead-Prüfung**: Wer einen Lead ins CRM bringt, ist die recherchierende Person. Je nach Lernstufe wird er
+  geprüft (Stufe 1 jeder, 2 jeder 5., 3 jeder 10.); Omids Leads prüft Hamza, Hamzas Leads Oskar, und jeder 5.
+  bestandene Lead geht als Stichprobe eine Ebene höher. Ablehnen nur mit Grund; bis zur Prüfung kein Kontakt.
+- **In der Akte**: Testbranche und warm/kalt, „Kontakt protokollieren“ (Telefon, Brief, LinkedIn, vor Ort),
+  „Ernsthaftes Preisgespräch geführt“.
+
 ## Team: Konten, eigenes CRM, Vorlage, Zahlen
 
-- **Anmelden mit Name und Passwort**: Finn Adams, Hamza Al-Shebli, Oskar Jacobsen. Passwörter liegen nur als
-  scrypt-Hash in der Datenbank, nach Fehlversuchen greift dieselbe Sperre wie beim Postfach-Login.
-- **Erstes Passwort**: einmal mit einem E-Mail-Postfach von Ylva Labs anmelden, „Wer bist du?“ wählen und unter
-  *Mein Profil* ein Passwort festlegen (mindestens 8 Zeichen). Für jemanden ohne Passwort kann das jede im Team
-  tun; ein bestehendes fremdes Passwort ändern nur Admins (`ADMIN_USERS`, z. B. `oskar` oder eine Postfach-Adresse).
+- **Anmelden mit Name und Passwort**. Passwörter liegen nur als scrypt-Hash in der Datenbank, nach Fehlversuchen
+  greift dieselbe Sperre wie beim Postfach-Login. Gesperrte und archivierte Personen kommen nicht mehr rein.
+- **Erstes Passwort**: über den Einladungslink aus Einstellungen → Personen. Passwörter anderer setzt nur, wer
+  Personen verwalten darf.
 - **Eigenes CRM**: Zuständig wird, wer einen Betrieb zuerst bearbeitet (gut markiert, verschoben, angeschrieben …),
   in der Akte änderbar. Im CRM oben: *Meine* (eigene und noch niemandem zugeordnete), *Gesamt* oder eine Person.
 - **Absender wählen**: In jedem Mail-Fenster (Mail an Betriebe, Antworten, neue Mail) steht „Von“. Verschickt wird über
@@ -315,6 +349,12 @@ app/pixel.py           Pixel-Band und Pixel-Icons als mailtaugliche Tabellen
 app/leads_views.py     Akquise: Übersicht, Akte mit Chat, Regeln, Gehirn, Web-App und Push
 app/crm_views.py       CRM: Pipeline-Board, Karte, Wiedervorlagen, Kontaktdaten, Firma anlegen, CSV
 app/crm.py             Pipeline-Stufen, Wiedervorlagen, Import/Export, Versand aus „Verfassen“ in der Akte
+app/firma.py           Firmen-OS: Protokoll (log), Personen, Rollen und Rechte, Bereiche, Einladung, Notfall
+app/aufgaben.py        Aufgaben, Anfragen, Kommentare mit @-Erwähnung, Meldungen an eine Person
+app/aufgaben_views.py  Seiten „Mein Tag“, „Aufgaben“, Kommentare
+app/personen_views.py  Einstellungen → Personen, Rollen, Bereiche, Protokoll; Einladungslink
+app/branchentest.py    Testbranchen, Lead-Prüfung (Freigaben), Kontakte, Preisgespräche, Auswertung
+app/branchentest_views.py  Seiten Branchentest, Testbranche, Leads prüfen; Knöpfe in der Akte
 app/scoring.py         Bewertung nach Regeln und Einordnen von Antworten, beides ohne KI
 app/regions.py         Kreise: Grenzen, Statistik je Kreis, Wachstumsregionen
 app/agent.py           Hintergrund-Arbeiter: suchen, bewerten, Antworten lesen, Entwürfe auf Wunsch
@@ -325,7 +365,7 @@ app/leaddb.py          Datenbank der Leads und das Gehirn (Startfassung: app/bra
 app/webpush.py         Push-Benachrichtigungen (VAPID, ohne App Store)
 tests/                 python -m unittest discover tests
 email_templates/       Die Mail-Vorlagen (Jinja2), Original-Band und Logo
-templates/, static/    Oberfläche im Stil der Brand Guidelines
+templates/, static/    Oberfläche nach docs/DESIGN.md (os.css/os.js: Bausteine des Firmen-OS)
 ```
 
 Eine neue Vorlage anlegen: eine HTML-Datei in `email_templates/` ablegen (am besten `brief.html` kopieren)

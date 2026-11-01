@@ -201,7 +201,7 @@ def seed(conn):
             "bau": {k: round(b * EINWOHNER_UNGEFAEHR[k] / 1000) for k, (_, b) in BEISPIEL_JE_1000.items()},
             "stand": {"gewerbe": "Beispielzahlen, erfunden", "bau": "Beispielzahlen, erfunden"}})
     # Wiedervorlagen, damit „Heute dran“ etwas zeigt
-    if not conn.execute("SELECT 1 FROM tasks").fetchone():
+    if not conn.execute("SELECT 1 FROM aufgaben WHERE quelle='wiedervorlage'").fetchone():
         names = {r["name"]: r["id"] for r in conn.execute("SELECT id, name FROM leads WHERE source_id LIKE 'demo:%'")}
         for name, days, text in [("Tischlerei Hansen (Beispiel)", 0, "Anrufen, vormittags (hat um Rückruf gebeten)"),
                                  ("Pflegedienst Schleiufer (Beispiel)", 150, "Im Frühjahr wieder melden"),

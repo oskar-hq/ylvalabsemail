@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, avatar %}
+{% block title %}Leads prüfen · Branchentest{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Branchentest</span>
+    <h1 class="os-title-l">Leads prüfen</h1>
+    <p class="os-sub os-lead">{% if liste %}{{ liste|length }} {{ 'Lead wartet' if liste|length == 1 else 'Leads warten' }}{% if alle %} im Team{% else %} auf dich{% endif %}. Passt der Betrieb in die Branche und zu uns? Bis du entscheidest, wird er nicht kontaktiert.{% else %}Gerade wartet nichts auf {{ 'das Team' if alle else 'dich' }}.{% endif %}</p>
+  </header>
+  {% if verwalten %}<div class="os-chips"><a href="{{ url_for('branchentest.pruefen') }}" class="{{ 'on' if not alle }}">Meine</a><a href="{{ url_for('branchentest.pruefen', alle='1') }}" class="{{ 'on' if alle }}">Alle im Team</a></div>{% endif %}
+
+  {% for f in liste %}
+  <section class="os-section" style="{{ 'margin-top:24px' if loop.first }}">
+    <span class="os-eyebrow">{{ 'Stichprobe' if f.stufe == 'stichprobe' else 'Prüfung' }} · {{ f.branche_name or 'ohne Testbranche' }}{% if f.herkunft == 'warm' %} · warm{% endif %}</span>
+    <h2 class="os-title-m"><a href="{{ url_for('leads.detail', lead_id=f.objekt_id) }}" style="color:inherit;text-decoration:none">{{ f.name }}</a></h2>
+    <dl class="os-kv" style="margin-top:24px">
+      <dt>Von</dt><dd>{{ f.von_name or f.angefragt_von }}</dd>
+      {% if alle %}<dt>Prüft</dt><dd>{{ f.pruefer_name }}</dd>{% endif %}
+      <dt>Art</dt><dd>{{ f.category_label or '–' }}</dd>
+      {% if f.city %}<dt>Ort</dt><dd>{{ f.city }}</dd>{% endif %}
+      {% if f.fit_score is not none %}<dt>Bewertung</dt><dd>{{ f.fit_score }} Punkte</dd>{% endif %}
+      {% if f.website %}<dt>Webseite</dt><dd><a href="{{ f.website }}" target="_blank" rel="noopener">{{ f.website|replace('https://', '')|replace('http://', '')|truncate(32, true) }}</a></dd>{% endif %}
+    </dl>
+    {% if f.fit_reason %}<p class="os-caption" style="margin-top:16px">{{ f.fit_reason|truncate(220) }}</p>{% endif %}
+    {% if f.pruefer == account.team or verwalten %}
+    <div class="os-btns">
+      <form method="post" action="{{ url_for('branchentest.entscheiden', fid=f.id) }}" data-os-fetch="reload">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="angenommen" value="1">
+        <button class="os-btn small">Annehmen</button></form>
+      <button type="button" class="os-btn small quiet" data-sheet="sheet-ablehnen-{{ f.id }}">Ablehnen</button>
+    </div>
+    <dialog class="os-sheet" id="sheet-ablehnen-{{ f.id }}" aria-label="Lead ablehnen">
+      <div class="os-sheet-grab" aria-hidden="true"></div>
+      <div class="os-sheet-body">
+        <form method="post" action="{{ url_for('branchentest.entscheiden', fid=f.id) }}" data-os-fetch="reload" data-os-require="textarea">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="angenommen" value="0">
+          <span class="os-eyebrow">{{ f.name }}</span>
+          <textarea class="os-ask" name="grund" rows="3" maxlength="1000" placeholder="Warum passt er nicht?" required></textarea>
+          <p class="os-caption">{{ (f.von_name or 'Die Person').split(' ')[0] }} bekommt den Grund und lernt daraus. Der Lead wird aussortiert.</p>
+          <div class="os-sheet-foot">
+            <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+            <button type="submit" class="os-btn"><span>Ablehnen</span>{{ i('check') }}</button>
+          </div>
+        </form>
+      </div>
+    </dialog>
+    {% endif %}
+  </section>
+  {% endfor %}
+
+  {% if kpis.entschieden or kpis.offen %}
+  <section class="os-section">
+    <h2 class="os-headline">Deine Leads</h2>
+    <dl class="os-kv" style="margin-top:16px">
+      <dt>Angenommen, letzte 7 Tage</dt><dd>{{ kpis.angenommen_woche }}</dd>
+      <dt>Anteil angenommen</dt><dd>{{ (kpis.anteil ~ ' %') if kpis.anteil is not none else '–' }}</dd>
+      <dt>Noch in Prüfung</dt><dd>{{ kpis.offen }}</dd>
+    </dl>
+  </section>
+  {% endif %}
+
+  {% if erledigt %}
+  <section class="os-section">
+    <h2 class="os-headline">Zuletzt entschieden</h2>
+    <ul class="os-list">{% for f in erledigt %}<li><a class="os-row" href="{{ url_for('leads.detail', lead_id=f.objekt_id) }}">
+      <span class="os-ico {{ 'red' if f.status == 'abgelehnt' }}">{{ i('check') if f.status == 'angenommen' else '–' }}</span>
+      <span class="os-txt"><b>{{ f.name }}</b><span>{{ 'Angenommen' if f.status == 'angenommen' else 'Abgelehnt' }}{% if f.grund %}: {{ f.grund|truncate(80) }}{% endif %} · {{ f.entschieden_am|kurzdatum }}</span></span>
+      <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('branchentest.uebersicht') }}" aria-label="Zurück zum Branchentest">{{ i('back') }}</a>
+</div>
+{% endblock %}
