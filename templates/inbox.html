@@ -1,49 +1,56 @@
 {% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
 {% block title %}Postfach · CRM{% endblock %}
 {% macro when(iso) %}{% if iso %}{{ fmt_day(iso) }}{% if iso[11:16] %} · {{ iso[11:16] }}{% endif %}{% endif %}{% endmacro %}
 {% macro row(cv) %}
-  <li><a class="conv" href="{{ url_for('crm.conversation', lead_id=cv.id) }}">
-    <i class="mood mood-{{ cv.mood }}" title="{{ moods[cv.mood] }} ({{ cv.mood_why }})"></i>
-    <span class="conv-main">
-      <span class="conv-top"><b>{{ cv.name }}</b>{% if cv.unread_msgs %}<span class="nav-count new-count">{{ cv.unread_msgs }} neu</span>{% endif %}
-        <span class="conv-when">{{ when(cv.last_at) }}</span></span>
-      <span class="conv-meta">{{ cv.contact_name or cv.category_label }}{% if cv.city %} · {{ cv.city }}{% endif %}{% if cv.stage %} · {{ stage_labels.get(cv.stage, '') }}{% endif %}{% if cv.owner and cv.owner in people %} · {{ people[cv.owner] }}{% endif %}</span>
-      {% if cv.wartet_seit %}<span class="conv-meta" style="color:var(--accent-text,#DE2E36)">wartet seit {{ when(cv.wartet_seit) }}{% if cv.wunsch %} · möglicher Änderungswunsch{% endif %}</span>{% elif cv.wunsch %}<span class="conv-meta">möglicher Änderungswunsch</span>{% endif %}
-      <span class="conv-snip">{% if cv.last_dir == 'out' %}<em>Ihr:</em> {% endif %}{{ (cv.last_text or '')|replace('\n', ' ')|truncate(140) }}</span>
+  <li><a class="os-row os-conv" href="{{ url_for('crm.conversation', lead_id=cv.id) }}">
+    <i class="os-mood {{ cv.mood }}" title="{{ moods[cv.mood] }} ({{ cv.mood_why }})" aria-label="{{ moods[cv.mood] }}"></i>
+    <span class="os-txt">
+      <b>{{ cv.name }}{% if cv.unread_msgs %} <span class="os-neu">{{ cv.unread_msgs }} neu</span>{% endif %}</b>
+      <span>{{ when(cv.last_at) }}{% if cv.contact_name or cv.category_label %} · {{ cv.contact_name or cv.category_label }}{% endif %}{% if cv.city %} · {{ cv.city }}{% endif %}{% if cv.stage %} · {{ stage_labels.get(cv.stage, '') }}{% endif %}{% if cv.owner and cv.owner in people %} · {{ people[cv.owner] }}{% endif %}</span>
+      {% if cv.wartet_seit %}<span class="os-late">wartet seit {{ when(cv.wartet_seit) }}{% if cv.wunsch %} · möglicher Änderungswunsch{% endif %}</span>{% elif cv.wunsch %}<span>möglicher Änderungswunsch</span>{% endif %}
+      <span class="os-snip">{% if cv.last_dir == 'out' %}Ihr: {% endif %}{{ (cv.last_text or '')|replace('\n', ' ')|truncate(140) }}</span>
     </span>
-    <span class="chev">›</span></a></li>
+    <span class="os-chev">{{ i('chev') }}</span></a></li>
 {% endmacro %}
 {% block content %}
-<main class="page narrow">
-  <a class="back" href="{{ url_for('crm.board') }}">‹ CRM</a>
-  <div class="inbox-head">
-    <h1 class="title">Postfach</h1>
-    <span class="inbox-actions">
-      <button class="btn small" type="button" id="inboxFetch" {{ 'disabled' if ready and not account.demo and not weitere }}>Jetzt abrufen</button>
-      <a class="btn small primary" href="{{ url_for('crm.compose_mail') }}">Neue Mail</a>
-    </span>
-  </div>
-  {% if weitere %}<p class="muted small">Weitere Postfächer: {% for p in weitere %}{{ p.name }}{% if p.fehler %} <span style="color:var(--accent-text,#DE2E36)">(Fehler: {{ p.fehler }})</span>{% endif %}{{ ', ' if not loop.last }}{% endfor %}. <a href="{{ url_for('posteingang.einstellungen') }}">Postfächer</a></p>{% endif %}
-  {% if ready and not weitere %}<p class="note warn small">{{ ready }} Senden und Empfangen gehen erst danach: <a href="{{ url_for('settings.page', gid='postfach', pid='zugang') }}">Einstellungen → Akquise-Postfach</a>.</p>
-  {% elif inbox_status and not inbox_status.ok %}<p class="note err small">Das Postfach konnte zuletzt nicht abgerufen werden ({{ inbox_status.at|kurzdatum }}): {{ inbox_status.error }} <a href="{{ url_for('leads.system') }}">Systemcheck →</a></p>
-  {% elif inbox_status %}<p class="muted small">Zuletzt abgerufen {{ inbox_status.at|kurzdatum }}. Neue Mails kommen alle paar Minuten von selbst.</p>{% endif %}
-  <p class="muted small" id="inboxMsg" hidden></p>
-  <p class="muted small">Alle Nachrichten an einer Stelle: Akquise-Postfach, weitere Postfächer, Kunden-Bereich und von Hand festgehaltene Telefonate, Briefe und Nachrichten. Nach Absender. Antworten Sie hier direkt, der Verlauf bleibt zusammen. Newsletter und automatische Mails bleiben draußen.
-    Der Punkt zeigt, wie es läuft: <i class="mood mood-gut"></i> gut <i class="mood mood-mittel"></i> mittel <i class="mood mood-schlecht"></i> eher schlecht <i class="mood mood-neutral"></i> neutral.</p>
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">CRM</span>
+    <h1 class="os-title-l">Postfach</h1>
+    <p class="os-sub os-lead">Alle Nachrichten an einer Stelle: Akquise-Postfach, weitere Postfächer, Kunden-Bereich und von Hand festgehaltene Telefonate, Briefe und Nachrichten. Newsletter und automatische Mails bleiben draußen.</p>
+  </header>
+
+  {% if account.team %}<div class="os-chips" aria-label="Wessen Gespräche">
+    <a href="{{ url_for('crm.inbox') }}" class="{{ 'on' if wer == 'meine' }}">Meine</a>
+    <a href="{{ url_for('crm.inbox', wer='alle') }}" class="{{ 'on' if wer == 'alle' }}">Alle</a></div>{% endif %}
+
+  {% if ready and not weitere %}<p class="os-hinweis err">{{ ready }} Senden und Empfangen gehen erst danach: <a href="{{ url_for('settings.page', gid='postfach', pid='zugang') }}">Einstellungen → Akquise-Postfach</a></p>
+  {% elif inbox_status and not inbox_status.ok %}<p class="os-hinweis err">Das Postfach konnte zuletzt nicht abgerufen werden ({{ inbox_status.at|kurzdatum }}): {{ inbox_status.error }} <a href="{{ url_for('leads.system') }}">Systemcheck</a></p>
+  {% elif inbox_status %}<p class="os-caption">Zuletzt abgerufen {{ inbox_status.at|kurzdatum }}. Neue Mails kommen alle paar Minuten von selbst.</p>{% endif %}
+  {% if weitere %}<p class="os-caption" style="margin-top:8px">Weitere Postfächer: {% for p in weitere %}{{ p.name }}{% if p.fehler %} <span class="os-frist">(Fehler: {{ p.fehler }})</span>{% endif %}{{ ', ' if not loop.last }}{% endfor %}. <a href="{{ url_for('posteingang.einstellungen') }}">Postfächer</a></p>{% endif %}
+  <p class="os-caption" id="inboxMsg" hidden style="margin-top:8px"></p>
+  <p class="os-caption os-mood-legende" style="margin-top:8px">Der Punkt zeigt, wie es läuft: <i class="os-mood gut"></i> gut <i class="os-mood mittel"></i> mittel <i class="os-mood schlecht"></i> eher schlecht <i class="os-mood neutral"></i> neutral</p>
+
   {% if not groups.offen and not groups.gesendet %}
-  <p class="note small">Noch keine Mails. Sobald jemand an das Akquise-Postfach schreibt oder auf eine Mail antwortet, steht es hier.{% if st.warnings %} Prüfen Sie dafür das Akquise-Postfach unter Einstellungen.{% endif %}</p>
+  <p class="os-hinweis">Noch keine Nachrichten. Sobald jemand an ein Postfach schreibt oder auf eine Mail antwortet, steht es hier.</p>
   {% endif %}
 
-  <section class="inbox-group">
-    <p class="label">Offen zum Antworten · {{ groups.offen|length }}</p>
-    {% if groups.offen %}<ul class="conv-list">{% for cv in groups.offen %}{{ row(cv) }}{% endfor %}</ul>
-    {% else %}<p class="muted small empty">Alles beantwortet.</p>{% endif %}
+  <section class="os-section">
+    <h2 class="os-headline">Offen zum Antworten · {{ groups.offen|length }}</h2>
+    {% if groups.offen %}<ul class="os-list anim">{% for cv in groups.offen %}{{ row(cv) }}{% endfor %}</ul>
+    {% else %}<p class="os-empty">Alles beantwortet.</p>{% endif %}
   </section>
-  <section class="inbox-group">
-    <p class="label">Gesendet, wartet auf Antwort · {{ groups.gesendet|length }}</p>
-    {% if groups.gesendet %}<ul class="conv-list">{% for cv in groups.gesendet %}{{ row(cv) }}{% endfor %}</ul>
-    {% else %}<p class="muted small empty">Noch nichts.</p>{% endif %}
+  <section class="os-section">
+    <h2 class="os-headline">Gesendet, wartet auf Antwort · {{ groups.gesendet|length }}</h2>
+    {% if groups.gesendet %}<ul class="os-list">{% for cv in groups.gesendet %}{{ row(cv) }}{% endfor %}</ul>
+    {% else %}<p class="os-empty">Noch nichts.</p>{% endif %}
   </section>
 </main>
+<div class="os-float bar">
+  <button class="os-btn ink" type="button" id="inboxFetch" {{ 'disabled' if ready and not account.demo and not weitere }}><span>Jetzt abrufen</span>{{ i('pfeil') }}</button>
+  <a class="os-btn" href="{{ url_for('crm.compose_mail') }}"><span>Neue Mail</span>{{ i('plus') }}</a>
+</div>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='inbox.js') }}"></script>{% endblock %}

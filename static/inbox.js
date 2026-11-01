@@ -9,21 +9,23 @@
     if (!resp.ok) throw new Error(json.error || 'Hat nicht geklappt.');
     return json;
   };
+  const melden = (text, fehler) => (window.osToast ? window.osToast(text, fehler) : alert(text));
 
   const root = document.getElementById('conv');
   if (root) {
     const id = root.dataset.id;
     root.querySelectorAll('[data-mood]').forEach((b) => b.addEventListener('click', async () => {
       try { await post(`/crm/postfach/${id}/stimmung`, { mood: b.dataset.mood }); location.reload(); }
-      catch (e) { alert(e.message); }
+      catch (e) { melden(e.message, true); }
     }));
     const form = document.getElementById('replyForm');
     form?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const btn = form.querySelector('button.primary');
-      btn.disabled = true; btn.textContent = 'Wird gesendet …';
+      const btn = document.getElementById('replySend');
+      const label = btn?.querySelector('span');
+      if (btn) { btn.disabled = true; label.textContent = 'Wird gesendet …'; }
       try { await post(`/crm/postfach/${id}/antwort`, { text: form.text.value, subject: form.subject.value, von: form.von?.value || '', postfach: form.postfach?.value || '' }); location.reload(); }
-      catch (err) { alert(err.message); btn.disabled = false; btn.textContent = 'Antworten'; }
+      catch (err) { melden(err.message, true); if (btn) { btn.disabled = false; label.textContent = 'Antworten'; } }
     });
     const entwurf = document.getElementById('entwurfAssistent');
     entwurf?.addEventListener('click', async () => {
@@ -34,44 +36,46 @@
         if (r.betreff) form.subject.value = r.betreff;
         form.text.value = r.text;
         form.text.focus();
-        if (window.osToast) window.osToast(r.message);
-      } catch (err) { if (window.osToast) window.osToast(err.message, true); else alert(err.message); }
+        melden(r.message);
+      } catch (err) { melden(err.message, true); }
       finally { entwurf.disabled = false; entwurf.textContent = text; }
     });
     root.querySelectorAll('[data-wunsch]').forEach((b) => b.addEventListener('click', async () => {
       b.disabled = true;
       try { await post(`/crm/postfach/nachricht/${b.dataset.wunsch}/wunsch`, { ja: b.dataset.ja }); location.reload(); }
-      catch (e) { alert(e.message); b.disabled = false; }
+      catch (e) { melden(e.message, true); b.disabled = false; }
     }));
     const fh = document.getElementById('festhaltenForm');
     fh?.addEventListener('submit', async (e) => {
       e.preventDefault();
-      const btn = fh.querySelector('button.primary');
+      const btn = fh.querySelector('button');
       btn.disabled = true;
       try { await post(`/crm/postfach/${id}/festhalten`, new FormData(fh)); location.reload(); }
-      catch (err) { alert(err.message); btn.disabled = false; }
+      catch (err) { melden(err.message, true); btn.disabled = false; }
     });
-    if (!location.hash) document.querySelector('.thread li:last-child')?.scrollIntoView({ block: 'end' });
+    if (!location.hash && document.querySelector('.os-thread li.in')) document.querySelector('.os-thread li:last-child')?.scrollIntoView({ block: 'center' });
   }
 
   const fetchBtn = document.getElementById('inboxFetch');
   fetchBtn?.addEventListener('click', async () => {
     const msg = document.getElementById('inboxMsg');
-    fetchBtn.disabled = true; fetchBtn.textContent = 'Ruft ab …';
+    const label = fetchBtn.querySelector('span') || fetchBtn;
+    fetchBtn.disabled = true; label.textContent = 'Ruft ab …';
     try {
       const r = await post('/crm/postfach/abrufen');
-      msg.textContent = r.message; msg.hidden = false;
+      msg.textContent = r.message; msg.hidden = false; melden(r.message);
       if (r.neu) location.reload();
-    } catch (e) { msg.textContent = e.message; msg.hidden = false; msg.className = 'note err small'; }
-    finally { fetchBtn.disabled = false; fetchBtn.textContent = 'Jetzt abrufen'; }
+    } catch (e) { msg.textContent = e.message; msg.hidden = false; melden(e.message, true); }
+    finally { fetchBtn.disabled = false; label.textContent = 'Jetzt abrufen'; }
   });
 
   const mailNew = document.getElementById('mailNew');
   mailNew?.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const btn = mailNew.querySelector('button.primary');
-    btn.disabled = true; btn.textContent = 'Wird gesendet …';
-    try { const r = await post('/crm/postfach/schreiben', new FormData(mailNew)); location.href = r.url; }
-    catch (err) { alert(err.message); btn.disabled = false; btn.textContent = 'Senden'; }
+    const btn = document.querySelector('[form="mailNew"]');
+    const label = btn?.querySelector('span');
+    if (btn) { btn.disabled = true; label.textContent = 'Wird gesendet …'; }
+    try { const r = await post('/crm/postfach/schreiben', new FormData(mailNew)); location.href = r.url || '/crm/postfach'; }
+    catch (err) { melden(err.message, true); if (btn) { btn.disabled = false; label.textContent = 'Senden'; } }
   });
 })();

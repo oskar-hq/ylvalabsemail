@@ -714,7 +714,7 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
   - **Wartet auf Antwort seit** im Postfach (älteste zuerst) und im Gespräch, zuständige Person in der Liste.
     KPIs „Antwortzeit auf Kunden“ (Stunden bis zu unserer nächsten Nachricht, alle Kanäle) und „Wartet auf unsere
     Antwort“ im Katalog.
-  - Das Postfach im CRM behält seine bisherige Gestaltung (noch nicht auf `os.css` umgestellt).
+  - Das Postfach im CRM (Liste, Gespräch, Neue Mail) ist seit 01.11.2026 auf `os.css` umgestellt (hell und dunkel).
 - [x] **Stufe 10 – Assistent** (gebaut 01.11.2026, Abweichungen unten)
   KI-Fragen an die Firmendaten, Vorschläge für Prioritäten, Entwürfe für Angebote, Briefings und Case Studys.
   *Umsetzung und Abweichungen* (Umfang mit Oskar abgestimmt: alles, Werkzeuge, Prioritäten auf Knopfdruck, Angebote
