@@ -1,0 +1,100 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}{{ a.p.kunde }} · Kunden-Bereich{% endblock %}
+{% block content %}
+{% macro datum(v) %}{{ v[8:10] }}.{{ v[5:7] }}.{{ v[:4] }}{% endmacro %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Kunden-Bereich · Ylva Labs</span>
+    <h1 class="os-title-l">{{ a.p.kunde or a.p.titel }}</h1>
+    <p class="os-sub os-lead">Guten Tag{% if a.z.name %} {{ a.z.name }}{% endif %}. Hier steht, wo Ihr Projekt gerade ist{% if a.p.verantwortlich_name %}. Ihre Ansprechperson: {{ a.p.verantwortlich_name }}{% endif %}.</p>
+  </header>
+
+  <ol class="os-journey" aria-label="Projektstand">{% for k, label, _ in a.schritte %}
+    <li class="{{ 'on' if k == a.p.status else ('done' if loop.index0 < a.p.index else '') }}">{{ label }}</li>{% endfor %}</ol>
+
+  <section class="os-section" style="margin-top:24px">
+    <h2 class="os-headline">Jetzt: {{ a.p.schritt }}</h2>
+    <p class="os-sub">{{ a.p.erklaerung }}</p>
+    <dl class="os-kv" style="margin-top:16px">
+      {% if a.p.status == 'bau' and a.p.bau_ende_plan %}<dt>Geplant fertig</dt><dd>{{ datum(a.p.bau_ende_plan) }}</dd>{% endif %}
+      {% if a.p.live_am %}<dt>Live seit</dt><dd>{{ datum(a.p.live_am) }}</dd>{% endif %}
+      {% if a.p.kostenlos_bis %}<dt>Anpassungen inklusive bis</dt><dd>{{ datum(a.p.kostenlos_bis) }}</dd>{% endif %}
+    </dl>
+  </section>
+
+  {% if a.p.anforderung %}
+  <section class="os-section" id="anforderung">
+    <h2 class="os-headline">Was wir bauen</h2>
+    <p style="white-space:pre-wrap;font:500 16px/24px var(--sans);margin:12px 0 0">{{ a.p.anforderung }}</p>
+    {% if a.p.kann_bestaetigen %}
+    <form method="post" action="{{ url_for('portal.bestaetigen') }}" style="margin-top:16px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="os-btn ink"><span>So passt es, bitte bauen</span>{{ i('check') }}</button>
+      <p class="os-caption">Passt etwas nicht? Schreiben Sie es unten als Wunsch, wir passen die Beschreibung an.</p>
+    </form>
+    {% elif a.p.bestaetigt_am %}<p class="os-caption" style="margin-top:12px">Bestätigt am {{ datum(a.p.bestaetigt_am) }}.</p>{% endif %}
+  </section>
+  {% endif %}
+
+  {% if a.termine %}
+  <section class="os-section">
+    <h2 class="os-headline">Termine</h2>
+    <ul class="os-list">{% for t in a.termine %}<li class="os-row">
+      <span class="os-ico">{{ i('kalender') }}</span>
+      <span class="os-txt"><b>{{ t.titel }}</b><span>{{ t.zeit }}{% if t.ort %} · {{ t.ort }}{% endif %}</span></span>
+      {% if t.meet_link %}<a class="os-btn small ink" href="{{ t.meet_link }}" target="_blank" rel="noopener">Meet</a>{% endif %}
+    </li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  {% if a.punkte %}
+  <section class="os-section">
+    <h2 class="os-headline">Abnahme-Checkliste</h2>
+    <ul class="os-list">{% for x in a.punkte %}<li class="os-row" style="min-height:0;padding:10px 0">
+      <span class="os-ico {{ '' if x.erledigt else 'muted' }}">{% if x.erledigt %}{{ i('check') }}{% else %}·{% endif %}</span>
+      <span class="os-txt"><span style="color:var(--text-primary)">{{ x.text }}</span></span></li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  <section class="os-section" id="wuensche">
+    <h2 class="os-headline">Ihre Wünsche</h2>
+    <p class="os-sub">Was soll anders werden? Wir ordnen jeden Wunsch ein und Sie sehen hier, wie es weitergeht.</p>
+    <ul class="os-list">{% for w in a.aenderungen %}<li class="os-row">
+      <span class="os-ico">{% if w.erledigt %}{{ i('check') }}{% else %}{{ i('anfrage') }}{% endif %}</span>
+      <span class="os-txt"><b style="font-weight:500">{{ w.text }}</b><span>{{ w.status }} · {{ datum(w.am) }}</span></span>
+    </li>{% endfor %}</ul>
+    <form method="post" action="{{ url_for('portal.wunsch') }}" style="margin-top:12px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <label class="os-field"><span>Neuer Wunsch</span><textarea name="text" rows="3" maxlength="3000" required placeholder="z. B. Im Formular soll auch die Telefonnummer abgefragt werden."></textarea></label>
+      <button class="os-btn small ink">Wunsch schicken</button>
+    </form>
+  </section>
+
+  {% if a.dokumente %}
+  <section class="os-section">
+    <h2 class="os-headline">Dokumente</h2>
+    <ul class="os-list">{% for d in a.dokumente %}<li><a class="os-row" href="{{ url_for('portal.dokument', did=d.id) }}">
+      <span class="os-ico">{{ i('aufgabe') }}</span>
+      <span class="os-txt"><b>{{ d.titel }}</b><span>{{ d.art_label }} · {{ datum(d.hochgeladen_am) }}</span></span>
+      <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  {% if a.berichte %}
+  <section class="os-section">
+    <h2 class="os-headline">Wochenberichte</h2>
+    <ul class="os-list">{% for b in a.berichte %}<li><details>
+      <summary class="os-row" style="cursor:pointer;list-style:none"><span class="os-txt"><b>{{ b.betreff }}</b><span>{{ datum(b.verschickt_am) }}</span></span><span class="os-chev">{{ i('chev') }}</span></summary>
+      <pre style="white-space:pre-wrap;font:500 15px/22px var(--sans);color:var(--text-secondary);padding:0 0 16px;margin:0">{{ b.text }}</pre>
+    </details></li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  <form method="post" action="{{ url_for('portal.abmelden') }}" style="margin-top:40px">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button class="os-link">Abmelden ({{ a.z.email }})</button>
+  </form>
+</main>
+{% endblock %}

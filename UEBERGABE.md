@@ -80,6 +80,11 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   die Notfall-Zuständigkeit prüfen (Startwerte aus den Rollen). Die Einladung an Kunden steht auf Stufe C wie
   bisher; wer sie auf B (mit Einspruch) stellen will, kann das dort tun. Einmal den Notfall-Knopf mit einer
   Probemeldung testen (Push kommt bei den Zuständigen an?) und als behoben markieren.
+- **Firmen-OS Stufe 7 (01.11.2026):** Kunden-Bereich. Nach dem Update: unter Einstellungen → Benachrichtigungen die
+  „Adresse der App“ (`BASE_URL`, z. B. https://mail.ylvalabs.de) prüfen, sonst stimmen die Links in den Mails nicht.
+  Unter Einstellungen → Kunden-Bereich die Mailtexte lesen. Einmal an einem Testprojekt mit der eigenen Adresse
+  „Zugang per Mail schicken“ und anmelden. Wochenberichte starten am nächsten Freitag für Projekte ab „Bau“; wer
+  das nicht will, stellt die Stufe unter Freigaben und Entscheidungen auf C.
 
 - Die automatischen Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.

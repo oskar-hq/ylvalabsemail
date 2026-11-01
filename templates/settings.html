@@ -17,6 +17,8 @@
       <span class="txt"><b>Rollen und Rechte</b><span>Wer was sehen, bearbeiten und verwalten darf</span></span><span class="chev">›</span></a></li>
     {% if darf('kunden') %}<li><a href="{{ url_for('kunden.einstellungen') }}"><span class="ico">{{ osi('aufgabe') }}</span>
       <span class="txt"><b>Projekte</b><span>Abnahme-Checkliste, Änderungswünsche, Abrechnung, Zeit</span></span><span class="chev">›</span></a></li>{% endif %}
+    {% if darf('kunden') %}<li><a href="{{ url_for('kunden.portal_einstellungen') }}"><span class="ico">{{ osi('person') }}</span>
+      <span class="txt"><b>Kunden-Bereich</b><span>Einmal-Link, was Kunden sehen, Wochenbericht, Erinnerung</span></span><span class="chev">›</span></a></li>{% endif %}
     {% if darf('kalender') %}<li><a href="{{ url_for('kalender.einstellungen') }}"><span class="ico">{{ osi('kalender') }}</span>
       <span class="txt"><b>Kalender</b><span>Google-Zugang, Regeln, Wochengespräch</span></span><span class="chev">›</span></a></li>{% endif %}
     {% if darf('entscheidungen') %}<li><a href="{{ url_for('freigaben.einstellungen') }}"><span class="ico">{{ osi('check') }}</span>

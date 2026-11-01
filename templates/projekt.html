@@ -100,6 +100,64 @@
     <div class="os-btns"><button type="button" class="os-btn small quiet" data-sheet="sheet-wunsch">Wunsch eintragen</button></div>
   </section>
 
+  <section class="os-section" id="portal">
+    <h2 class="os-headline">Kunden-Bereich</h2>
+    <p class="os-sub">Der Kunde sieht dort Stand, Termine, Dokumente und Berichte, bestätigt die Anforderung und schickt Wünsche. Anmeldung per Einmal-Link, kein Passwort.</p>
+    {% if portal_link %}<label class="os-field" style="margin-top:12px"><span>Link für den Kunden (einmal gültig, nur jetzt sichtbar)</span><input readonly value="{{ portal_link }}"></label>{% endif %}
+    <ul class="os-list">{% for z in zugaenge %}<li class="os-row">
+      <span class="os-ico">{{ i('person') }}</span>
+      <span class="os-txt"><b>{{ z.name or z.email }}</b><span>{{ z.email }} · {% if z.status == 'gesperrt' %}gesperrt{% elif z.letzter_login %}zuletzt angemeldet {{ tag(z.letzter_login) }}{% elif z.link_offen %}Link verschickt, noch nicht benutzt{% else %}noch nie angemeldet{% endif %}</span></span>
+      {% if portal_darf %}<form method="post" action="{{ url_for('kunden.zugang_aendern', zid=z.id) }}" data-os-fetch="reload"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="os-link {{ 'danger' if z.status == 'aktiv' }}" name="gesperrt" value="{{ '1' if z.status == 'aktiv' else '0' }}">{{ 'Sperren' if z.status == 'aktiv' else 'Freigeben' }}</button></form>{% endif %}
+    </li>{% else %}<li class="os-empty">Noch kein Zugang.</li>{% endfor %}</ul>
+    {% if portal_darf %}<form method="post" action="{{ url_for('kunden.zugang', pid=p.id) }}" style="margin-top:12px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="os-grid2">
+        <label class="os-field"><span>Mailadresse</span><input name="email" type="email" value="{{ p.kunde_email or '' }}" required></label>
+        <label class="os-field"><span>Name (für die Anrede)</span><input name="name" value="{{ p.contact_name or '' }}"></label>
+      </div>
+      <div class="os-btns"><button class="os-btn small ink" name="senden" value="1">Zugang per Mail schicken</button>
+        <button class="os-btn small quiet" name="senden" value="0">Nur Link erzeugen</button></div>
+      <p class="os-caption">Der Klick ist die Freigabe: Die Mail geht sofort über das Akquise-Postfach raus und steht in der Akte. Der Kunde kann sich später selbst einen neuen Link schicken lassen.</p>
+    </form>{% endif %}
+  </section>
+
+  <section class="os-section" id="dokumente">
+    <h2 class="os-headline">Dokumente</h2>
+    <ul class="os-list">{% for d in dokumente %}<li class="os-row">
+      <span class="os-ico">{{ i('aufgabe') }}</span>
+      <span class="os-txt"><b><a href="{{ url_for('kunden.dokument_laden', did=d.id) }}" style="color:inherit">{{ d.titel }}</a></b><span>{{ d.art_label }} · {{ (d.groesse / 1024)|round|int }} KB · {{ tag(d.hochgeladen_am) }}{% if d.von_name %} · {{ d.von_name }}{% endif %} · {{ 'Kunde sieht es' if d.sichtbar else 'nur intern' }}</span></span>
+      {% if portal_darf %}<span class="os-zielknoepfe"><form method="post" action="{{ url_for('kunden.dokument_aendern', did=d.id) }}" data-os-fetch="reload" style="display:inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="os-link" name="sichtbar" value="{{ '0' if d.sichtbar else '1' }}">{{ 'Verbergen' if d.sichtbar else 'Zeigen' }}</button>
+        <button class="os-link danger" name="loeschen" value="1" data-confirm="Dokument „{{ d.titel }}“ löschen?">Löschen</button></form></span>{% endif %}
+    </li>{% else %}<li class="os-empty">Noch keine Dokumente.</li>{% endfor %}</ul>
+    {% if portal_darf %}<form method="post" action="{{ url_for('kunden.dokument_hochladen', pid=p.id) }}" enctype="multipart/form-data" data-os-fetch="reload" style="margin-top:12px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="os-grid2">
+        <label class="os-field"><span>Datei (PDF, Bild, Word, Excel; bis 8 MB)</span><input type="file" name="datei" required></label>
+        <label class="os-field"><span>Art</span><select name="art">{% for k, label in dok_arten %}<option value="{{ k }}">{{ label }}</option>{% endfor %}</select></label>
+      </div>
+      <label class="os-field"><span>Titel (optional)</span><input name="titel" maxlength="120" placeholder="z. B. Angebot vom 3. November"></label>
+      <label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px"><span style="margin:0">Kunde sieht es im Kunden-Bereich</span>
+        <span class="os-toggle"><input type="checkbox" name="sichtbar" value="1" checked><span></span></span></label>
+      <button class="os-btn small quiet">Hochladen</button>
+    </form>{% endif %}
+  </section>
+
+  <section class="os-section" id="berichte">
+    <h2 class="os-headline">Wochenberichte</h2>
+    <ul class="os-list">{% for b in berichte %}<li><details>
+      <summary class="os-row" style="cursor:pointer;list-style:none"><span class="os-txt"><b>{{ b.betreff }}</b><span>{{ {'wartet': 'wartet auf Versand', 'verschickt': 'verschickt ' ~ tag(b.verschickt_am), 'gestoppt': 'nicht verschickt'}[b.status] }}</span></span><span class="os-chev">{{ i('chev') }}</span></summary>
+      {% if b.status == 'wartet' and portal_darf %}<form method="post" action="{{ url_for('kunden.bericht_bearbeiten', bid=b.id) }}" data-os-fetch="reload" style="padding:8px 0 16px">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <label class="os-field"><span>Betreff</span><input name="betreff" maxlength="200" value="{{ b.betreff }}"></label>
+        <label class="os-field"><span>Text</span><textarea name="text" rows="12">{{ b.text }}</textarea></label>
+        <div class="os-btns"><button class="os-btn small quiet">Speichern</button><a class="os-btn small quiet" href="{{ url_for('freigaben.zentrale') }}">Zur Freigabe</a></div>
+      </form>{% else %}<pre style="white-space:pre-wrap;font:500 15px/22px var(--sans);color:var(--text-secondary);padding:8px 0 16px;margin:0">{{ b.text }}</pre>{% endif %}
+    </details></li>{% else %}<li class="os-empty">Noch keine Berichte. Sie entstehen am eingestellten Tag, sobald das Projekt im Bau ist.</li>{% endfor %}</ul>
+    {% if portal_darf and p.status in ('bau', 'abnahme', 'live', 'betrieb') %}<form method="post" action="{{ url_for('kunden.bericht_jetzt', pid=p.id) }}" data-os-fetch="reload" style="margin-top:12px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="os-btn small quiet">Bericht für diese Woche jetzt vorbereiten</button></form>{% endif %}
+  </section>
+
   <section class="os-section" id="zeit">
     <h2 class="os-headline">Zeit</h2>
     <p class="os-sub">{{ (p.zeit_min / 60)|round(1)|kpi }} Stunden insgesamt.{% if laeuft %} Läuft gerade: {{ laeuft.titel }} seit {{ laeuft.seit_min }} Min.{% endif %}</p>

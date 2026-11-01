@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Kunden-Bereich · Einstellungen{% endblock %}
+{% block content %}
+{% set dis = 'disabled' if not verwalten %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Einstellungen</span>
+    <h1 class="os-title-l">Kunden-Bereich</h1>
+    <p class="os-sub os-lead">Zugang per Einmal-Link, was Kunden sehen, Wochenbericht und Termin-Erinnerung. Den Zugang schickt die verantwortliche Person am Projekt.</p>
+  </header>
+  {% if not verwalten %}<p class="os-caption">Ändern darf, wer „Kunden, Projekte und Änderungen: Verwalten“ hat.</p>{% endif %}
+  <form method="post" action="{{ url_for('kunden.portal_einstellungen_speichern') }}" data-os-fetch="reload">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <section class="os-section" style="margin-top:0">
+      <h2 class="os-headline">Zugang</h2>
+      <div class="os-grid2" style="margin-top:12px">
+        <label class="os-field"><span>{{ labels.link_tage[1] }}</span><input type="number" name="link_tage" min="1" max="30" value="{{ regeln.link_tage }}" {{ dis }}></label>
+        <label class="os-field"><span>{{ labels.sitzung_tage[1] }}</span><input type="number" name="sitzung_tage" min="1" max="365" value="{{ regeln.sitzung_tage }}" {{ dis }}></label>
+      </div>
+      <label class="os-field"><span>{{ labels.betreff_zugang[1] }}</span><input name="betreff_zugang" maxlength="200" value="{{ regeln.betreff_zugang }}" {{ dis }}></label>
+      <label class="os-field"><span>{{ labels.text_zugang[1] }}</span><textarea name="text_zugang" rows="8" {{ dis }}>{{ regeln.text_zugang }}</textarea></label>
+    </section>
+    <section class="os-section">
+      <h2 class="os-headline">Was Kunden sehen</h2>
+      {% for k in ['zeige_termine', 'zeige_abnahme'] %}<label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:12px"><span style="margin:0">{{ labels[k][1] }}</span>
+        <span class="os-toggle"><input type="checkbox" name="{{ k }}" value="1" {{ 'checked' if regeln[k] }} {{ dis }}><span></span></span></label>{% endfor %}
+      <p class="os-caption">Immer sichtbar: Projektstand, Anforderung, Wünsche, freigegebene Dokumente und verschickte Berichte. Nie sichtbar: Zeiten, Kosten, interne Notizen.</p>
+    </section>
+    <section class="os-section">
+      <h2 class="os-headline">Wochenbericht</h2>
+      <p class="os-sub">Für Projekte im Bau, in der Abnahme, live und im Betrieb. Freigabe-Stufe: <b>{{ stufen.wochenbericht }}</b>{% if stufen.wochenbericht == 'B' %} (geht nach {{ stufen.frist_h }} Stunden raus, wenn niemand stoppt){% endif %}. Ändern unter <a href="{{ url_for('freigaben.einstellungen') }}">Freigaben und Entscheidungen</a>.</p>
+      <div class="os-grid2" style="margin-top:12px">
+        <label class="os-field"><span>Tag</span><select name="bericht_tag" {{ dis }}>{% for t in wochentage %}<option value="{{ loop.index0 }}" {{ 'selected' if loop.index0 == regeln.bericht_tag }}>{{ t }}</option>{% endfor %}</select></label>
+        <label class="os-field"><span>{{ labels.bericht_stunde[1] }}</span><input type="number" name="bericht_stunde" min="0" max="23" value="{{ regeln.bericht_stunde }}" {{ dis }}></label>
+      </div>
+      <label class="os-field"><span>{{ labels.betreff_bericht[1] }}</span><input name="betreff_bericht" maxlength="200" value="{{ regeln.betreff_bericht }}" {{ dis }}></label>
+    </section>
+    <section class="os-section">
+      <h2 class="os-headline">Termin-Erinnerung an Kunden</h2>
+      <p class="os-sub">24 Stunden vor einem Kundentermin an die Gäste. Freigabe-Stufe: <b>{{ stufen.erinnerung_kunde }}</b>.</p>
+      <label class="os-field" style="margin-top:12px"><span>{{ labels.text_erinnerung[1] }}</span><textarea name="text_erinnerung" rows="6" {{ dis }}>{{ regeln.text_erinnerung }}</textarea></label>
+    </section>
+    {% if verwalten %}<button class="os-btn small quiet">Speichern</button>{% endif %}
+  </form>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('settings.settings') }}" aria-label="Zurück zu den Einstellungen">{{ i('back') }}</a>
+</div>
+{% endblock %}

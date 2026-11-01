@@ -382,6 +382,8 @@ class WebTest(WebBasis):
                            "team.template_editor", "team.template_preview", "team.template_save"}
         for rule in main.app.url_map.iter_rules():
             ep = rule.endpoint
+            if ep.startswith("portal."):  # Kunden-Bereich: eigene Anmeldung per Einmal-Link, kein Team-Modul
+                continue
             if ep in main.FREI or ep in frei_ohne_modul or ep in ("static", "login", "logout", "demo_login",
                                                                   "forget_device", "healthz", "personen.einladung"):
                 continue
@@ -1294,11 +1296,11 @@ class FreigabeZentraleTest(unittest.TestCase):
         with self.assertRaises(f.FreigabeError):
             f.stufen_speichern(c, "oskar", {"frist_h": "0"})
         f.stufen_speichern(c, "oskar", {"termin_einladung": "B", "frist_h": "24", "erstkontakt": "A",
-                                        "wochenbericht": "C"})
+                                        "angebot": "D"})
         s = f.stufen(c)
         self.assertEqual((s["termin_einladung"], s["frist_h"]), ("B", 24))
         self.assertEqual(s["erstkontakt"], "C")  # fest: nie ohne Freigabe (§ 7 UWG, hart im Code)
-        self.assertEqual(s["wochenbericht"], "B")  # kommt erst mit Stufe 7
+        self.assertEqual(s["angebot"], "C")  # kommt erst mit Stufe 8
         self.assertTrue(any(e["quelle"] == "regel" and "Freigabe-Stufen" in e["titel"]
                             for e in f.entscheidungen(c)))  # Regeländerung steht im Entscheidungs-Log
         # Stufe B: angekündigt, nicht verschickt; nach der Frist geht es ohne Einspruch raus
@@ -1494,6 +1496,238 @@ class FreigabenWebTest(WebBasis):
         r = self.post("/einstellungen/freigaben/stufen", {"termin_einladung": "C", "frist_h": "24"},
                       headers={"X-Requested-With": "fetch"})
         self.assertTrue(r.get_json()["ok"])
+
+
+# ---------------------------------------------------------------- Stufe 7: Kunden-Bereich
+
+
+class PostfachMock:
+    """Akquise-Postfach zum Mitlesen: alle Mails landen in `self.mails`."""
+
+    def __init__(self, test):
+        from unittest import mock
+        from app import agent
+        self.mails = []
+        smtp = mock.Mock(send_message=lambda m: self.mails.append(m))
+        settings = dict(agent.CFG["settings"], OUTREACH_USER="kontakt@ylvalabs.de", OUTREACH_PASSWORD="x",
+                        IMAP_HOST="", BASE_URL="https://os.example.de")
+        p = mock.patch.dict(agent.CFG, {"settings": settings, "smtp_connect": lambda u, pw: smtp})
+        p.start()
+        test.addCleanup(p.stop)
+
+    def text(self, i=-1):
+        return self.mails[i].get_content()
+
+
+def projekt_anlegen(c, name="Tischlerei Portal", email="kunde@tischlerei.de"):
+    from app import crm, projekte
+    lid = lead_anlegen(c, name, stage="angebot", owner="oskar", email=email, contact_name="Frau Hansen")
+    crm.set_stage(c, lid, "kunde", author="Oskar")
+    return projekte.zum_lead(c, lid)["id"]
+
+
+class PortalTest(unittest.TestCase):
+    def setUp(self):
+        from app import portal, projekte
+        self.pt, self.pj = portal, projekte
+        self.c = frische_db()
+        self.post = PostfachMock(self)
+        self.pid = projekt_anlegen(self.c)
+
+    def token_aus_mail(self):
+        import re
+        return re.search(r"/portal/login/([\w-]+)", self.post.text()).group(1)
+
+    def test_zugang_einmal_link_sitzung_sperren(self):
+        pt, c = self.pt, self.c
+        with self.assertRaises(pt.PortalError):
+            pt.zugang_schicken(c, "hamza", self.pid)  # nur die verantwortliche Person
+        link = pt.zugang_schicken(c, "oskar", self.pid)
+        self.assertTrue(link.startswith("https://os.example.de/portal/login/"))
+        self.assertEqual(self.post.mails[0]["To"], "Frau Hansen <kunde@tischlerei.de>")
+        self.assertIn("Guten Tag Frau Hansen", self.post.text())
+        token = self.token_aus_mail()
+        self.assertNotIn(token, str([tuple(r) for r in c.execute("SELECT * FROM kunden_zugaenge")]))  # nur der Hash
+        self.assertTrue(pt.link_pruefen(c, token))
+        sitzung, tage = pt.anmelden(c, token)
+        self.assertEqual(tage, 90)
+        with self.assertRaises(pt.PortalError):
+            pt.anmelden(c, token)  # einmal gültig
+        z = pt.sitzung(c, sitzung)
+        self.assertEqual(z["email"], "kunde@tischlerei.de")
+        self.assertTrue(z["letzter_login"])
+        # Neuen Link anfordern: gleiche Antwort für unbekannte Adressen, höchstens einmal in zehn Minuten
+        antwort = pt.link_anfordern(c, "fremd@example.de")
+        self.assertEqual(len(self.post.mails), 1)
+        self.assertEqual(pt.link_anfordern(c, "kunde@tischlerei.de"), antwort)
+        self.assertEqual(len(self.post.mails), 1)  # gerade erst verschickt
+        c.execute("UPDATE kunden_zugaenge SET link_angefordert='2000-01-01T00:00:00'")
+        pt.link_anfordern(c, "Kunde@Tischlerei.de ")
+        self.assertEqual(len(self.post.mails), 2)
+        # Abgelaufener Link
+        c.execute("UPDATE kunden_zugaenge SET link_bis='2000-01-01T00:00:00'")
+        self.assertIsNone(pt.link_pruefen(c, self.token_aus_mail()))
+        # Sperren beendet die Sitzung
+        pt.zugang_sperren(c, "oskar", z["id"])
+        self.assertIsNone(pt.sitzung(c, sitzung))
+        # Gesperrter Betrieb bekommt keine Mails, Link zum Kopieren geht ohne Mail
+        c.execute("UPDATE leads SET status='gesperrt'")
+        with self.assertRaises(pt.PortalError):
+            pt.zugang_schicken(c, "oskar", self.pid, "neu@tischlerei.de")
+        self.assertIn("/portal/login/", pt.zugang_schicken(c, "oskar", self.pid, "neu@tischlerei.de", senden=False))
+
+    def test_ansicht_bestaetigen_wunsch(self):
+        pt, pj, c = self.pt, self.pj, self.c
+        link = pt.zugang_schicken(c, "oskar", self.pid, senden=False)
+        z = pt.sitzung(c, pt.anmelden(c, link.rsplit("/", 1)[1])[0])
+        pj.weiter(c, "oskar", self.pid)
+        pj.aendern(c, "oskar", self.pid, anforderung="Anfragen automatisch sortieren.")
+        a = pt.ansicht(c, z)
+        self.assertEqual((a["p"]["schritt"], a["p"]["kann_bestaetigen"]), ("Anforderung", True))
+        self.assertNotIn("zeit_min", a["p"])  # keine Zeiten, keine Kosten
+        pt.bestaetigen(c, z)
+        self.assertTrue(pj.get(c, self.pid)["kunde_bestaetigt_am"])
+        self.assertIn("Anforderung bestätigt: Tischlerei Portal",
+                      [r["title"] for r in leaddb.notices(c, "f", 20, "finn")[0]])
+        with self.assertRaises(pt.PortalError):
+            pt.wunsch(c, z, "")
+        aid = pt.wunsch(c, z, "Bitte auch die Telefonnummer abfragen.")
+        self.assertEqual(pj.aenderung_get(c, aid)["quelle"], "portal")
+        a = pt.ansicht(c, z)
+        self.assertEqual([(w["text"], w["status"]) for w in a["aenderungen"]],
+                         [("Bitte auch die Telefonnummer abfragen.", "Eingegangen")])
+
+    def test_dokumente(self):
+        import io
+        from werkzeug.datastructures import FileStorage
+        pt, c = self.pt, self.c
+        ordner = tempfile.mkdtemp()
+        with self.assertRaises(pt.PortalError):
+            pt.dokument_speichern(c, "oskar", self.pid, FileStorage(io.BytesIO(b"x"), "boese.exe"), "", "angebot", True,
+                                  ordner)
+        d1 = pt.dokument_speichern(c, "oskar", self.pid, FileStorage(io.BytesIO(b"%PDF-1"), "Angebot.pdf"), "",
+                                   "angebot", True, ordner)
+        d2 = pt.dokument_speichern(c, "oskar", self.pid, FileStorage(io.BytesIO(b"intern"), "kalk.xlsx"),
+                                   "Kalkulation", "sonstiges", False, ordner)
+        self.assertEqual([d["titel"] for d in pt.dokumente(c, self.pid, nur_sichtbar=True)], ["Angebot"])
+        self.assertEqual(len(pt.dokumente(c, self.pid)), 2)
+        datei = Path(ordner) / "dokumente" / pt.dokument(c, d2)["datei"]
+        self.assertTrue(datei.exists())
+        pt.dokument_aendern(c, "oskar", d1, sichtbar=False)
+        self.assertEqual(pt.dokumente(c, self.pid, nur_sichtbar=True), [])
+        pt.dokument_aendern(c, "oskar", d2, loeschen=True, data_dir=ordner)
+        self.assertFalse(datei.exists())
+
+    def test_wochenbericht_stufe_b_und_c(self):
+        from datetime import datetime as dt
+        from app import freigaben, kpis
+        pt, pj, c = self.pt, self.pj, self.c
+        pt.zugang_schicken(c, "oskar", self.pid, senden=False)
+        c.execute("UPDATE projekte SET status='bau', bau_ende_plan=? WHERE id=?", (MORGEN, self.pid))
+        c.commit()
+        aid = pj.aenderung_anlegen(c, "oskar", self.pid, "Logo austauschen")
+        freitag = date.today() + timedelta(days=(4 - date.today().weekday()) % 7)
+        self.assertEqual(pt.takt(c, dt.combine(freitag, dt.min.time()).replace(hour=9))["berichte"], 0)  # zu früh
+        self.assertEqual(pt.takt(c, dt.combine(freitag, dt.min.time()).replace(hour=13))["berichte"], 1)
+        self.assertEqual(pt.takt(c, dt.combine(freitag, dt.min.time()).replace(hour=14))["berichte"], 0)  # einmal
+        b = pt.berichte(c, self.pid)[0]
+        self.assertIn("Stand: Im Bau", b["text"])
+        self.assertIn("Logo austauschen (Eingegangen)", b["text"])
+        self.assertIn("https://os.example.de/portal", b["text"])
+        offen = [x for x in freigaben.offen(c, "oskar") if x["art"] == "wochenbericht"]
+        self.assertEqual((len(offen), offen[0]["stufe"]), (1, "B"))
+        self.assertEqual(self.post.mails, [])  # nichts vor der Frist
+        pt.bericht_bearbeiten(c, "oskar", b["id"], b["betreff"], b["text"] + "\n\nSchönes Wochenende!")
+        freigaben.takt(c, jetzt=(date.today() + timedelta(days=9)).isoformat())
+        self.assertEqual(pt.bericht_get(c, b["id"])["status"], "verschickt")
+        self.assertIn("Schönes Wochenende!", self.post.text())
+        self.assertEqual(self.post.mails[0]["To"], "Frau Hansen <kunde@tischlerei.de>")
+        # Stufe C: wartet, Ablehnen mit Grund stoppt
+        freigaben.stufen_speichern(c, "oskar", {"wochenbericht": "C"})
+        bid = pt.bericht_anlegen(c, self.pid, kpis.woche_plus(kpis.woche_von(), 3), "oskar")
+        self.assertTrue(bid)
+        f = next(x for x in freigaben.offen(c, "oskar") if x["art"] == "wochenbericht")
+        self.assertEqual(f["stufe"], "C")
+        with self.assertRaises(freigaben.FreigabeError):
+            freigaben.entscheiden(c, "hamza", "wochenbericht", f["oid"], True)
+        freigaben.entscheiden(c, "oskar", "wochenbericht", f["oid"], False, "Diese Woche telefoniert")
+        self.assertEqual(pt.bericht_get(c, bid)["status"], "gestoppt")
+        self.assertEqual(len(self.post.mails), 1)
+        _ = aid
+
+    def test_termin_erinnerung_an_kunden(self):
+        from datetime import datetime as dt
+        from app import freigaben
+        pt, c = self.pt, self.c
+        lid = c.execute("SELECT lead_id FROM projekte WHERE id=?", (self.pid,)).fetchone()[0]
+
+        def termin(stunden):
+            start = (dt.now() + timedelta(hours=stunden)).strftime("%Y-%m-%dT%H:%M")
+            ende = (dt.now() + timedelta(hours=stunden + 1)).strftime("%Y-%m-%dT%H:%M")
+            tid = c.execute("INSERT INTO termine (titel, art, start, ende, verantwortlich, lead_id, status, meet_link, "
+                            "erstellt_am) VALUES ('Abnahme', 'kunde', ?, ?, 'oskar', ?, 'geplant', 'https://meet/x', ?)",
+                            (start, ende, lid, leaddb.now())).lastrowid
+            c.execute("INSERT INTO termin_teilnehmer (termin_id, email) VALUES (?, 'kunde@tischlerei.de')", (tid,))
+            c.commit()
+            return tid
+        termin(30)  # noch nicht dran
+        t1 = termin(20)
+        self.assertEqual(pt.takt(c)["erinnerungen"], 1)
+        self.assertIn("https://meet/x", self.post.text())
+        self.assertEqual(pt.takt(c)["erinnerungen"], 0)  # nur einmal
+        self.assertIn("Erinnerung an den Kunden verschickt", firma.protokoll(c, objekt=("termin", t1))[0]["text"])
+        freigaben.stufen_speichern(c, "oskar", {"erinnerung_kunde": "C"})
+        termin(22)
+        pt.takt(c)
+        self.assertEqual(len(self.post.mails), 1)
+        f = next(x for x in freigaben.offen(c, "oskar") if x["art"] == "erinnerung_kunde")
+        freigaben.entscheiden(c, "oskar", "erinnerung_kunde", f["oid"], True)
+        self.assertEqual(len(self.post.mails), 2)
+
+
+class PortalWebTest(WebBasis):
+    def test_team_und_kunde(self):
+        import io
+        import re
+        from app import portal
+        c = self.c
+        pid = projekt_anlegen(c, "Web Portal Kunde", "web@kunde.de")
+        self.addCleanup(lambda: (c.execute("DELETE FROM projekte WHERE id=?", (pid,)),
+                                 c.execute("DELETE FROM kunden_zugaenge WHERE projekt_id=?", (pid,)), c.commit()))
+        for url in (f"/kunden/{pid}", "/einstellungen/kunden-bereich", "/portal"):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+        r = self.post(f"/kunden/{pid}/zugang", {"email": "web@kunde.de", "name": "Herr Web", "senden": "0"})
+        self.assertEqual(r.status_code, 302)
+        html = self.client.get(f"/kunden/{pid}").get_data(as_text=True)
+        token = re.search(r"/portal/login/([\w-]+)", html).group(1)
+        self.assertNotIn(token, self.client.get(f"/kunden/{pid}").get_data(as_text=True))  # nur einmal gezeigt
+        r = self.post(f"/kunden/{pid}/dokument", {"datei": (io.BytesIO(b"%PDF"), "Angebot.pdf"), "art": "angebot",
+                                                  "sichtbar": "1"}, content_type="multipart/form-data")
+        self.assertEqual(r.status_code, 302)
+        did = portal.dokumente(c, pid)[0]["id"]
+        self.addCleanup(lambda: portal.dokument_aendern(c, "oskar", did, loeschen=True, data_dir=main.SETTINGS["DATA_DIR"]))
+        # Kunde: eigener Browser ohne Team-Sitzung
+        kunde = main.app.test_client()
+        kunde.get("/portal")
+        with kunde.session_transaction() as sess:
+            sess["csrf"] = "k"
+        self.assertIn("Anmelden", kunde.get(f"/portal/login/{token}").get_data(as_text=True))
+        r = kunde.post(f"/portal/login/{token}", data={"_csrf": "k"})
+        self.assertIn("ylva_kunde=", r.headers.get("Set-Cookie", ""))
+        html = kunde.get("/portal").get_data(as_text=True)
+        self.assertIn("Web Portal Kunde", html)
+        self.assertIn("Herr Web", html)
+        self.assertNotIn("Kosten", html)
+        self.assertEqual(kunde.get(f"/portal/dokument/{did}").status_code, 200)
+        self.assertEqual(kunde.get(f"/kunden/{pid}").status_code, 302)  # Team-Seiten bleiben zu
+        kunde.post("/portal/wunsch", data={"_csrf": "k", "text": "Bitte grüner Knopf"})
+        self.assertIn("Bitte grüner Knopf", kunde.get("/portal").get_data(as_text=True))
+        kunde.post("/portal/abmelden", data={"_csrf": "k"})
+        self.assertIn("Link schicken", kunde.get("/portal").get_data(as_text=True))
+        self.assertEqual(kunde.get(f"/portal/dokument/{did}").status_code, 302)
+        # Recherche sieht Kunden nicht, also auch die Einstellungen nicht
+        self.als("hamza")
+        self.assertEqual(self.client.get("/einstellungen/kunden-bereich").status_code, 403)
 
 
 if __name__ == "__main__":

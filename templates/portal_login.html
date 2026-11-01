@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Kunden-Bereich · Ylva Labs{% endblock %}
+{% block content %}
+<main class="os-page" style="max-width:520px">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Ylva Labs</span>
+    <h1 class="os-title-l">Kunden-Bereich</h1>
+    {% if token %}<p class="os-sub os-lead">Willkommen{% if zugang and zugang.name %}, {{ zugang.name }}{% endif %}. Ein Klick, und Sie sind angemeldet. Auf diesem Gerät bleiben Sie danach angemeldet.</p>
+    {% elif abgelaufen %}<p class="os-sub os-lead">Dieser Link ist abgelaufen oder wurde schon benutzt. Kein Problem: Geben Sie Ihre Mailadresse ein, dann schicken wir einen neuen.</p>
+    {% else %}<p class="os-sub os-lead">Hier sehen Sie den Stand Ihres Projekts, Termine und Dokumente. Zum Anmelden schicken wir Ihnen einen Link per Mail, ein Passwort brauchen Sie nicht.</p>{% endif %}
+  </header>
+  {% if token %}
+  <form method="post" action="{{ url_for('portal.login_einloesen', token=token) }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button class="os-btn ink"><span>Anmelden</span>{{ i('pfeil') }}</button>
+  </form>
+  {% else %}
+  <form method="post" action="{{ url_for('portal.link_anfordern') }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <label class="os-field"><span>Ihre Mailadresse</span><input type="email" name="email" required autocomplete="email" placeholder="name@firma.de"></label>
+    <button class="os-btn ink"><span>Link schicken</span>{{ i('pfeil') }}</button>
+  </form>
+  {% endif %}
+  <p class="os-caption" style="margin-top:32px">Fragen? Antworten Sie einfach auf eine unserer Mails.</p>
+</main>
+{% endblock %}

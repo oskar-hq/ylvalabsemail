@@ -1,6 +1,6 @@
 """Seiten „Kunden“ (Projekte entlang der Customer Journey), ein Projekt (nächster Schritt, Anforderung, Abnahme,
 Änderungswünsche, Zeiten, Kosten), Zeiterfassung und Einstellungen → Projekte."""
-from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
+from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
 from . import firma, projekte
 from .leads_views import db, me
@@ -70,7 +70,7 @@ def neu():
 def detail(pid):
     c = db()
     p = _projekt_or_404(pid)
-    from . import aufgaben
+    from . import aufgaben, portal
     return render_template("projekt.html", account=g.account, p=p, status=projekte.STATUS,
                            aenderungen=projekte.aenderungen(c, pid), zeiten=projekte.zeiten(c, pid, 20),
                            kosten=projekte.kosten(c, pid), regeln=projekte.regeln(c),
@@ -80,7 +80,10 @@ def detail(pid):
                            verlauf=firma.protokoll(c, objekt=("projekt", pid), limit=25),
                            namen={x["key"]: x["name"] for x in firma.personen(c, mit_archiv=True)},
                            verwalten=darf("kunden", firma.VERWALTEN), personen=firma.aktive_personen(c),
-                           demo=SETTINGS["DEMO_MODE"])
+                           demo=SETTINGS["DEMO_MODE"], zugaenge=portal.zugaenge(c, pid),
+                           dokumente=portal.dokumente(c, pid), dok_arten=portal.DOK_ARTEN,
+                           berichte=portal.berichte(c, pid), portal_darf=portal.darf_zugang(c, me(), p),
+                           portal_link=session.pop("portal_link", None))
 
 
 @bp.get("/kunden/aenderung/<int:aid>")
@@ -233,3 +236,131 @@ def einstellungen_speichern():
     except projekte.ProjektError as exc:
         return _fertig(str(exc), url_for("kunden.einstellungen"), ok=False)
     return _fertig("Regeln gespeichert.", url_for("kunden.einstellungen"))
+
+# ---------------------------------------------------------------- Kunden-Bereich (Stufe 7): Zugang, Dokumente, Berichte
+
+
+def _portal_fertig(fn, pid, anker, ok_text):
+    from . import portal
+    ziel = url_for("kunden.detail", pid=pid) + anker
+    try:
+        text = fn() or ok_text
+    except (portal.PortalError, projekte.ProjektError) as exc:
+        return _fertig(str(exc), ziel, ok=False)
+    return _fertig(text, ziel)
+
+
+@bp.post("/kunden/<int:pid>/zugang")
+@login_required
+def zugang(pid):
+    from . import portal
+    _projekt_or_404(pid)
+    senden = request.form.get("senden", "1") == "1" and not g.account.get("demo")
+
+    def tun():
+        link = portal.zugang_schicken(db(), me(), pid, request.form.get("email", ""), request.form.get("name", ""),
+                                      senden=senden, basis=request.host_url)
+        if senden:
+            return "Zugang geschickt."
+        session["portal_link"] = link  # einmal auf der Projektseite zum Kopieren zeigen
+        return "Link erzeugt. Er steht im Abschnitt Kunden-Bereich zum Kopieren."
+    return _portal_fertig(tun, pid, "#portal", "")
+
+
+@bp.post("/kunden/zugang/<int:zid>")
+@login_required
+def zugang_aendern(zid):
+    from . import portal
+    row = db().execute("SELECT projekt_id FROM kunden_zugaenge WHERE id=?", (zid,)).fetchone()
+    if not row:
+        abort(404)
+    gesperrt = request.form.get("gesperrt") == "1"
+    return _portal_fertig(lambda: portal.zugang_sperren(db(), me(), zid, gesperrt), row["projekt_id"], "#portal",
+                          "Zugang gesperrt." if gesperrt else "Zugang wieder frei.")
+
+
+@bp.post("/kunden/<int:pid>/dokument")
+@login_required
+def dokument_hochladen(pid):
+    from . import portal
+    _projekt_or_404(pid)
+    f = request.form
+    return _portal_fertig(lambda: portal.dokument_speichern(db(), me(), pid, request.files.get("datei"), f.get("titel", ""),
+                                                            f.get("art", ""), f.get("sichtbar") == "1",
+                                                            SETTINGS["DATA_DIR"]) and None,
+                          pid, "#dokumente", "Dokument hochgeladen.")
+
+
+@bp.post("/kunden/dokument/<int:did>")
+@login_required
+def dokument_aendern(did):
+    from . import portal
+    d = portal.dokument(db(), did)
+    if not d:
+        abort(404)
+    loeschen = request.form.get("loeschen") == "1"
+    sichtbar = request.form.get("sichtbar") == "1"
+    return _portal_fertig(lambda: portal.dokument_aendern(db(), me(), did, sichtbar, loeschen, SETTINGS["DATA_DIR"]),
+                          d["projekt_id"], "#dokumente", "Gelöscht." if loeschen else "Gespeichert.")
+
+
+@bp.get("/kunden/dokument/<int:did>")
+@login_required
+def dokument_laden(did):
+    from flask import send_from_directory
+    from . import portal
+    d = portal.dokument(db(), did)
+    if not d:
+        abort(404)
+    return send_from_directory(portal.dok_ordner(SETTINGS["DATA_DIR"]), d["datei"], as_attachment=True,
+                               download_name=d["dateiname"] or d["datei"])
+
+
+@bp.post("/kunden/<int:pid>/bericht")
+@login_required
+def bericht_jetzt(pid):
+    from . import kpis, portal
+    p = _projekt_or_404(pid)
+
+    def tun():
+        if not portal.darf_zugang(db(), me(), p):
+            raise portal.PortalError("Das macht die verantwortliche Person (oder wer Kunden verwaltet).")
+        if not portal.bericht_anlegen(db(), pid, kpis.woche_von(), me()):
+            raise portal.PortalError("Für diese Woche gibt es schon einen Bericht, oder es fehlt eine Mailadresse.")
+        return "Bericht vorbereitet. Er steht in der Freigabe-Zentrale."
+    return _portal_fertig(tun, pid, "#berichte", "")
+
+
+@bp.post("/kunden/bericht/<int:bid>")
+@login_required
+def bericht_bearbeiten(bid):
+    from . import portal
+    b = portal.bericht_get(db(), bid)
+    if not b:
+        abort(404)
+    return _portal_fertig(lambda: portal.bericht_bearbeiten(db(), me(), bid, request.form.get("betreff", ""),
+                                                            request.form.get("text", "")),
+                          b["projekt_id"], "#berichte", "Bericht gespeichert.")
+
+
+@bp.get("/einstellungen/kunden-bereich")
+@login_required
+def portal_einstellungen():
+    from . import freigaben, portal
+    c = db()
+    return render_template("portal_einstellungen.html", account=g.account, regeln=portal.regeln(c),
+                           labels=portal.REGELN, wochentage=portal.WOCHENTAGE, verwalten=darf("kunden", firma.VERWALTEN),
+                           stufen=freigaben.stufen(c))
+
+
+@bp.post("/einstellungen/kunden-bereich")
+@login_required
+def portal_einstellungen_speichern():
+    from . import portal
+    if g.account.get("demo") or not darf("kunden", firma.VERWALTEN):
+        abort(403, "Dafür brauchst du „Kunden, Projekte und Änderungen: Verwalten“.")
+    try:
+        geaendert = portal.regeln_speichern(db(), me(), request.form)
+    except portal.PortalError as exc:
+        return _fertig(str(exc), url_for("kunden.portal_einstellungen"), ok=False)
+    return _fertig("Gespeichert." if geaendert else "Nichts geändert.", url_for("kunden.portal_einstellungen"))
