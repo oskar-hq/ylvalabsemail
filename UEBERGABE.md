@@ -69,6 +69,9 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   Entwicklungsumgebung gesperrt, in den Tests nachgebaut). Erster Test: Oskar verbindet sich und legt einen
   internen Termin mit sich selbst an; erscheint er im Google-Kalender, einen Kundentermin an die eigene
   zweite Adresse mit Meet probieren.
+- **Firmen-OS Stufe 4 (01.11.2026):** Cockpit, Wochenziele, Agenda fürs Wochengespräch, Lernstufen-Messung.
+  Nach dem Update: im Cockpit die Zielwerte setzen (z. B. qualifizierte Leads je Woche), im ersten
+  Wochengespräch die Ziele für die nächste Woche eintragen. Die Lernstufen-Regeln stehen im Cockpit unten.
 
 - Die automatischen Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.

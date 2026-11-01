@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import aufgaben, branchentest, firma, kalender  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
+from . import aufgaben, branchentest, firma, kalender, kpis  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
 
 ROOT = Path(__file__).resolve().parent.parent
 BRAIN_SEED = Path(__file__).resolve().parent / "brain_seed.md"
@@ -161,6 +161,9 @@ MIGRATIONS = [
     "ALTER TABLE leads ADD COLUMN preisgespraech_am TEXT",
     # Firmen-OS Stufe 3: geheime Adresse für das Kalender-Abo (nur der Hash)
     "ALTER TABLE team ADD COLUMN ics_hash TEXT",
+    # Firmen-OS Stufe 4: Entwurf, wie ihn die schreibende Person hinterlassen hat (Lernstufen-Messung)
+    "ALTER TABLE leads ADD COLUMN entwurf_original TEXT",
+    "ALTER TABLE leads ADD COLUMN entwurf_von TEXT",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.
@@ -192,6 +195,12 @@ DATA_MIGRATIONS = [
        AND json_extract(rechte, '$.kalender') IS NULL""",
     """UPDATE rollen SET rechte = json_set(rechte, '$.kalender', 2) WHERE key = 'recherche'
        AND json_extract(rechte, '$.kalender') IS NULL""",
+    # Stufe 4: neues Modul „Zahlen, Ziele und Wochengespräch“ (Gründer verwalten, Recherche bearbeitet eigene Ziele)
+    """UPDATE rollen SET rechte = json_set(rechte, '$.cockpit', 4) WHERE key = 'gruender'
+       AND json_extract(rechte, '$.cockpit') IS NULL""",
+    """UPDATE rollen SET rechte = json_set(rechte, '$.cockpit', 2) WHERE key = 'recherche'
+       AND json_extract(rechte, '$.cockpit') IS NULL""",
+    *kpis.SEED,
 ]
 
 FOLLOWUP_DAYS = 7  # wird beim Start aus LEADS_FOLLOWUP_DAYS gesetzt, 0 = aus
@@ -223,6 +232,7 @@ def connect(path):
     conn.executescript(aufgaben.SCHEMA)
     conn.executescript(branchentest.SCHEMA)
     conn.executescript(kalender.SCHEMA)
+    conn.executescript(kpis.SCHEMA)
     for stmt in MIGRATIONS:
         try:
             conn.execute(stmt)

@@ -21,7 +21,7 @@
 <body class="{% block body_class %}{% endblock %}">
 {% if account %}
 {% set ep = request.endpoint or '' %}
-{% set sec = 'tag' if ep == 'aufgaben.mein_tag' else ('kalender' if ep.startswith('kalender.') and ep != 'kalender.einstellungen' else 'aufgaben' if ep.startswith('aufgaben.') else ('leads' if ep.startswith('leads.') else ('crm' if ep.startswith('crm.') else ('mailer' if ep in ('compose', 'history') else ('mehr' if ep.startswith(('settings.', 'personen.')) else ''))))) %}
+{% set sec = 'tag' if ep == 'aufgaben.mein_tag' else ('kalender' if ep.startswith('kalender.') and ep != 'kalender.einstellungen' else 'cockpit' if ep.startswith('cockpit.') else 'aufgaben' if ep.startswith('aufgaben.') else ('leads' if ep.startswith('leads.') else ('crm' if ep.startswith('crm.') else ('mailer' if ep in ('compose', 'history') else ('mehr' if ep.startswith(('settings.', 'personen.')) else ''))))) %}
 {% set mit_person = account.team %}
 {% set n_leads = leads_todo() if mit_person and darf('leads') else 0 %}{% set n_crm = crm_due() if mit_person and darf('crm') else 0 %}{% set n_auf = aufgaben_offen() if mit_person else 0 %}
 {% set who_name = (account.name or account.address or account.user or 'Team') %}
@@ -35,6 +35,7 @@
       {% if mit_person %}<a href="{{ url_for('aufgaben.mein_tag') }}" class="{{ 'on' if sec == 'tag' }}">Mein Tag</a>
       {% if darf('aufgaben') %}<a href="{{ url_for('aufgaben.liste') }}" class="{{ 'on' if sec == 'aufgaben' }}">Aufgaben{% if n_auf %} <span class="nav-count" title="Heute fällig und Anfragen an dich">{{ n_auf }}</span>{% endif %}</a>{% endif %}
       {% if darf('kalender') %}<a href="{{ url_for('kalender.uebersicht') }}" class="{{ 'on' if sec == 'kalender' }}">Kalender{% set n_heute = termine_heute() %}{% if n_heute %} <span class="nav-count" title="Termine heute">{{ n_heute }}</span>{% endif %}</a>{% endif %}
+      {% if darf('cockpit') %}<a href="{{ url_for('cockpit.cockpit') }}" class="{{ 'on' if sec == 'cockpit' }}">Cockpit</a>{% endif %}
       {% if darf('leads') %}<a href="{{ url_for('leads.overview') }}" class="{{ 'on' if sec == 'leads' }}">Leads{% if n_leads %} <span class="nav-count">{{ n_leads }}</span>{% endif %}</a>{% endif %}
       {% if darf('crm') %}<a href="{{ url_for('crm.board') }}" class="{{ 'on' if sec == 'crm' }}">CRM{% if n_crm %} <span class="nav-count" title="Wiedervorlagen heute">{{ n_crm }}</span>{% endif %}</a>{% endif %}{% endif %}
       {% if not mit_person or darf('mailer') %}<a href="{{ url_for('compose') }}" class="{{ 'on' if sec == 'mailer' }}">Mailer</a>{% endif %}
@@ -70,6 +71,8 @@
         {% if darf('einstellungen') %}<a href="{{ url_for('settings.settings') }}">Einstellungen</a>{% endif %}
         {% if mit_person and darf('mailer') %}<a href="{{ url_for('compose') }}">Mailer</a>{% endif %}
         {% if darf('kalender') %}<a href="{{ url_for('kalender.mein') }}">Mein Kalender</a>{% endif %}
+        {% if darf('cockpit') %}<a href="{{ url_for('cockpit.cockpit') }}">Cockpit</a>
+        <a href="{{ url_for('cockpit.wochengespraech') }}">Wochengespräch</a>{% endif %}
         {% if not mit_person or darf('mailer') %}<a href="{{ url_for('history') }}">Verlauf des Mailers</a>{% endif %}
         {% if darf('kosten') %}<a href="{{ url_for('leads.costs') }}">Kosten</a>{% endif %}
         {% if darf('einstellungen') %}<a href="{{ url_for('leads.system') }}">Systemcheck</a>{% endif %}

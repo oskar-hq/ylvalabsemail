@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 from markupsafe import Markup, escape
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from . import aufgaben, branchentest, crm, firma, kalender, leaddb, mailbox
+from . import aufgaben, branchentest, crm, firma, kalender, kpis, leaddb, mailbox
 from .leads_views import db, me
 from .main import SETTINGS, darf, login_required, safe_next
 
@@ -76,6 +76,9 @@ def mein_tag():
                                  jetzt.date().isoformat() + "T23:59", key)
         ergebnisse = kalender.offene_ergebnisse(c, key)
         freigaben = kalender.freigaben_fuer(c, key)
+    woche = kpis.woche_von()
+    ziele = kpis.ziele_der_woche(c, woche, key) if darf("cockpit") else []
+    aufstiege = kpis.aufstiege(c, key) if darf("cockpit") else []
     pruefungen = branchentest.pruefungen(c, key) if darf("leads") else []
     meine_leads = branchentest.recherche_kpis(c, key) if darf("leads") else None
     person = firma.person(c, key)
@@ -86,6 +89,8 @@ def mein_tag():
     html = render_template("mein_tag.html", account=g.account, t=tag, gruss=gruss, akquise=akquise,
                            pruefungen=pruefungen, meine_leads=meine_leads, termine=termine, ergebnisse=ergebnisse,
                            termin_freigaben=freigaben, kalender_verbunden=kalender.verbunden(c, key),
+                           ziele=ziele, woche=woche, aufstiege=aufstiege,
+                           katalog=[k for k in kpis.KATALOG if k["fn"] and k["je_person"]],
                            vorname=(person["name"] if person else "Team").split(" ")[0],
                            datum=f"{wochentag[jetzt.weekday()]}, {jetzt.day}. {monat[jetzt.month - 1]}",
                            **_form_kontext(), demo=SETTINGS["DEMO_MODE"])

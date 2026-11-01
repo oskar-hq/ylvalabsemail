@@ -216,6 +216,16 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
   „Firmen OS“ eintragen. Danach verbindet jede Person unter „Mein Kalender“ ihr eigenes Konto. Google zeigt dabei
   einmal „App nicht überprüft“ (über „Erweitert“ weiter).
 
+## Cockpit, Wochenziele und Wochengespräch (Stufe 4)
+
+- **Cockpit**: alle KPIs je Bereich für die Woche, Verlauf über acht Wochen, Ampel gegen den Zielwert. Team oder
+  eine Person (persönliche Zahlen sieht die Person selbst und wer sie führt).
+- **Wochenziele**: bis zu drei je Person und Woche, auf „Mein Tag“. Mit Kennzahl zeigt das OS den Stand live.
+- **Wochengespräch**: Agenda mit Zahlen der Woche, je Person Ziele und wo es hängt, offene Entscheidungen.
+  Aufgaben und Ziele für nächste Woche direkt dort festhalten. Vom Serientermin „Wochengespräch“ verlinkt.
+- **Lernstufen**: Das OS misst die Aufstiegsbedingung (angenommene Leads, Entwürfe ohne große Änderung,
+  Termine und begleitete Gespräche) und schlägt den Aufstieg vor; freigeben muss die Person, die führt.
+
 ## Team: Konten, eigenes CRM, Vorlage, Zahlen
 
 - **Anmelden mit Name und Passwort**. Passwörter liegen nur als scrypt-Hash in der Datenbank, nach Fehlversuchen
@@ -372,6 +382,8 @@ app/branchentest_views.py  Seiten Branchentest, Testbranche, Leads prüfen; Knö
 app/kalender.py        Termine, Freigabe der Einladung, Vorschläge, Erinnerungen, Ergebnis, Briefing, Serien, ICS
 app/google_kalender.py Google OAuth, frei/belegt, Termine mit Meet (ohne Zusatzbibliothek)
 app/kalender_views.py  Seiten Kalender, Termin, Mein Kalender, Einstellungen → Kalender
+app/kpis.py            KPI-Katalog, Zielwerte, Wochenziele, Agenda, Lernstufen-Messung
+app/cockpit_views.py   Seiten Cockpit, Wochengespräch; Wochenziele, Aufstiege
 app/scoring.py         Bewertung nach Regeln und Einordnen von Antworten, beides ohne KI
 app/regions.py         Kreise: Grenzen, Statistik je Kreis, Wachstumsregionen
 app/agent.py           Hintergrund-Arbeiter: suchen, bewerten, Antworten lesen, Entwürfe auf Wunsch

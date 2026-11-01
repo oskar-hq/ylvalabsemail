@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_os.html" import i, toasts, aufgabe_zeile, sheet_neu, avatar %}
+{% from "_ziele.html" import ziele_liste, ziel_sheet %}
 {% block title %}Mein Tag · Ylva Labs{% endblock %}
 {% block content %}
 {% set me = account.team %}
@@ -47,6 +48,26 @@
       {% for k in ergebnisse %}<li><a class="os-row" href="{{ url_for('kalender.detail', tid=k.id) }}#ergebnis"><span class="os-ico">{{ i('check') }}</span>
         <span class="os-txt"><b>Wie war es? {{ k.titel }}</b><span>{{ k.zeit }}{% if k.lead_name %} · {{ k.lead_name }}{% endif %}</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
     </ul>
+  </section>
+  {% endif %}
+
+  {% if darf('cockpit') %}
+  <section class="os-section" id="ziele">
+    <h2 class="os-headline">Meine Wochenziele</h2>
+    {% if ziele %}{{ ziele_liste(ziele, url_for('aufgaben.mein_tag')) }}
+    {% else %}<p class="os-empty">Noch keine Ziele für diese Woche. Drei reichen.</p>{% endif %}
+    <div class="os-btns" style="margin-top:12px">
+      {% if ziele|length < 3 %}<button type="button" class="os-btn small quiet" data-sheet="sheet-ziel">Ziel eintragen</button>{% endif %}
+      <a class="os-btn small quiet" href="{{ url_for('cockpit.cockpit', person=account.team) }}">Meine Zahlen</a>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if aufstiege %}
+  <section class="os-section">
+    <h2 class="os-headline">Aufstieg freigeben</h2>
+    <ul class="os-list">{% for f in aufstiege %}<li><a class="os-row" href="{{ url_for('cockpit.wochengespraech') }}">{{ avatar(f.person_name) }}
+      <span class="os-txt"><b>{{ f.person_name }}: Lernstufe {{ f.nach }}</b><span>{{ f.stand.text }}</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}</ul>
   </section>
   {% endif %}
 
@@ -132,4 +153,5 @@
   <button type="button" class="os-btn ink" data-sheet="sheet-neu" data-set-art="anfrage"><span>Anfrage</span>{{ i('anfrage') }}</button>
 </div>
 {{ sheet_neu(bereiche, personen, meine_bereiche, me, heute, url_for('aufgaben.mein_tag')) }}
+{% if darf('cockpit') %}{{ ziel_sheet('sheet-ziel', me, woche, katalog, url_for('aufgaben.mein_tag')) }}{% endif %}
 {% endblock %}

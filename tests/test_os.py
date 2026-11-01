@@ -827,5 +827,216 @@ class KalenderWebTest(WebBasis):
         self.assertEqual(self.post(f"/kalender/{tid}/absagen").status_code, 403)  # nicht seiner
 
 
+# ---------------------------------------------------------------- Stufe 4: KPIs, Ziele, Wochengespräch, Lernstufen
+
+
+class KpiTest(unittest.TestCase):
+    def setUp(self):
+        from app import kpis
+        self.kp = kpis
+        self.c = frische_db()
+        self.omid = firma.person_anlegen(self.c, "oskar", "Omid Beispiel", "recherche", bereiche_neu=["akquise"],
+                                         lernstufe=1)
+        self.woche = kpis.woche_von()
+
+    def pruefung(self, person, status, wochen_zurueck=0, tag=1):
+        from datetime import datetime as dt
+        von, _ = self.kp.woche_grenzen(self.kp.woche_plus(self.woche, -wochen_zurueck))
+        at = (dt.fromisoformat(von) + timedelta(days=tag, hours=10)).isoformat(timespec="seconds")
+        lid = lead_anlegen(self.c, f"L{status}{wochen_zurueck}{tag}")
+        self.c.execute("INSERT INTO freigaben (art, objekt_typ, objekt_id, stufe, angefragt_von, angefragt_am, pruefer, "
+                       "status, entschieden_am) VALUES ('lead_pruefung','lead',?,'erst',?,?, 'hamza', ?, ?)",
+                       (lid, person, at, status, at))
+        self.c.commit()
+
+    def test_wochen(self):
+        kp = self.kp
+        self.assertEqual(kp.woche_grenzen("2026-W45"), ("2026-11-02T00:00:00", "2026-11-09T00:00:00"))
+        self.assertEqual(kp.woche_plus("2026-W01", -1), "2025-W52")
+        self.assertEqual(kp.woche_text("2026-W45"), "KW 45 · 2.11. bis 8.11.")
+        with self.assertRaises(kp.KpiError):
+            kp.woche_grenzen("quatsch")
+
+    def test_kennzahlen_aus_ereignissen(self):
+        kp, c = self.kp, self.c
+        for st in ("angenommen", "angenommen", "angenommen", "abgelehnt"):
+            self.pruefung(self.omid, st)
+        self.pruefung("hamza", "angenommen")
+        self.pruefung(self.omid, "angenommen", wochen_zurueck=1)
+        self.assertEqual(kp.wert(c, "qualifizierte_leads", self.woche, self.omid), 3)
+        self.assertEqual(kp.wert(c, "qualifizierte_leads", self.woche), 4)
+        self.assertEqual(kp.wert(c, "anteil_angenommen", self.woche, self.omid), 75)
+        z = kp.zeile(c, "qualifizierte_leads", self.woche, self.omid)
+        self.assertEqual((len(z["verlauf"]), z["verlauf"][-2:], z["vorwoche"]), (8, [1, 3], 1))
+        # Termine, Kontakte, Gespräche, Kunden, Aufgaben, KI-Kosten
+        from app import aufgaben, crm, kalender
+        jetzt = datetime_now()
+        lid = lead_anlegen(c, "Kunde K", stage="kontaktiert", owner="oskar")
+        kalender.anlegen(c, self.omid, "Erstgespräch", (jetzt - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M"),
+                         verantwortlich="oskar", personen=[self.omid], lead_id=lid)
+        tid = c.execute("SELECT MAX(id) FROM termine").fetchone()[0]
+        kalender.ergebnis(c, "oskar", tid, "stattgefunden")
+        crm.set_stage(c, lid, "kunde", author="Oskar Jacobsen")
+        from app import branchentest
+        branchentest.kontakt(c, self.omid, lead_anlegen(c, "Kontakt K"), "telefon")
+        aid = aufgaben.anlegen(c, "oskar", "X", "markt", HEUTE, person="oskar")
+        aufgaben.erledigen(c, "oskar", aid)
+        leaddb.record_usage(c, "entwurf", "m", {"input": 0, "output": 0, "cache_write": 0, "cache_read": 0}, 1.0, person="oskar")
+        self.assertEqual(kp.wert(c, "termine_gebucht", self.woche, self.omid), 1)
+        self.assertEqual(kp.wert(c, "kontakte", self.woche, self.omid), 1)
+        self.assertEqual(kp.wert(c, "erstgespraeche", self.woche, "oskar"), 1)
+        self.assertEqual(kp.wert(c, "neue_kunden", self.woche), 1)
+        self.assertEqual(kp.wert(c, "abschlussquote", self.woche), 100)
+        self.assertEqual(kp.wert(c, "aufgaben_erledigt", self.woche, "oskar"), 1)
+        self.assertGreater(kp.wert(c, "ki_kosten", self.woche, "oskar"), 0)
+        self.assertIsNone(kp.wert(c, "aufgaben_ueberfaellig", kp.woche_plus(self.woche, -2)))  # nur Stand jetzt
+        self.assertIsNone(kp.wert(c, "stunden_pro_build", self.woche))  # kommt mit Stufe 5
+
+    def test_zielwerte_und_ampel(self):
+        kp, c = self.kp, self.c
+        self.assertEqual(kp.ziel(c, "anteil_angenommen"), 80)  # Startwert aus den Rollen
+        kp.ziel_setzen(c, "oskar", "qualifizierte_leads", "40")
+        kp.ziel_setzen(c, "oskar", "qualifizierte_leads", "20", self.omid)
+        self.assertEqual((kp.ziel(c, "qualifizierte_leads"), kp.ziel(c, "qualifizierte_leads", self.omid)), (40, 20))
+        self.assertEqual(kp.ziel(c, "qualifizierte_leads", "hamza"), 40)  # ohne eigenes: Team
+        self.assertEqual([kp.ampel("qualifizierte_leads", w, 40) for w in (40, 30, 10, None)],
+                         ["gruen", "gelb", "rot", "grau"])
+        self.assertEqual(kp.ampel("ki_kosten", 5, 10), "gruen")
+        with self.assertRaises(kp.KpiError):
+            kp.ziel_setzen(c, "oskar", "kassenstand", "1000")
+        kp.ziel_setzen(c, "oskar", "qualifizierte_leads", "")
+        self.assertIsNone(kp.ziel(c, "qualifizierte_leads"))
+
+    def test_wer_sieht_wessen_zahlen(self):
+        kp, c = self.kp, self.c
+        self.assertTrue(kp.fuehrt(c, "hamza", self.omid))  # verantwortlich für Akquise
+        self.assertTrue(kp.fuehrt(c, "oskar", "hamza"))  # Markt liegt über Akquise
+        self.assertFalse(kp.fuehrt(c, self.omid, "hamza"))
+        self.assertFalse(kp.fuehrt(c, "finn", "hamza"))
+        self.assertEqual({p["key"] for p in kp.sichtbare_personen(c, "hamza")}, {"hamza", self.omid})
+        self.assertEqual({p["key"] for p in kp.sichtbare_personen(c, self.omid)}, {self.omid})
+        self.assertEqual(len(kp.sichtbare_personen(c, "finn")), 4)  # Gründer verwalten das Cockpit
+
+    def test_wochenziele(self):
+        kp, c = self.kp, self.c
+        self.pruefung(self.omid, "angenommen")
+        zid = kp.ziel_anlegen(c, "hamza", self.omid, self.woche, "Zwei gute Leads", "qualifizierte_leads", "2")
+        kp.ziel_anlegen(c, self.omid, self.omid, self.woche, "Branchenliste fertig")
+        z = kp.ziele_der_woche(c, self.woche, self.omid)
+        self.assertEqual((z[0]["ist"], z[0]["fortschritt"], z[0]["erreicht_live"]), (1, 50, False))
+        self.assertIsNone(z[1]["kpi_key"])
+        kp.ziel_anlegen(c, self.omid, self.omid, self.woche, "Drittes")
+        with self.assertRaises(kp.KpiError):
+            kp.ziel_anlegen(c, self.omid, self.omid, self.woche, "Viertes")  # höchstens drei
+        with self.assertRaises(kp.KpiError):
+            kp.ziel_anlegen(c, "oskar", "hamza", self.woche, "Mit Kennzahl", "kontakte", "")  # Zielwert fehlt
+        self.assertFalse(kp.darf_ziele(c, self.omid, "hamza"))
+        with self.assertRaises(kp.KpiError):
+            kp.ziel_bewerten(c, "finn" if False else self.omid, zid + 99, "erreicht")
+        kp.ziel_bewerten(c, self.omid, zid, "erreicht", "mit Hilfe")
+        self.assertEqual(kp.ziele_der_woche(c, self.woche, self.omid)[0]["status"], "erreicht")
+        self.assertTrue(firma.protokoll(c, art="ziel"))
+
+    def test_entwurf_aenderung_messen(self):
+        kp, c = self.kp, self.c
+        lid = lead_anlegen(c, "Entwurf E")
+        text = "Guten Tag, wir helfen kleinen Betrieben, Büroarbeit zu sparen. Hätten Sie kurz Zeit für ein Gespräch?"
+        kp.entwurf_merken(c, lid, self.omid, text)
+        kp.entwurf_merken(c, lid, "oskar", text + " Viele Grüße")  # Oskar ändert: Omids Stand bleibt
+        self.assertGreater(kp.entwurf_freigegeben(c, lid, "oskar", text + " Viele Grüße"), 0.9)
+        self.assertEqual(kp.entwuerfe(c, *kp.woche_grenzen(self.woche), self.omid), (1, 1))
+        lid2 = lead_anlegen(c, "Entwurf F")
+        kp.entwurf_merken(c, lid2, self.omid, text)
+        kp.entwurf_freigegeben(c, lid2, "oskar", "Komplett anderer Text, neu geschrieben.")
+        self.assertEqual(kp.wert(c, "entwuerfe_ohne_aenderung", self.woche, self.omid), 50)
+        lid3 = lead_anlegen(c, "Selbst")
+        kp.entwurf_merken(c, lid3, "oskar", text)
+        self.assertIsNone(kp.entwurf_freigegeben(c, lid3, "oskar", text))  # selbst freigegeben zählt nicht
+
+    def test_lernstufe_1_aufstieg(self):
+        kp, c = self.kp, self.c
+        for w in range(1, 5):  # vier abgeschlossene Wochen mit je 5 Prüfungen, 4 angenommen = 80 %
+            for n, st in enumerate(["angenommen"] * 4 + ["abgelehnt"]):
+                self.pruefung(self.omid, st, wochen_zurueck=w, tag=n % 5)
+        stand = kp.lernstand(c, self.omid)
+        self.assertTrue(stand["erfuellt"], stand)
+        fid = kp.aufstieg_pruefen(c, self.omid)
+        self.assertIsNotNone(fid)
+        self.assertIsNone(kp.aufstieg_pruefen(c, self.omid))  # kein zweiter Vorschlag
+        f = kp.aufstiege(c, "oskar")[0]
+        self.assertEqual((f["person"], f["nach"]), (self.omid, 2))
+        self.assertIn("Aufstieg freigeben: Omid Beispiel", [r["title"] for r in leaddb.notices(c, "o", 9, "oskar")[0]])
+        with self.assertRaises(kp.KpiError):
+            kp.aufstieg_entscheiden(c, self.omid, fid, True)  # nicht selbst
+        with self.assertRaises(kp.KpiError):
+            kp.aufstieg_entscheiden(c, "oskar", fid, False, "")
+        kp.aufstieg_entscheiden(c, "oskar", fid, True)
+        self.assertEqual(firma.person(c, self.omid)["lernstufe"], 2)
+        self.assertEqual(kp.lernstand(c, self.omid)["stufe"], 2)
+        self.assertFalse(kp.lernstand(c, self.omid)["erfuellt"])  # jetzt zählen Entwürfe
+
+    def test_lernstufe_1_noch_nicht(self):
+        kp, c = self.kp, self.c
+        for w in range(1, 5):
+            for n, st in enumerate(["angenommen"] * 3 + ["abgelehnt"] * 2):  # 60 %
+                self.pruefung(self.omid, st, wochen_zurueck=w, tag=n % 5)
+        self.assertFalse(kp.lernstand(c, self.omid)["erfuellt"])
+        self.assertIsNone(kp.aufstieg_pruefen(c, self.omid))
+
+    def test_lernstufe_3(self):
+        kp, c = self.kp, self.c
+        firma.person_aendern(c, "oskar", self.omid, "Omid Beispiel", "recherche", bereiche_neu=["akquise"], lernstufe=3)
+        leaddb.kv_set(c, "regel:lernstufen", dict(kp.lernregeln(c), s3_termine=1, s3_gespraeche=1))
+        from app import kalender
+        lid = lead_anlegen(c, "Termin T")
+        tid = kalender.anlegen(c, self.omid, "Gespräch", (datetime_now() - timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M"),
+                               verantwortlich="oskar", personen=[self.omid], lead_id=lid)
+        self.assertFalse(kp.lernstand(c, self.omid)["erfuellt"])
+        kalender.ergebnis(c, "oskar", tid, "stattgefunden")
+        self.assertTrue(kp.lernstand(c, self.omid)["erfuellt"])
+
+    def test_agenda(self):
+        kp, c = self.kp, self.c
+        kp.ziel_anlegen(c, "oskar", "hamza", self.woche, "Liste fertig")
+        a = kp.agenda(c, "oskar", self.woche)
+        self.assertEqual(len(a["personen"]), 4)
+        hamza = next(p for p in a["personen"] if p["person"]["key"] == "hamza")
+        self.assertEqual(hamza["ziele"][0]["text"], "Liste fertig")
+        self.assertEqual(len(kp.agenda(c, self.omid, self.woche)["personen"]), 1)
+
+
+def datetime_now():
+    from datetime import datetime as dt
+    return dt.now()
+
+
+class CockpitWebTest(WebBasis):
+    def test_seiten_und_rechte(self):
+        from app import kpis
+        c = self.c
+        omid = firma.person_anlegen(c, "oskar", "Omid Webtest", "recherche", bereiche_neu=["akquise"], lernstufe=1)
+        self.addCleanup(lambda: (c.execute("DELETE FROM team WHERE key=?", (omid,)),
+                                 c.execute("DELETE FROM person_bereiche WHERE person=?", (omid,)),
+                                 c.execute("DELETE FROM ziele"), c.commit()))
+        for url in ("/cockpit", f"/cockpit?person={omid}", "/cockpit?woche=2026-W01", "/wochengespraech",
+                    "/mein-tag"):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+        r = self.post("/ziele/neu", {"person": omid, "text": "Zehn Leads", "kpi": "qualifizierte_leads",
+                                     "zielwert": "10"}, headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"], r.get_data(as_text=True))
+        self.assertIn("Zehn Leads", self.client.get("/wochengespraech").get_data(as_text=True))
+        self.assertEqual(self.post("/cockpit/ziel", {"kpi": "kontakte", "wert": "30"}).status_code, 302)
+        self.addCleanup(lambda: (c.execute("DELETE FROM kpi_ziele WHERE kpi_key='kontakte'"), c.commit()))
+        self.als("hamza")
+        self.assertEqual(self.client.get(f"/cockpit?person={omid}").status_code, 200)  # Hamza führt Omid
+        self.assertEqual(self.client.get("/cockpit?person=finn").status_code, 403)
+        self.assertEqual(self.post("/cockpit/ziel", {"kpi": "kontakte", "wert": "1"}).status_code, 403)
+        self.assertEqual(self.post("/cockpit/lernstufen", {"wochen": "1"}).status_code, 403)
+        r = self.post("/ziele/neu", {"person": "finn", "text": "Fremdes Ziel"})
+        self.assertEqual(r.status_code, 403)
+        self.assertIn("Meine Wochenziele", self.client.get("/mein-tag").get_data(as_text=True))
+        self.assertEqual(kpis.woche_von(date(2026, 11, 1)), "2026-W44")
+
+
 if __name__ == "__main__":
     unittest.main()

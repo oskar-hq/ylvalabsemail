@@ -283,6 +283,29 @@ body.os-sheet-open .os-page,body.os-sheet-open main.page{transform:scale(.94);bo
 .os-hinweis{margin:24px 0 0;padding:16px;border-radius:var(--radius-sm);background:var(--surface-sunken);font:500 15px/20px var(--sans)}
 .os-hinweis.err{color:var(--negative)}
 
+/* ---------------------------------------------------------------- Cockpit und Wochengespräch */
+.os-kpi .os-wert{font:700 22px/28px var(--display);letter-spacing:-.01em;font-variant-numeric:tabular-nums;white-space:nowrap}
+.os-kpi.aus .os-txt b,.os-kpi.aus .os-wert{color:var(--text-secondary)}
+.os-kpi .os-end{flex-direction:column;align-items:flex-end;gap:2px}
+.os-spark{flex:none;width:96px;height:28px;color:var(--text-primary)}
+.os-spark polyline{fill:none;stroke:currentColor;stroke-width:1.5;stroke-linejoin:round;stroke-linecap:round;
+  stroke-dasharray:400;stroke-dashoffset:400;animation:os-draw 600ms ease-out forwards}
+@keyframes os-draw{to{stroke-dashoffset:0}}
+@media (max-width:479px){.os-spark{display:none}}
+.os-wochen{display:flex;gap:4px}
+.os-wochen i{width:8px;height:8px;border-radius:50%;background:var(--toggle-off)}
+.os-wochen i.ok{background:var(--positive)}
+.os-ampel.rot{background:var(--negative)}
+.os-person{margin:32px 0 0;padding:24px 0 0}
+.os-person+.os-person{margin-top:48px}
+.os-person-kopf{display:flex;align-items:center;gap:12px;margin:0 0 12px;font:700 22px/28px var(--display);letter-spacing:-.01em}
+.os-zahl{display:inline-flex;align-items:baseline;gap:6px;height:36px;padding:0 14px;border-radius:var(--radius-full);background:var(--surface-sunken);
+  font:500 15px/36px var(--sans);color:var(--text-secondary)}
+.os-zahl b{color:var(--text-primary);font-weight:700}
+.os-zielknoepfe{display:flex;gap:12px;flex:none}
+@media (max-width:479px){.os-zielknoepfe{flex-direction:column;gap:6px;align-items:flex-end}}
+.os-link.leise{color:var(--text-secondary);font-weight:500;font-size:13px}
+
 /* ---------------------------------------------------------------- Weniger Bewegung */
 @media (prefers-reduced-motion:reduce){
   :root{--t-smooth:150ms;--t-snappy:150ms;--t-bouncy:150ms;--spring-smooth:linear;--spring-snappy:linear;--spring-bouncy:linear}
@@ -290,6 +313,7 @@ body.os-sheet-open .os-page,body.os-sheet-open main.page{transform:scale(.94);bo
   dialog.os-sheet[open].in{opacity:1}
   body.os-sheet-open .os-page,body.os-sheet-open main.page{transform:none}
   .os-list.anim>li{animation:none!important}
+  .os-spark polyline{animation:none;stroke-dashoffset:0}
   .os-toast,.os-toast.in,.os-toast.out{transform:translate(-50%,0);transition:opacity 150ms}
   .os-row.leaving{transform:none}
   .os-btn:active,.os-tile:active,.os-back:active,.os-check:active,.os-chips a:active,.os-page button:active:not(:disabled){transform:none}

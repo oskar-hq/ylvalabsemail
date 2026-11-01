@@ -1350,6 +1350,11 @@ def tick():
                 kalender.takt(c)
             except Exception:
                 log.exception("Fehler im Kalender-Takt")
+            try:  # Lernstufen einmal am Tag prüfen, Aufstieg vorschlagen (Firmen-OS Stufe 4)
+                from . import kpis
+                kpis.takt(c)
+            except Exception:
+                log.exception("Fehler bei der Lernstufen-Messung")
             reports.notify_released(c, notify)
             start_scheduled(c)
             run = c.execute("SELECT id FROM runs WHERE status='wartet' ORDER BY id LIMIT 1").fetchone()

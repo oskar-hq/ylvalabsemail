@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS person_bereiche (
 MODULE = [
     ("aufgaben", "Aufgaben und Anfragen"),
     ("kalender", "Kalender und Termine"),
+    ("cockpit", "Zahlen, Ziele und Wochengespräch"),
     ("leads", "Leads und Akquise"),
     ("crm", "CRM und Postfach"),
     ("mailer", "Mailer"),
@@ -58,8 +59,8 @@ KEY_RE = re.compile(r"[a-z][a-z0-9_-]{1,29}")
 EINLADUNG_TAGE = 7  # Standard; einstellbar unter Einstellungen → Personen (kv „regel:einladung_tage“)
 
 GRUENDER = {k: VERWALTEN for k in MODUL_KEYS}
-RECHERCHE = {"aufgaben": BEARBEITEN, "kalender": BEARBEITEN, "leads": BEARBEITEN, "crm": BEARBEITEN, "mailer": BEARBEITEN,
-             "kosten": 0, "protokoll": 0, "einstellungen": 0, "personen": 0}
+RECHERCHE = {"aufgaben": BEARBEITEN, "kalender": BEARBEITEN, "cockpit": BEARBEITEN, "leads": BEARBEITEN,
+             "crm": BEARBEITEN, "mailer": BEARBEITEN, "kosten": 0, "protokoll": 0, "einstellungen": 0, "personen": 0}
 
 # Startwerte, laufen genau einmal (leaddb.DATA_MIGRATIONS). Danach wird alles in der App gepflegt.
 SEED = [

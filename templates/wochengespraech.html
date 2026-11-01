@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, avatar, sheet_neu %}
+{% from "_ziele.html" import ziele_liste, ziel_sheet %}
+{% block title %}Wochengespräch · Ylva Labs{% endblock %}
+{% block content %}
+{% set hier = url_for('cockpit.wochengespraech', woche=a.woche) %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">{{ a.text }}</span>
+    <h1 class="os-title-l">Wochengespräch</h1>
+    <p class="os-sub os-lead">Die Agenda stellt das OS zusammen. Was im Gespräch entschieden wird, gleich hier als Aufgabe oder Ziel festhalten.</p>
+  </header>
+  <div class="os-chips">
+    <a href="{{ url_for('cockpit.wochengespraech', woche=vor) }}">‹ Vorwoche</a>
+    <a href="{{ url_for('cockpit.wochengespraech') }}">Diese Woche</a>
+    <a href="{{ url_for('cockpit.wochengespraech', woche=nach) }}">Nächste ›</a>
+  </div>
+
+  <section class="os-section" style="margin-top:24px">
+    <h2 class="os-headline">1. Zahlen der Woche</h2>
+    <ul class="os-list">{% for z in a.team %}<li class="os-row os-kpi">
+      <span class="os-ampel {{ z.ampel }}"></span><span class="os-txt"><b>{{ z.label }}</b><span>Vorwoche {{ z.vorwoche|kpi(z.einheit) }}{% if z.ziel is not none %} · Ziel {{ z.ziel|kpi(z.einheit) }}{% endif %}</span></span>
+      <span class="os-end"><span class="os-wert">{{ z.wert|kpi(z.einheit) }}</span></span></li>{% endfor %}</ul>
+  </section>
+
+  <section class="os-section">
+    <h2 class="os-headline">2. Pro Person</h2>
+    {% for p in a.personen %}
+    <div class="os-person">
+      <h3 class="os-person-kopf">{{ avatar(p.person.name) }}<span>{{ p.person.name }}</span></h3>
+      {% if p.zahlen %}<div class="os-chips">{% for label, w, einheit in p.zahlen %}<span class="os-zahl"><b>{{ w|kpi(einheit) }}</b> {{ label }}</span>{% endfor %}</div>{% endif %}
+      <p class="os-sub" style="margin-top:8px">Ziele dieser Woche</p>
+      {% if p.ziele %}{{ ziele_liste(p.ziele, hier) }}{% else %}<p class="os-empty">Keine Ziele eingetragen.</p>{% endif %}
+      {% set haengt = p.ueberfaellig|length + p.anfragen|length + p.ergebnisse|length + p.pruefungen %}
+      {% if haengt %}
+      <p class="os-sub" style="margin-top:16px">Wo es hängt</p>
+      <ul class="os-list">
+        {% for x in p.ueberfaellig[:5] %}<li><a class="os-row" href="{{ url_for('aufgaben.detail', aid=x.id) }}"><span class="os-ico red">!</span><span class="os-txt"><b>{{ x.titel }}</b><span>überfällig seit {{ x.tag }}</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
+        {% for x in p.anfragen %}<li><a class="os-row" href="{{ url_for('aufgaben.detail', aid=x.id) }}"><span class="os-ico">{{ i('anfrage') }}</span><span class="os-txt"><b>{{ x.titel }}</b><span>Anfrage von {{ x.anfrage_von_name }}, unentschieden</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
+        {% for x in p.ergebnisse %}<li><a class="os-row" href="{{ url_for('kalender.detail', tid=x.id) }}#ergebnis"><span class="os-ico">{{ i('kalender') }}</span><span class="os-txt"><b>{{ x.titel }}</b><span>Ergebnis fehlt</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
+        {% if p.pruefungen %}<li class="os-row"><span class="os-ico">{{ p.pruefungen }}</span><span class="os-txt"><b>Offene Freigaben</b><span>Prüfungen und Einladungen, die auf {{ p.person.name.split(' ')[0] }} warten</span></span></li>{% endif %}
+      </ul>
+      {% endif %}
+      {% if p.lernstand %}<p class="os-caption" style="margin-top:12px">Lernstufe {{ p.lernstand.stufe }}: {{ p.lernstand.text }}</p>{% endif %}
+      <p class="os-sub" style="margin-top:16px">Ziele für nächste Woche</p>
+      {% if p.naechste_ziele %}{{ ziele_liste(p.naechste_ziele, hier, False) }}{% endif %}
+      <div class="os-btns" style="margin-top:12px">
+        {% if p.naechste_ziele|length < 3 %}<button type="button" class="os-btn small quiet" data-sheet="sheet-ziel-{{ p.person.key }}">Ziel für nächste Woche</button>{% endif %}
+        {% if darf('aufgaben', 2) %}<button type="button" class="os-btn small quiet" data-sheet="sheet-neu" data-set-person="{{ p.person.key }}" data-set-art="aufgabe">Aufgabe festhalten</button>{% endif %}
+      </div>
+    </div>
+    {% endfor %}
+  </section>
+
+  <section class="os-section">
+    <h2 class="os-headline">3. Offene Entscheidungen</h2>
+    {% if a.aufstiege %}<ul class="os-list">{% for f in a.aufstiege %}<li class="os-row">
+      {{ avatar(f.person_name) }}<span class="os-txt"><b>{{ f.person_name }}: Aufstieg auf Lernstufe {{ f.nach }}</b><span>{{ f.stand.text }}</span></span>
+      {% if f.pruefer == account.team or darf('personen', 4) %}<form method="post" action="{{ url_for('cockpit.aufstieg', fid=f.id) }}" data-os-fetch="reload" class="os-zielknoepfe">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}">
+        <button class="os-link" name="ok" value="1">Freigeben</button></form>
+        <button type="button" class="os-link danger" data-sheet="sheet-aufstieg-{{ f.id }}">Noch nicht</button>{% endif %}
+    </li>{% endfor %}</ul>{% endif %}
+    {% set labels = {'lead_pruefung': 'Lead-Prüfungen', 'termin_einladung': 'Einladungen an Kunden', 'lernstufe': 'Aufstiege'} %}
+    {% if a.offen %}<dl class="os-kv" style="margin-top:16px">{% for art, n in a.offen.items() %}<dt>{{ labels.get(art, art) }}</dt><dd>{{ n }} offen</dd>{% endfor %}</dl>
+    {% elif not a.aufstiege %}<p class="os-empty">Nichts offen.</p>{% endif %}
+    <p class="os-caption" style="margin-top:16px">Notfälle der Woche und das Entscheidungs-Log kommen mit Stufe 6.</p>
+  </section>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('cockpit.cockpit', woche=a.woche) }}" aria-label="Zum Cockpit">{{ i('back') }}</a>
+</div>
+{% for p in a.personen %}{{ ziel_sheet('sheet-ziel-' ~ p.person.key, p.person.key, naechste, katalog, hier, p.person.name) }}{% endfor %}
+{% for f in a.aufstiege %}
+<dialog class="os-sheet" id="sheet-aufstieg-{{ f.id }}" aria-label="Aufstieg noch nicht">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('cockpit.aufstieg', fid=f.id) }}" data-os-fetch="reload" data-os-require="textarea">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="ok" value="0">
+      <span class="os-eyebrow">{{ f.person_name }} · Lernstufe {{ f.nach }}</span>
+      <textarea class="os-ask" name="grund" rows="3" maxlength="500" placeholder="Was fehlt noch?" required></textarea>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Speichern</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endfor %}
+{% if darf('aufgaben', 2) %}{{ sheet_neu(bereiche, personen, [], account.team, heute, hier) }}{% endif %}
+{% endblock %}
