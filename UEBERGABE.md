@@ -85,6 +85,12 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   Unter Einstellungen → Kunden-Bereich die Mailtexte lesen. Einmal an einem Testprojekt mit der eigenen Adresse
   „Zugang per Mail schicken“ und anmelden. Wochenberichte starten am nächsten Freitag für Projekte ab „Bau“; wer
   das nicht will, stellt die Stufe unter Freigaben und Entscheidungen auf C.
+- **Firmen-OS Stufe 8 (01.11.2026):** Finanzen. Nach dem Update: unter Einstellungen → Finanzen die Firmendaten
+  (Anschrift, Steuernummer, Bank) eintragen, sonst geht keine Rechnung zur Freigabe; Umsatzsteuer prüfen (Startwert
+  Kleinunternehmer, mit dem Steuerberater klären). Laufende Kosten und den Kassenstand einmal eintragen. Ab dem
+  nächsten Monatsersten bereitet das OS Monatsrechnungen für Projekte live/im Betrieb mit Pauschale vor; sie warten in
+  der Freigabe-Zentrale. Wer schon Rechnungen außerhalb des OS geschrieben hat: im Nummernformat einen anderen
+  Präfix wählen oder mit dem Steuerberater klären, wie die Nummern weiterlaufen.
 
 - Die automatischen Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.

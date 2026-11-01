@@ -158,6 +158,20 @@
     {% if portal_darf and p.status in ('bau', 'abnahme', 'live', 'betrieb') %}<form method="post" action="{{ url_for('kunden.bericht_jetzt', pid=p.id) }}" data-os-fetch="reload" style="margin-top:12px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="os-btn small quiet">Bericht für diese Woche jetzt vorbereiten</button></form>{% endif %}
   </section>
 
+  <section class="os-section" id="rechnungen">
+    <h2 class="os-headline">Rechnungen</h2>
+    {% if darf('finanzen') %}<ul class="os-list">{% for r in rechnungen %}<li><a class="os-row" href="{{ url_for('finanzen.rechnung', rid=r.id) }}">
+      <span class="os-ampel {{ 'gruen' if r.status == 'bezahlt' else 'rot' if r.ueberfaellig else 'gelb' if r.status in ('offen', 'wartet') else 'grau' }}"></span>
+      <span class="os-txt"><b>{{ r.nummer or 'Entwurf' }} · {{ r.art_label }}</b><span>{{ r.status_label }}{% if r.zeitraum %} · {{ r.zeitraum[5:7] }}/{{ r.zeitraum[:4] }}{% endif %}</span></span>
+      <span class="os-end"><span class="os-wert">{{ r.brutto|kpi('euro') }}</span></span></a></li>
+    {% else %}<li class="os-empty">Noch keine Rechnungen.</li>{% endfor %}</ul>
+    {% if darf('finanzen', 2) %}<div class="os-btns" style="margin-top:12px">
+      {% if p.preis_einmal and not rechnungen|selectattr('art', 'equalto', 'einmal')|rejectattr('status', 'equalto', 'storniert')|list %}<form method="post" action="{{ url_for('finanzen.neu') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="projekt_id" value="{{ p.id }}"><input type="hidden" name="art" value="einmal"><input type="hidden" name="next" value="{{ hier }}"><button class="os-btn small quiet">Rechnung Einmalbetrag</button></form>{% endif %}
+      {% if p.pauschale_monat and p.status in ('live', 'betrieb') %}<form method="post" action="{{ url_for('finanzen.neu') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="projekt_id" value="{{ p.id }}"><input type="hidden" name="art" value="monat"><input type="hidden" name="next" value="{{ hier }}"><button class="os-btn small quiet">Monatsrechnung</button></form>{% endif %}
+    </div>{% endif %}
+    {% else %}<p class="os-empty">Rechnungen sieht, wer das Recht „Finanzen“ hat.</p>{% endif %}
+  </section>
+
   <section class="os-section" id="zeit">
     <h2 class="os-headline">Zeit</h2>
     <p class="os-sub">{{ (p.zeit_min / 60)|round(1)|kpi }} Stunden insgesamt.{% if laeuft %} Läuft gerade: {{ laeuft.titel }} seit {{ laeuft.seit_min }} Min.{% endif %}</p>

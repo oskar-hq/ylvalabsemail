@@ -357,3 +357,8 @@ body.os-sheet-open .os-page,body.os-sheet-open main.page{transform:scale(.94);bo
 @media (max-width:600px){.os-freigabe .os-btns{padding-left:0}.os-stufe-zeile{flex-direction:column;align-items:flex-start;gap:8px}}
 .os-chips label{position:relative}
 .os-field .os-chips input{width:1px;height:1px;min-height:0;padding:0}
+
+/* Stufe 8: Positionen einer Rechnung (Leistung breit, Menge und Preis schmal) */
+.os-pos{display:grid;grid-template-columns:1fr 90px 130px;gap:12px}
+.os-pos .os-field{margin-bottom:12px}
+@media (max-width:479px){.os-pos{grid-template-columns:1fr 1fr}.os-pos .os-field:first-child{grid-column:1/-1}}

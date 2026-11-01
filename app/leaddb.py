@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import aufgaben, branchentest, firma, freigaben, kalender, kpis, notfall, portal, projekte  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
+from . import aufgaben, branchentest, firma, finanzen, freigaben, kalender, kpis, notfall, portal, projekte  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
 
 ROOT = Path(__file__).resolve().parent.parent
 BRAIN_SEED = Path(__file__).resolve().parent / "brain_seed.md"
@@ -213,6 +213,11 @@ DATA_MIGRATIONS = [
     """UPDATE rollen SET rechte = json_set(rechte, '$.entscheidungen', 2) WHERE key = 'recherche'
        AND json_extract(rechte, '$.entscheidungen') IS NULL""",
     *freigaben.SEED,
+    # Stufe 8: neues Modul „Finanzen“ (Gründer verwalten, Recherche ohne Zugriff)
+    """UPDATE rollen SET rechte = json_set(rechte, '$.finanzen', 4) WHERE key = 'gruender'
+       AND json_extract(rechte, '$.finanzen') IS NULL""",
+    """UPDATE rollen SET rechte = json_set(rechte, '$.finanzen', 0) WHERE key = 'recherche'
+       AND json_extract(rechte, '$.finanzen') IS NULL""",
 ]
 
 FOLLOWUP_DAYS = 7  # wird beim Start aus LEADS_FOLLOWUP_DAYS gesetzt, 0 = aus
@@ -249,6 +254,7 @@ def connect(path):
     conn.executescript(freigaben.SCHEMA)
     conn.executescript(notfall.SCHEMA)
     conn.executescript(portal.SCHEMA)
+    conn.executescript(finanzen.SCHEMA)
     for stmt in MIGRATIONS:
         try:
             conn.execute(stmt)

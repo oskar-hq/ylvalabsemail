@@ -1,6 +1,6 @@
 # Ylva Labs Firmen-OS – Bauplan
 
-**Stand:** 01.11.2026 · Stufe 1 bis 7 gebaut, als Nächstes Stufe 8 (Finanzen) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
+**Stand:** 01.11.2026 · Stufe 1 bis 8 gebaut, als Nächstes Stufe 9 (Ein Posteingang) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
 
 Aus dem Ylva Labs Mailer (Akquise, CRM, Mailer) wird das Betriebssystem der Firma. Diese Datei hält fest, **was**
 gebaut werden soll und **nach welchen Prinzipien**, damit alle, die am Code arbeiten (Menschen und KI), dasselbe
@@ -19,7 +19,7 @@ hier ab und trägt Abweichungen ein.
   ist eingerichtet und in Produktion (4.3). Apple/iCloud und ICS-Abo erst danach.
 - WhatsApp kommt später über Unipile, nicht jetzt.
 
-**Stand des Baus:** Stufe 1 bis 7 sind gebaut. Weiter geht es mit Stufe 8, Übergabe dazu in
+**Stand des Baus:** Stufe 1 bis 8 sind gebaut. Weiter geht es mit Stufe 9, Übergabe dazu in
 [BAU-UEBERGABE.md](BAU-UEBERGABE.md).
 
 **Womit der Bau anfing: Stufe 1** (Abschnitt 8). Der Kalender ist Stufe 3. Für Stufe 1 und 2 wird nichts von
@@ -657,8 +657,37 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
     Mailschalter `OUTREACH_EMAIL` bleibt davon unberührt.
   - Einstellungen → Kunden-Bereich: Gültigkeit von Link und Sitzung, Texte der Mails, Berichtstag und -uhrzeit,
     ob Kunden Termine und Abnahme-Checkliste sehen.
-- [ ] **Stufe 8 – Finanzen**
+- [x] **Stufe 8 – Finanzen** (gebaut 01.11.2026, Abweichungen unten)
   Rechnungen, laufende Kosten, Kassenstand, Geld-Regel als Ampel, Export für Steuerberater.
+  *Umsetzung und Abweichungen:*
+  - `app/finanzen.py`, Seiten in `app/finanzen_views.py`, PDF ohne zusätzliche Bibliothek in `app/pdf.py` (Helvetica,
+    A4). Neue Tabellen `rechnungen`, `rechnung_positionen`, `kosten`, `kasse`. Neues Rechte-Modul „Finanzen“
+    (Gründer verwalten, Recherche ohne Zugriff). Seite „Finanzen“ im Konto-Menü, Einstellungen → Finanzen.
+  - **Rechnungen:** Entwurf ohne Nummer (Positionen, Empfänger, Leistungszeitraum bearbeitbar) → „Zur Freigabe“
+    (Freigabe-Stufe `rechnung`, Standard C, B möglich; neue Art in der Zentrale) → mit der Freigabe fortlaufende
+    Nummer je Jahr (Format einstellbar, Standard `RE-2026-0001`), Datum, Fälligkeit, PDF, Dokument im Kunden-Bereich
+    und Mail mit PDF-Anhang an den Kunden (abschaltbar; über das Akquise-Postfach, in der Akte, nie an gesperrte
+    Betriebe). Ablehnen schickt die Rechnung mit Grund zurück in den Entwurf. Ausgestellte Rechnungen ändert man nicht:
+    Stornieren erzeugt eine Stornorechnung mit eigener Nummer und negativen Beträgen (gleicher Steuersatz wie die
+    Rechnung). Bezahlt von Hand markieren; überfällige zeigt die Übersicht. Ohne Firmendaten (Name, Anschrift,
+    Steuernummer oder USt-IdNr.) geht keine Rechnung zur Freigabe.
+  - Vorlagen aus dem Projekt: „Rechnung Einmalbetrag“ (einmal je Projekt, außer nach Storno) und Monatsrechnung
+    (Pauschale des Monats plus kleine Änderungen mit Abrechnung „Pauschale“, die im Vormonat erledigt und noch nicht
+    abgerechnet wurden). Monatsrechnungen bereitet der Takt am eingestellten Tag (Standard 1., ab 6 Uhr) für Projekte
+    live und im Betrieb vor und gibt sie zur Freigabe. Frei angelegte Rechnungen gehen auch.
+  - **Umsatzsteuer:** Startwert Kleinunternehmer (§ 19 UStG, Hinweis auf der Rechnung), umstellbar auf
+    Regelbesteuerung mit Steuersatz. Gilt für neue Entwürfe; ausgestellte Rechnungen behalten ihren Satz.
+    **E-Rechnung** (XRechnung/ZUGFeRD) noch nicht: bis Ende 2027 reicht für kleine Firmen das PDF, vorher als eigene
+    Stufe nachziehen.
+  - **Laufende Kosten** mit Monatsbetrag, Kategorie, seit/bis; KI-Kosten automatisch aus `ai_usage` (Schnitt der
+    letzten drei Monate). **Kassenstand** von Hand mit Datum.
+  - **Kennzahlen:** Pauschalen im Monat (Projekte live/Betrieb), Monatskosten, offene und überfällige Forderungen,
+    Reichweite des Kontos, Gewinnschwelle (Pauschalen gegen Monatskosten), Umsatz/Kosten/übrig der letzten drei
+    Monate. **Geld-Regel** als Ampel mit den Personalkosten der nächsten Stelle aus den Einstellungen (grau, solange
+    keine eingetragen sind). KPI „Umsatz (Rechnungen, netto)“ im Katalog.
+  - **Export** (`/finanzen/export`): ZIP mit `rechnungen.csv`, `kosten.csv`, `kasse.csv` (Semikolon, UTF-8 mit
+    BOM für Excel) und den PDFs der Rechnungen im Zeitraum.
+  - Angebote verschicken bleibt im Katalog als „kommt später“ (nicht Teil dieser Stufe).
 - [ ] **Stufe 9 – Ein Posteingang**
   Alle Kanäle an einer Stelle; Unipile für WhatsApp/LinkedIn, sobald Budget da ist.
 - [ ] **Stufe 10 – Assistent**

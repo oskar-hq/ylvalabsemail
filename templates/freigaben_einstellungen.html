@@ -39,7 +39,7 @@
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       {% for a in aktionen %}
       <div class="os-stufe-zeile">
-        <span class="os-txt"><b>{{ a.label }}</b><span>{{ a.bereich }}{% if a.kommt_mit %} · kommt mit Stufe {{ a.kommt_mit }}{% elif a.erlaubt|length < 2 %} · fest{% endif %}{% if a.hinweis %} · {{ a.hinweis }}{% endif %}</span></span>
+        <span class="os-txt"><b>{{ a.label }}</b><span>{{ a.bereich }}{% if a.kommt_mit %} · kommt {{ 'mit Stufe ' ~ a.kommt_mit if a.kommt_mit is number else a.kommt_mit }}{% elif a.erlaubt|length < 2 %} · fest{% endif %}{% if a.hinweis %} · {{ a.hinweis }}{% endif %}</span></span>
         <span class="os-stufen" role="radiogroup" aria-label="Stufe für {{ a.label }}">{% for s in ['A', 'B', 'C', 'D'] %}
           <label title="{{ stufen[s][0] }}"><input type="radio" name="{{ a.key }}" value="{{ s }}" {{ 'checked' if werte[a.key] == s }} {{ 'disabled' if not verwalten or s not in a.erlaubt or a.kommt_mit or a.erlaubt|length < 2 }}><span>{{ s }}</span></label>{% endfor %}</span>
       </div>

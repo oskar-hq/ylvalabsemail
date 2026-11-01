@@ -202,6 +202,11 @@ def _projekte():
     return projekte
 
 
+def _finanzen():
+    from . import finanzen
+    return finanzen
+
+
 def _notfall():
     from . import notfall
     return notfall
@@ -236,6 +241,8 @@ KATALOG = [
        "runter", quelle="Zeiterfassung an Projekten, live in der Woche"),
     _k("freigaben_ohne_aenderung", "Abnahmen beim ersten Mal", "technik",
        lambda *a: _projekte().kpi_abnahmen_erstes_mal(*a), "prozent", quelle="Erste Abnahme bestanden"),
+    _k("umsatz", "Umsatz (Rechnungen, netto)", "markt", lambda *a: _finanzen().kpi_umsatz(*a), "euro",
+       je_person=False, quelle="Ausgestellte Rechnungen nach Rechnungsdatum"),
     _k("ausfallzeit", "Ausfallzeit", "technik", lambda *a: _notfall().ausfallzeit(*a), "stunden", "runter",
        je_person=False, quelle="Notfälle „Kundensystem gestört“"),
     _k("aufgaben_erledigt", "Aufgaben erledigt", "alle", aufgaben_erledigt, quelle="Aufgaben im OS"),

@@ -1370,6 +1370,11 @@ def tick():
                 portal.takt(c)
             except Exception:
                 log.exception("Fehler im Kunden-Bereich-Takt")
+            try:  # Finanzen: Monatsrechnungen vorbereiten (Firmen-OS Stufe 8)
+                from . import finanzen
+                finanzen.takt(c)
+            except Exception:
+                log.exception("Fehler im Finanzen-Takt")
             reports.notify_released(c, notify)
             start_scheduled(c)
             run = c.execute("SELECT id FROM runs WHERE status='wartet' ORDER BY id LIMIT 1").fetchone()

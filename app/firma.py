@@ -48,6 +48,7 @@ MODULE = [
     ("einstellungen", "Einstellungen, Updates, Sicherung"),
     ("personen", "Personen, Rollen und Bereiche"),
     ("entscheidungen", "Freigabe-Stufen, Entscheidungsrechte und Entscheidungs-Log"),
+    ("finanzen", "Finanzen: Rechnungen, Kosten, Kasse"),
 ]
 MODUL_KEYS = [k for k, _ in MODULE]
 STUFEN = [(0, "Kein Zugriff"), (1, "Sehen"), (2, "Bearbeiten"), (3, "Freigeben"), (4, "Verwalten")]
@@ -63,7 +64,7 @@ EINLADUNG_TAGE = 7  # Standard; einstellbar unter Einstellungen → Personen (kv
 GRUENDER = {k: VERWALTEN for k in MODUL_KEYS}
 RECHERCHE = {"aufgaben": BEARBEITEN, "kalender": BEARBEITEN, "cockpit": BEARBEITEN, "leads": BEARBEITEN,
              "crm": BEARBEITEN, "mailer": BEARBEITEN, "kunden": 0, "kosten": 0, "protokoll": 0, "einstellungen": 0, "personen": 0,
-             "entscheidungen": BEARBEITEN}
+             "entscheidungen": BEARBEITEN, "finanzen": 0}
 
 # Startwerte, laufen genau einmal (leaddb.DATA_MIGRATIONS). Danach wird alles in der App gepflegt.
 SEED = [

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Finanzen · Einstellungen{% endblock %}
+{% block content %}
+{% set dis = 'disabled' if not verwalten %}
+{% macro feld(k, typ='text', extra='') -%}
+<label class="os-field"><span>{{ labels[k][1] }}</span><input type="{{ typ }}" name="{{ k }}" value="{{ regeln[k] }}" {{ extra|safe }} {{ dis }}></label>
+{%- endmacro %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Einstellungen</span>
+    <h1 class="os-title-l">Finanzen</h1>
+    <p class="os-sub os-lead">Was auf jeder Rechnung steht, wie die Umsatzsteuer läuft und wie Rechnungen rausgehen. Ob eine Rechnung freigegeben werden muss, steht unter <a href="{{ url_for('freigaben.einstellungen') }}">Freigaben und Entscheidungen</a>.</p>
+  </header>
+  {% if not verwalten %}<p class="os-caption">Ändern darf, wer „Finanzen: Verwalten“ hat.</p>{% endif %}
+  {% if fehlt %}<p class="os-caption" style="color:var(--accent-text)">Pflichtangaben für Rechnungen fehlen noch: {{ fehlt|join(', ') }}.</p>{% endif %}
+  <form method="post" action="{{ url_for('finanzen.einstellungen_speichern') }}" data-os-fetch="reload">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <section class="os-section" style="margin-top:0">
+      <h2 class="os-headline">Firmendaten auf der Rechnung</h2>
+      <div style="margin-top:12px">{{ feld('firma_name', extra='maxlength=120') }}</div>
+      <label class="os-field"><span>{{ labels.firma_anschrift[1] }}</span><textarea name="firma_anschrift" rows="3" {{ dis }}>{{ regeln.firma_anschrift }}</textarea></label>
+      <div class="os-grid2">{{ feld('firma_email', 'email') }}{{ feld('steuernummer') }}{{ feld('ust_id') }}{{ feld('bank') }}{{ feld('iban') }}{{ feld('bic') }}</div>
+    </section>
+    <section class="os-section">
+      <h2 class="os-headline">Umsatzsteuer</h2>
+      <div class="os-chips" style="margin:12px 0 16px">{% for k, label in steuer.items() %}<label><input type="radio" name="steuer" value="{{ k }}" {{ 'checked' if regeln.steuer == k }} {{ dis }}><span>{{ label }}</span></label>{% endfor %}</div>
+      {{ feld('ust_satz', 'number', 'min=0 max=30') }}
+      <p class="os-caption">Kleinunternehmer: Auf der Rechnung steht „Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.“ Im Zweifel mit dem Steuerberater klären. Bereits ausgestellte Rechnungen ändern sich nicht.</p>
+    </section>
+    <section class="os-section">
+      <h2 class="os-headline">Nummern, Fristen, Versand</h2>
+      <div class="os-grid2" style="margin-top:12px">{{ feld('nummer_format', extra='maxlength=40') }}{{ feld('zahlungsziel', 'number', 'min=0 max=90') }}{{ feld('monat_tag', 'number', 'min=1 max=28') }}</div>
+      <label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px"><span style="margin:0">{{ labels.versand[1] }}</span>
+        <span class="os-toggle"><input type="checkbox" name="versand" value="1" {{ 'checked' if regeln.versand }} {{ dis }}><span></span></span></label>
+      {{ feld('betreff', extra='maxlength=200') }}
+      <label class="os-field"><span>{{ labels.text[1] }}</span><textarea name="text" rows="7" {{ dis }}>{{ regeln.text }}</textarea></label>
+    </section>
+    <section class="os-section">
+      <h2 class="os-headline">Geld-Regel</h2>
+      <p class="os-sub">Eingestellt wird erst, wenn drei Monate in Folge mindestens das 1,5-Fache der neuen Personalkosten übrig blieb und 6 Monatskosten auf dem Konto liegen (aus den Rollen).</p>
+      <div style="margin-top:12px">{{ feld('personalkosten_neu', 'number', 'min=0') }}</div>
+    </section>
+    {% if verwalten %}<button class="os-btn small quiet">Speichern</button>{% endif %}
+  </form>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('settings.settings') }}" aria-label="Zurück zu den Einstellungen">{{ i('back') }}</a>
+</div>
+{% endblock %}
