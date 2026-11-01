@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, avatar %}
+{% block title %}Kalender · Einstellungen{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Einstellungen</span>
+    <h1 class="os-title-l">Kalender</h1>
+    <p class="os-sub os-lead">Google-Zugang, wann Termine stattfinden dürfen, Erinnerungen und Serientermine wie das Wochengespräch.</p>
+  </header>
+
+  <section class="os-section" style="margin-top:0">
+    <h2 class="os-headline">Google</h2>
+    <dl class="os-kv" style="margin-top:16px">
+      <dt>Client-ID und Schlüssel</dt><dd class="{{ 'late' if not google_da }}">{{ 'Eingetragen' if google_da else 'Fehlen noch' }}</dd>
+    </dl>
+    <p class="os-caption" style="margin-top:16px">Rücksprung-Adresse (so muss sie im Google-Projekt stehen):</p>
+    <div class="os-copy" style="margin-top:8px"><input class="os-input" id="rueckweg" value="{{ rueckweg }}" readonly>
+      <button type="button" class="os-btn small quiet" data-os-copy="rueckweg">Kopieren</button></div>
+    {% if verwalten %}<ul class="os-list" style="margin-top:16px"><li><a class="os-row" href="{{ url_for('settings.page', gid='google', pid='zugang') }}"><span class="os-ico">{{ i('schloss') }}</span>
+      <span class="os-txt"><b>{{ 'Zugang ändern' if google_da else 'Client-ID und Schlüssel eintragen' }}</b><span>Aus der Google Cloud Console, Projekt „Firmen OS“</span></span><span class="os-chev">{{ i('chev') }}</span></a></li></ul>{% endif %}
+    <h3 class="os-headline" style="margin-top:32px;font-size:17px">Wer ist verbunden?</h3>
+    <ul class="os-list">{% for p in personen %}{% set k = konten.get(p.key) %}<li class="os-row">{{ avatar(p.name, '' if k and k.status == 'ok' else 'off') }}
+      <span class="os-txt"><b>{{ p.name }}</b><span>{% if not k %}Nicht verbunden{% elif k.status == 'ok' %}Verbunden{% if k.abgeglichen_am %} · abgeglichen {{ k.abgeglichen_am[11:16] }}{% endif %}{% else %}{{ 'Abgelaufen' if k.status == 'abgelaufen' else 'Fehler' }}{% endif %}</span></span></li>{% endfor %}</ul>
+  </section>
+
+  <section class="os-section">
+    <h2 class="os-headline">Regeln</h2>
+    <form method="post" action="{{ url_for('kalender.regeln') }}" data-os-fetch="reload" style="margin-top:16px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="os-grid2">
+        <label class="os-field"><span>{{ regel_labels.von[0] }}</span><input type="time" name="von" value="{{ regeln.von }}" {{ 'disabled' if not verwalten }}></label>
+        <label class="os-field"><span>{{ regel_labels.bis[0] }}</span><input type="time" name="bis" value="{{ regeln.bis }}" {{ 'disabled' if not verwalten }}></label>
+      </div>
+      <div class="os-field"><span>{{ regel_labels.tage[0] }}</span>
+        <div class="os-chips">{% for t in wochentage %}<label><input type="checkbox" name="tage" value="{{ loop.index0 }}" {{ 'checked' if loop.index0 in regeln.tage_liste }} {{ 'disabled' if not verwalten }}>{{ t[:2] }}</label>{% endfor %}</div></div>
+      <div class="os-grid2">
+        {% for k in ['dauer', 'puffer', 'abgleich'] %}<label class="os-field"><span>{{ regel_labels[k][0] }}</span><input type="number" name="{{ k }}" min="0" max="600" value="{{ regeln[k] }}" {{ 'disabled' if not verwalten }}></label>{% endfor %}
+        <label class="os-field"><span>{{ regel_labels.zeitzone[0] }}</span><input type="text" name="zeitzone" value="{{ regeln.zeitzone }}" {{ 'disabled' if not verwalten }}></label>
+      </div>
+      {% for k in ['erinnerung_24h', 'erinnerung_1h'] %}
+      <label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px"><span style="margin:0">{{ regel_labels[k][0] }} (an die Teilnehmenden)</span>
+        <span class="os-toggle"><input type="checkbox" name="{{ k }}" value="1" {{ 'checked' if regeln[k] }} {{ 'disabled' if not verwalten }}><span></span></span></label>{% endfor %}
+      {% if verwalten %}<button class="os-btn small quiet">Regeln speichern</button>{% endif %}
+    </form>
+  </section>
+
+  <section class="os-section">
+    <h2 class="os-headline">Serientermine</h2>
+    <p class="os-sub">Jede Woche zur selben Zeit, z. B. das Wochengespräch zu viert. Das OS hält die nächsten sechs Wochen im Kalender.</p>
+    <ul class="os-list" style="margin-top:8px">{% for s in serien %}<li class="os-row">
+      <span class="os-ico {{ '' if s.aktiv else 'off' }}">{{ i('kalender') }}</span>
+      <span class="os-txt"><b>{{ s.titel }}</b><span>{{ s.tag }}s {{ s.uhrzeit }}, {{ s.dauer_min }} Minuten · {{ s.teilnehmer|length }} Personen{% if not s.aktiv %} · beendet{% endif %}</span></span>
+      {% if s.aktiv and verwalten %}<form method="post" action="{{ url_for('kalender.serie_beenden', sid=s.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="os-link danger" data-confirm="Serie „{{ s.titel }}“ beenden? Künftige Termine werden abgesagt.">Beenden</button></form>{% endif %}</li>
+    {% else %}<li class="os-empty">Noch keine Serie.</li>{% endfor %}</ul>
+  </section>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('settings.settings') }}" aria-label="Zurück zu den Einstellungen">{{ i('back') }}</a>
+  {% if verwalten %}<button type="button" class="os-btn" data-sheet="sheet-serie"><span>Neue Serie</span>{{ i('plus') }}</button>{% endif %}
+</div>
+{% if verwalten %}
+<dialog class="os-sheet" id="sheet-serie" aria-label="Neue Serie">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('kalender.serie') }}" data-os-fetch="reload" data-os-require=".os-ask">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <span class="os-eyebrow">Neue Serie</span>
+      <input class="os-ask" name="titel" value="Wochengespräch" maxlength="200" required>
+      <div class="os-grid2">
+        <label class="os-field"><span>Wochentag</span><select name="wochentag">{% for t in wochentage %}<option value="{{ loop.index0 }}" {{ 'selected' if loop.index0 == 0 }}>{{ t }}</option>{% endfor %}</select></label>
+        <label class="os-field"><span>Uhrzeit</span><input type="time" name="uhrzeit" value="17:00" step="900" required></label>
+        <label class="os-field"><span>Dauer (Minuten)</span><input type="number" name="dauer" value="60" min="5" max="480"></label>
+        <label class="os-field"><span>Verantwortlich</span><select name="verantwortlich">{% for p in personen %}<option value="{{ p.key }}" {{ 'selected' if p.key == account.team }}>{{ p.name }}</option>{% endfor %}</select></label>
+      </div>
+      <div class="os-field"><span>Wer ist dabei?</span>
+        <div class="os-chips">{% for p in personen %}<label><input type="checkbox" name="personen" value="{{ p.key }}" checked>{{ p.name.split(' ')[0] }}</label>{% endfor %}</div></div>
+      <label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px"><span style="margin:0">Google Meet anhängen</span>
+        <span class="os-toggle"><input type="checkbox" name="meet" value="1" checked><span></span></span></label>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Anlegen</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endif %}
+{% endblock %}

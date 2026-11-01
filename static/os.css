@@ -274,6 +274,15 @@ body.os-sheet-open .os-page,body.os-sheet-open main.page{transform:scale(.94);bo
 .os-table td.hl{color:var(--positive)}
 .os-tile b .os-sub{color:var(--text-secondary)}
 
+/* ---------------------------------------------------------------- Kalender */
+.os-zeit{flex:none;width:52px;display:flex;flex-direction:column;font:700 17px/22px var(--sans);font-variant-numeric:tabular-nums}
+.os-zeit em{font:500 13px/18px var(--sans);font-style:normal;color:var(--text-secondary)}
+.os-meet{display:flex;align-items:center;gap:12px}
+.os-briefing p{margin:8px 0 0;font:500 17px/24px var(--sans)}
+.os-briefing ul{margin:8px 0 0;padding-left:20px;font:500 15px/22px var(--sans);color:var(--text-primary)}
+.os-hinweis{margin:24px 0 0;padding:16px;border-radius:var(--radius-sm);background:var(--surface-sunken);font:500 15px/20px var(--sans)}
+.os-hinweis.err{color:var(--negative)}
+
 /* ---------------------------------------------------------------- Weniger Bewegung */
 @media (prefers-reduced-motion:reduce){
   :root{--t-smooth:150ms;--t-snappy:150ms;--t-bouncy:150ms;--spring-smooth:linear;--spring-snappy:linear;--spring-bouncy:linear}

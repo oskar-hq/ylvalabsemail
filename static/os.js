@@ -110,6 +110,53 @@
     grab.addEventListener('pointerup', end);
     grab.addEventListener('pointercancel', end);
   });
+  // Sheets, die die Seite schon offen haben will (z. B. „Termin vereinbaren“ aus der Akte)
+  document.querySelectorAll('dialog.os-sheet[data-open]').forEach((dlg) => openSheet(dlg));
+
+  // Freie Zeiten: fragt das OS nach Vorschlägen für die gewählten Personen und füllt Datum und Uhrzeit
+  document.querySelectorAll('[data-os-slots]').forEach((box) => {
+    const form = box.closest('form');
+    const list = box.querySelector('[data-slots]');
+    const hint = box.querySelector('[data-slots-hinweis]');
+    let geladen = false;
+    const laden = async () => {
+      const qs = new URLSearchParams();
+      form.querySelectorAll('input[name="personen"]:checked').forEach((el) => qs.append('personen', el.value));
+      const v = form.querySelector('[name="verantwortlich"]');
+      if (v && v.value) qs.append('personen', v.value);
+      qs.set('dauer', form.querySelector('[name="dauer"]')?.value || '');
+      list.innerHTML = '<span class="os-caption">Sucht freie Zeiten …</span>';
+      try {
+        const res = await fetch(`${box.dataset.osSlots}?${qs}`, { headers: { Accept: 'application/json' } });
+        const data = await res.json();
+        list.innerHTML = '';
+        geladen = true;
+        (data.vorschlaege || []).forEach((slot) => {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = slot.text;
+          b.addEventListener('click', () => {
+            form.querySelector('[name="datum"]').value = slot.start.slice(0, 10);
+            form.querySelector('[name="uhrzeit"]').value = slot.start.slice(11, 16);
+            list.querySelectorAll('button').forEach((x) => x.classList.toggle('on', x === b));
+            buzz(8);
+          });
+          list.appendChild(b);
+        });
+        if (!list.children.length) list.innerHTML = '<span class="os-caption">In den nächsten zwei Wochen ist keine gemeinsame Zeit frei.</span>';
+        const ohne = data.ohne_google || [];
+        hint.hidden = !ohne.length;
+        hint.textContent = ohne.length ? `Ohne verbundenen Google-Kalender, nur Termine im OS berücksichtigt: ${ohne.join(', ')}` : '';
+      } catch (_) {
+        list.innerHTML = '<span class="os-caption">Vorschläge gerade nicht verfügbar.</span>';
+      }
+    };
+    box.querySelector('[data-slots-laden]')?.addEventListener('click', laden);
+    form.addEventListener('change', (ev) => {
+      if (geladen && ['personen', 'dauer', 'verantwortlich'].includes(ev.target.name)) laden();
+    });
+  });
+
   // Seite mit #neu (z. B. aus „Mein Tag“) öffnet das passende Sheet
   if (location.hash.length > 1) {
     const dlg = document.getElementById('sheet-' + location.hash.slice(1));

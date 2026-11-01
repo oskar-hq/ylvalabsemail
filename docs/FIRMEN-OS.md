@@ -1,6 +1,6 @@
 # Ylva Labs Firmen-OS – Bauplan
 
-**Stand:** 01.11.2026 · Stufe 1 und 2 gebaut, als Nächstes Stufe 3 (Kalender) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
+**Stand:** 01.11.2026 · Stufe 1 bis 3 gebaut, als Nächstes Stufe 4 (KPIs und Wochengespräch) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
 
 Aus dem Ylva Labs Mailer (Akquise, CRM, Mailer) wird das Betriebssystem der Firma. Diese Datei hält fest, **was**
 gebaut werden soll und **nach welchen Prinzipien**, damit alle, die am Code arbeiten (Menschen und KI), dasselbe
@@ -84,7 +84,7 @@ Diese Begriffe gelten im Code, in der Oberfläche und in Gesprächen gleich.
 | **Projekt (Build)** | Was für einen Kunden gebaut wird: Anforderung → Bau → Abnahme → Live | nein |
 | **Änderungswunsch** | Wunsch eines Kunden nach dem Start, mit Größe, Zeit, Abrechnung | nein |
 | **Aufgabe** | Etwas, das eine Person bis zu einem Termin erledigen muss. Kann an Kunde, Projekt, Lead hängen oder frei sein. | ja (`aufgaben`, inkl. Anfragen und Wiedervorlagen; Stufe 1) |
-| **Termin** | Zeitpunkt mit Teilnehmenden, optional Kunde und Meet-Link | nein |
+| **Termin** | Zeitpunkt mit Teilnehmenden, optional Kunde und Meet-Link | ja (`termine`; Stufe 3) |
 | **Freigabe** | Ein Vorschlag des OS, den ein Mensch annehmen, ändern oder ablehnen muss | nur implizit (Entwürfe) |
 | **Ereignis** | Eintrag im Firmen-Protokoll. Rohstoff für alle Zahlen. | ja (`ereignisse`, `firma.log`; Stufe 1) |
 | **KPI** | Kennzahl je Bereich/Person, aus Ereignissen berechnet | nein (nur Lauf-Berichte, KI-Kosten) |
@@ -225,7 +225,7 @@ Verbinden einmal „App nicht überprüft“, Grenze 100 Personen über die ganz
 laufen nicht ab). Der gelbe Hinweis „Die Anwendung muss überprüft werden“ in der Console wird ignoriert.
 Rücksprung-Adressen im Client: `https://mail.ylvalabs.de/kalender/google/zurueck` und
 `http://localhost:8080/kalender/google/zurueck`. Die Kalender-Anbindung muss genau diese Pfade verwenden.
-Noch zu tun beim Bau: Client-ID und Clientschlüssel in der App eintragen können (Einstellungen → Anbindungen → Google).
+Gebaut (Stufe 3): Client-ID und Clientschlüssel trägt man unter Einstellungen → Google Kalender ein.
 
 ### 4.4 Akquise und Recherche (gibt es schon, wird erweitert)
 
@@ -519,10 +519,30 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
   - Auswertung zählt Betriebe, Kontakte, Antworten, Gespräche, Preisgespräche, Abschlüsse je Branche, nur kalt;
     Ampel ab der eingestellten Zahl Preisgespräche. KPIs „angenommene Leads pro Woche“ und „Anteil angenommen“
     je Person auf „Leads prüfen“ und „Mein Tag“ (das Cockpit kommt mit Stufe 4).
-- [ ] **Stufe 3 – Kalender und Termine**
+- [x] **Stufe 3 – Kalender und Termine** (gebaut 01.11.2026, Abweichungen unten)
   Termine im OS, eigenen Google-Kalender verbinden (frei/belegt, Termine eintragen), Kundentermine mit Meet-Link
   und Einladung über das Google-Konto der zuständigen Person (Freigabe C), Terminvorschläge um alle herum,
   Erinnerungen, Ergebnis nach dem Termin, Briefing, Serientermin Wochengespräch. Danach iCloud und ICS-Abo.
+  *Umsetzung und Abweichungen:*
+  - Google über OAuth ohne Zusatzbibliothek (`app/google_kalender.py`), genau die zwei Berechtigungen, Rücksprung
+    `/kalender/google/zurueck`. Client-ID und Schlüssel unter Einstellungen → Google Kalender, Status und
+    Rücksprung-Adresse unter Einstellungen → Kalender. Refresh-Token verschlüsselt in `kalender_konten`.
+  - Tabellen `termine`, `termin_teilnehmer` (je Person die Google-Termin-ID), `belegt` (nur Zeiten), `serien`.
+    Interne Termine landen in jedem verbundenen Kalender der Teilnehmenden, ohne Einladung. Kundentermine nur im
+    Kalender der verantwortlichen Person mit Gast, Meet und Einladung durch Google.
+  - Freigabe C als `freigaben.art = 'termin_einladung'`: Legt jemand anderes den Kundentermin an, wartet die
+    Einladung auf die verantwortliche Person. Legt sie ihn selbst an und schaltet „Einladung jetzt senden“ ein,
+    gilt das als Freigabe. Ein Lead in der Lead-Prüfung bekommt noch keinen Termin.
+  - Erinnerungen 24 h und 1 h vorher an die Teilnehmenden aus dem OS (Glocke, 1 h auch Push). Kunden erinnert
+    Google über die Einladung; eigene Erinnerungsmails an Kunden schickt das OS nicht.
+  - Terminvorschläge aus frei/belegt (Google) und OS-Terminen, innerhalb von Arbeitszeit, Wochentagen und Puffer
+    (Regeln unter Einstellungen → Kalender, für alle gleich; je Person kommt mit den Stunden pro Woche).
+  - Ergebnis nach dem Termin (stattgefunden, abgesagt, nicht erschienen) mit Notiz, Preisgespräch und Folgeaufgabe;
+    „stattgefunden“ schiebt den Lead auf „Gespräch“. Briefing aus der Akte ohne KI, mit eigenen Notizen.
+  - Serien als einzelne Termine (sechs Wochen voraus, täglich aufgefüllt), nicht als Google-Serie.
+  - ICS-Abo je Person (`/kalender/<token>.ics`, nur der Hash gespeichert, in „Mein Kalender“ erneuerbar).
+    iCloud über CalDAV ist noch offen; das Abo deckt Apple-Kalender lesend ab.
+  - Buchungslink für Kunden (offene Frage 4) ist nicht gebaut.
 - [ ] **Stufe 4 – KPIs und Wochengespräch**
   KPI-Katalog aus Ereignissen, Wochenziele, Cockpit, automatische Agenda fürs Wochengespräch, Lernstufen-Messung.
 - [ ] **Stufe 5 – Kunden, Projekte, Abnahme**

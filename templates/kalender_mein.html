@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Mein Kalender · Ylva Labs{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Kalender</span>
+    <h1 class="os-title-l">Mein Kalender</h1>
+    <p class="os-sub os-lead">Verbinde den Kalender, den du ohnehin führst. Das OS liest dort nur frei/belegt, keine Titel oder Orte, und trägt Firmentermine direkt ein.</p>
+  </header>
+
+  <section class="os-section" style="margin-top:0">
+    <h2 class="os-headline">Google</h2>
+    {% if not google_da %}
+    <p class="os-sub">Google ist noch nicht eingerichtet. {% if darf('kalender', 4) %}<a href="{{ url_for('kalender.einstellungen') }}">Einstellungen → Kalender</a>{% else %}Eine Person mit Verwaltungsrecht trägt dafür Client-ID und Schlüssel ein.{% endif %}</p>
+    {% elif konto %}
+    <dl class="os-kv" style="margin-top:16px">
+      <dt>Status</dt><dd class="{{ 'late' if konto.status != 'ok' }}">{{ {'ok': 'Verbunden', 'fehler': 'Fehler', 'abgelaufen': 'Abgelaufen, bitte neu verbinden'}[konto.status] }}</dd>
+      <dt>Verbunden seit</dt><dd>{{ konto.verbunden_am|kurzdatum }}</dd>
+      <dt>Zuletzt abgeglichen</dt><dd>{{ konto.abgeglichen_am|kurzdatum if konto.abgeglichen_am else '–' }}{% if konto.abgeglichen_am %} {{ konto.abgeglichen_am[11:16] }}{% endif %}</dd>
+    </dl>
+    {% if konto.fehler %}<p class="os-hinweis err">{{ konto.fehler }}</p>{% endif %}
+    <div class="os-btns">
+      {% if konto.status != 'ok' %}<a class="os-btn small" href="{{ url_for('kalender.google_verbinden') }}">Neu verbinden</a>{% endif %}
+      <form method="post" action="{{ url_for('kalender.google_trennen') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="os-btn small quiet" data-confirm="Google-Kalender trennen? Das OS sieht dann deine freien Zeiten nicht mehr.">Trennen</button></form>
+    </div>
+    {% else %}
+    <p class="os-sub">Google zeigt einmal „App nicht überprüft“. Über „Erweitert“ geht es weiter; danach bleibt die Verbindung bestehen.</p>
+    <div class="os-btns"><a class="os-btn" href="{{ url_for('kalender.google_verbinden') }}"><span>Mit Google verbinden</span>{{ i('chev') }}</a></div>
+    {% endif %}
+  </section>
+
+  <section class="os-section">
+    <h2 class="os-headline">Kalender-Abo</h2>
+    <p class="os-sub">Für Apple-Kalender oder alle, die nichts verbinden wollen: eine geheime Adresse mit deinen Firmenterminen, nur zum Lesen. Neue Termine erscheinen beim nächsten Abgleich deines Kalenders.</p>
+    {% if ics_link %}
+    <div class="os-copy" style="margin-top:16px"><input class="os-input" id="icsLink" value="{{ ics_link }}" readonly>
+      <button type="button" class="os-btn small ink" data-os-copy="icsLink">Kopieren</button></div>
+    <p class="os-caption" style="margin-top:8px">Wird nur jetzt angezeigt. Im Kalender: „Abonnement hinzufügen“ und die Adresse einfügen.</p>
+    {% endif %}
+    <form method="post" action="{{ url_for('kalender.abo_neu') }}" style="margin-top:16px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="os-btn small quiet" {% if hat_abo %}data-confirm="Neue Adresse erzeugen? Die bisherige funktioniert dann nicht mehr."{% endif %}>{{ 'Neue Adresse erzeugen' if hat_abo else 'Abo-Adresse erzeugen' }}</button></form>
+  </section>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('kalender.uebersicht') }}" aria-label="Zurück zum Kalender">{{ i('back') }}</a>
+</div>
+{% endblock %}

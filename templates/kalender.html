@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, avatar %}
+{% block title %}Kalender · Ylva Labs{% endblock %}
+{% block content %}
+{% set me = account.team %}
+{% set wochentage = ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'] %}
+<main class="os-page">
+  {{ toasts() }}
+  <span class="os-eyebrow">Kalender</span>
+  <nav class="os-tabs" aria-label="Ansicht">
+    <a href="{{ url_for('kalender.uebersicht', ansicht='meine', ab=ab.isoformat()) }}" class="{{ 'on' if ansicht == 'meine' and not person }}">Meine</a>
+    <a href="{{ url_for('kalender.uebersicht', ansicht='alle', ab=ab.isoformat()) }}" class="{{ 'on' if ansicht == 'alle' and not person }}">Firma</a>
+  </nav>
+  <div class="os-chips">
+    <a href="{{ url_for('kalender.uebersicht', ansicht=ansicht, ab=zurueck, person=person) }}" aria-label="Zwei Wochen zurück">‹</a>
+    <a href="{{ url_for('kalender.uebersicht', ansicht=ansicht, person=person) }}" class="{{ 'on' if ab == heute }}">Ab heute</a>
+    <a href="{{ url_for('kalender.uebersicht', ansicht=ansicht, ab=vor, person=person) }}" aria-label="Zwei Wochen vor">›</a>
+    {% for p in personen %}<a href="{{ url_for('kalender.uebersicht', ansicht='alle', person=p.key, ab=ab.isoformat()) }}" class="{{ 'on' if person == p.key }}">{{ p.name.split(' ')[0] }}</a>{% endfor %}
+  </div>
+
+  {% if not verbunden %}
+  <ul class="os-list"><li><a class="os-row support" href="{{ url_for('kalender.mein') }}"><span class="os-ico blue">{{ i('kalender') }}</span>
+    <span class="os-txt"><b>Verbinde deinen Google-Kalender</b><span>Dann plant das OS um deine Termine herum und trägt Firmentermine direkt ein.</span></span>
+    <span class="os-chev">{{ i('chev') }}</span></a></li></ul>
+  {% endif %}
+
+  {% if freigaben %}
+  <section class="os-section" style="margin-top:24px">
+    <h2 class="os-headline">Einladungen freigeben</h2>
+    <p class="os-sub">Erst nach deiner Freigabe schickt Google die Einladung an den Kunden.</p>
+    <ul class="os-list">{% for t in freigaben %}<li><a class="os-row" href="{{ url_for('kalender.detail', tid=t.id) }}">
+      <span class="os-ico red">{{ i('kalender') }}</span><span class="os-txt"><b>{{ t.titel }}</b><span>{{ t.zeit }} · an {{ t.gaeste|join(', ') }}</span></span>
+      <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  {% if ergebnisse %}
+  <section class="os-section" style="margin-top:24px">
+    <h2 class="os-headline">Wie war der Termin?</h2>
+    <ul class="os-list">{% for t in ergebnisse %}<li><a class="os-row" href="{{ url_for('kalender.detail', tid=t.id) }}#ergebnis">
+      <span class="os-ico">{{ i('check') }}</span><span class="os-txt"><b>{{ t.titel }}</b><span>{{ t.zeit }}{% if t.lead_name %} · {{ t.lead_name }}{% endif %}</span></span>
+      <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  {% for tag_, liste in tage %}
+  {% set d = tag_|datum %}
+  <section class="os-section" style="margin-top:40px">
+    <h2 class="os-headline">{{ tag(tag_)|capitalize if tag(tag_) in ('heute', 'morgen', 'gestern') else wochentage[d.weekday()] }}<span class="os-sub" style="display:inline"> · {{ d.day }}.{{ d.month }}.</span></h2>
+    <ul class="os-list anim">{% for t in liste %}<li style="--i:{{ loop.index0 }}"><a class="os-row" href="{{ url_for('kalender.detail', tid=t.id) }}">
+      <span class="os-zeit">{{ t.start[11:16] }}<em>{{ t.ende[11:16] }}</em></span>
+      <span class="os-txt"><b>{{ t.titel }}</b><span>{% if t.status == 'vorschlag' %}<span class="os-new">Freigabe offen · </span>{% elif t.laeuft %}<span class="os-new">Läuft · </span>{% endif %}{{ t.verantwortlich_name.split(' ')[0] }}{% if t.personen|length > 1 %} +{{ t.personen|length - 1 }}{% endif %}{% if t.lead_name and t.lead_name not in t.titel %} · {{ t.lead_name }}{% elif t.art == 'kunde' %} · Kunde{% endif %}{% if t.meet_link %} · Meet{% endif %}</span></span>
+      <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}</ul>
+  </section>
+  {% else %}
+  <p class="os-empty" style="margin-top:32px">In diesen zwei Wochen steht nichts an.</p>
+  {% endfor %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('kalender.mein') }}" aria-label="Mein Kalender">{{ i('kalender') }}</a>
+  <button type="button" class="os-btn" data-sheet="sheet-termin"><span>Neuer Termin</span>{{ i('plus') }}</button>
+</div>
+
+<dialog class="os-sheet" id="sheet-termin" aria-label="Neuer Termin" {{ 'data-open' if neu or lead }}>
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('kalender.neu') }}" data-os-fetch="reload" data-os-require=".os-ask">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      {% if lead %}<input type="hidden" name="lead_id" value="{{ lead.id }}">{% endif %}
+      <span class="os-eyebrow">{{ 'Termin mit ' ~ lead.name if lead else 'Neuer Termin' }}</span>
+      <textarea class="os-ask" name="titel" rows="2" maxlength="200" placeholder="Worum geht es?" required>{{ ('Erstgespräch ' ~ lead.name) if lead else '' }}</textarea>
+      <div class="os-grid2">
+        <label class="os-field"><span>Verantwortlich</span><select name="verantwortlich">{% for p in personen %}<option value="{{ p.key }}" {{ 'selected' if p.key == me }}>{{ p.name }}</option>{% endfor %}</select></label>
+        <label class="os-field"><span>Dauer</span><select name="dauer">{% for m in [15, 30, 45, 60, 90, 120] %}<option value="{{ m }}" {{ 'selected' if m == regeln.dauer }}>{{ m }} Minuten</option>{% endfor %}</select></label>
+      </div>
+      <div class="os-field"><span>Wer aus dem Team ist dabei?</span>
+        <div class="os-chips">{% for p in personen %}<label><input type="checkbox" name="personen" value="{{ p.key }}" {{ 'checked' if p.key == me }}>{{ p.name.split(' ')[0] }}</label>{% endfor %}</div></div>
+      <div class="os-field" data-os-slots="{{ url_for('kalender.vorschlaege') }}"><span>Wann? Freie Zeiten, in denen alle können</span>
+        <div class="os-chips" data-slots><button type="button" class="os-link" data-slots-laden>Freie Zeiten finden</button></div>
+        <p class="os-caption" data-slots-hinweis hidden></p>
+        <div class="os-grid2" style="margin-top:12px">
+          <input type="date" name="datum" value="{{ heute.isoformat() }}" aria-label="Datum" required>
+          <input type="time" name="uhrzeit" value="{{ regeln.von }}" step="900" aria-label="Uhrzeit" required>
+        </div></div>
+      <label class="os-field"><span>Gäste (E-Mail, für Kundentermine)</span><input type="text" name="gaeste" value="{{ lead.email if lead and lead.email else '' }}" placeholder="kunde@beispiel.de" autocomplete="off"></label>
+      <label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <span style="margin:0">Google Meet anhängen</span>
+        <span class="os-toggle"><input type="checkbox" name="meet" value="1" {{ 'checked' if lead }}><span></span></span></label>
+      <label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px">
+        <span style="margin:0">Einladung an die Gäste jetzt senden<br><span class="os-caption">Nur wenn du verantwortlich bist. Sonst gibt die verantwortliche Person frei.</span></span>
+        <span class="os-toggle"><input type="checkbox" name="freigeben" value="1"><span></span></span></label>
+      <details class="os-field"><summary class="os-link">Ort und Notiz</summary>
+        <label class="os-field" style="margin-top:16px"><span>Ort</span><input type="text" name="ort" maxlength="200" placeholder="leer = Meet oder im Büro"></label>
+        <label class="os-field"><span>Notiz (steht auch im Google-Termin)</span><textarea name="beschreibung" rows="3" maxlength="4000"></textarea></label>
+      </details>
+      {% if not google_da %}<p class="os-caption">Google ist noch nicht eingerichtet: Der Termin steht nur im OS, ohne Einladung und Meet.</p>{% endif %}
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Anlegen</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endblock %}

@@ -1,0 +1,157 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, avatar %}
+{% block title %}{{ t.titel }} · Kalender{% endblock %}
+{% block content %}
+{% set me = account.team %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">{{ {'kunde': 'Kundentermin', 'serie': 'Serie', 'intern': 'Termin'}[t.art] }}{% if t.status == 'vorschlag' %} · wartet auf Freigabe{% elif t.status == 'abgesagt' %} · abgesagt{% endif %}</span>
+    <h1 class="os-title-m">{{ t.titel }}</h1>
+    <p class="os-sub os-lead">{{ t.zeit }}</p>
+  </header>
+
+  {% if t.meet_link and t.status == 'geplant' %}
+  <a class="os-btn ink full" href="{{ t.meet_link }}" target="_blank" rel="noopener" style="margin:0 0 32px"><span>Meet beitreten</span>{{ i('video') }}</a>
+  {% endif %}
+
+  <dl class="os-kv">
+    <dt>Verantwortlich</dt><dd>{{ t.verantwortlich_name }}</dd>
+    <dt>Dabei</dt><dd>{% for x in t.teilnehmer if x.person %}{{ x.person_name.split(' ')[0] }}{{ ', ' if not loop.last }}{% endfor %}</dd>
+    {% if t.gaeste %}<dt>Gäste</dt><dd>{{ t.gaeste|join(', ') }}</dd>{% endif %}
+    {% if t.lead_id %}<dt>Kunde</dt><dd><a href="{{ url_for('leads.detail', lead_id=t.lead_id) }}">{{ t.lead_name }}</a></dd>{% endif %}
+    {% if t.ort %}<dt>Ort</dt><dd>{{ t.ort }}</dd>{% endif %}
+    {% if t.ergebnis %}<dt>Ergebnis</dt><dd>{{ ergebnis_label[t.ergebnis] }}</dd>{% endif %}
+  </dl>
+  {% if t.beschreibung %}<p class="os-sub" style="margin-top:24px;white-space:pre-wrap">{{ t.beschreibung }}</p>{% endif %}
+  {% if t.sync_fehler %}<p class="os-hinweis err">{{ t.sync_fehler }}</p>{% endif %}
+
+  {% if freigabe and (freigabe.pruefer == me or darf('kalender', 4)) %}
+  <section class="os-section">
+    <h2 class="os-headline">Einladung freigeben</h2>
+    <p class="os-sub">{{ namen.get(freigabe.angefragt_von, freigabe.angefragt_von) }} hat den Termin angelegt. Nach deiner Freigabe schickt Google die Einladung an {{ t.gaeste|join(', ') }}{% if t.meet %}, mit Meet-Link{% endif %}.</p>
+    <div class="os-btns">
+      <form method="post" action="{{ url_for('kalender.freigabe', tid=t.id) }}" data-os-fetch="reload"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="ok" value="1">
+        <button class="os-btn small">Freigeben und senden</button></form>
+      <button type="button" class="os-btn small quiet" data-sheet="sheet-verwerfen">Verwerfen</button>
+    </div>
+  </section>
+  {% elif freigabe %}
+  <p class="os-hinweis">Die Einladung wartet auf die Freigabe von {{ namen.get(freigabe.pruefer, freigabe.pruefer) }}.</p>
+  {% endif %}
+
+  {% if t.vorbei and t.status == 'geplant' and (me in t.personen or darf('kalender', 4)) %}
+  <section class="os-section" id="ergebnis">
+    <h2 class="os-headline">{{ 'Ergebnis' if t.ergebnis else 'Wie war der Termin?' }}</h2>
+    {% if t.ergebnis %}<p class="os-sub">{{ ergebnis_label[t.ergebnis] }}{% if t.ergebnis_notiz %}: {{ t.ergebnis_notiz }}{% endif %} · {{ namen.get(t.ergebnis_von, t.ergebnis_von) }}, {{ t.ergebnis_am|kurzdatum }}</p>{% endif %}
+    <form method="post" action="{{ url_for('kalender.ergebnis', tid=t.id) }}" data-os-fetch="reload" style="margin-top:16px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="os-chips">{% for k, l in ergebnisse %}<label><input type="radio" name="ergebnis" value="{{ k }}" {{ 'checked' if t.ergebnis == k or (not t.ergebnis and loop.first) }}>{{ l }}</label>{% endfor %}</div>
+      <label class="os-field"><span>Was kam raus?</span><textarea name="notiz" rows="3" maxlength="2000" placeholder="z. B. Interesse, will Angebot bis Freitag">{{ t.ergebnis_notiz or '' }}</textarea></label>
+      {% if t.lead_id %}<label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px"><span style="margin:0">Ernsthaftes Preisgespräch (zählt im Branchentest)</span>
+        <span class="os-toggle"><input type="checkbox" name="preisgespraech" value="1"><span></span></span></label>{% endif %}
+      <div class="os-grid2">
+        <label class="os-field"><span>Folgeaufgabe (optional)</span><input type="text" name="folge_titel" maxlength="200" placeholder="z. B. Angebot schicken"></label>
+        <label class="os-field"><span>Bis</span><input type="date" name="folge_faellig"></label>
+      </div>
+      <button class="os-btn small ink">Ergebnis speichern</button>
+    </form>
+  </section>
+  {% endif %}
+
+  {% if briefing %}
+  <section class="os-section os-briefing" id="briefing">
+    <h2 class="os-headline">Briefing</h2>
+    <p class="os-sub">Aus der Akte zusammengestellt. Ergänze, was im Gespräch wichtig ist.</p>
+    <dl class="os-kv" style="margin-top:24px">{% for k, v in briefing.fakten %}<dt>{{ k }}</dt><dd>{% if k == 'Webseite' %}<a href="{{ v }}" target="_blank" rel="noopener">{{ v|replace('https://', '')|replace('http://', '')|truncate(30, true) }}</a>{% elif k == 'Telefon' %}<a href="tel:{{ v|replace(' ', '') }}">{{ v }}</a>{% else %}{{ v }}{% endif %}</dd>{% endfor %}</dl>
+    {% if briefing.warum %}<h3 class="os-headline" style="margin-top:32px;font-size:17px">Warum er passt</h3><p>{{ briefing.warum }}</p>{% endif %}
+    {% if briefing.signale %}<ul>{% for points, reason in briefing.signale %}<li>{{ reason }}</li>{% endfor %}</ul>{% endif %}
+    {% if briefing.zeitfresser %}<h3 class="os-headline" style="margin-top:24px;font-size:17px">Vermutete Zeitfresser</h3><ul>{% for z in briefing.zeitfresser %}<li>{{ z }}</li>{% endfor %}</ul>{% endif %}
+    {% if briefing.verlauf %}<h3 class="os-headline" style="margin-top:24px;font-size:17px">Zuletzt</h3><ul>{% for e in briefing.verlauf %}<li><span class="os-caption">{{ e.at|kurzdatum }}</span> {{ e.text|truncate(140) }}</li>{% endfor %}</ul>{% endif %}
+    {% if briefing.aufgaben %}<h3 class="os-headline" style="margin-top:24px;font-size:17px">Offen</h3><ul>{% for a in briefing.aufgaben %}<li>{{ a.titel }} · {{ a.tag }}</li>{% endfor %}</ul>{% endif %}
+    <form method="post" action="{{ url_for('kalender.briefing', tid=t.id) }}" data-os-fetch="reload" style="margin-top:24px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <label class="os-field"><span>Eigene Notizen zum Gespräch</span><textarea name="briefing_notiz" rows="4" maxlength="4000" placeholder="Fragen, Beispiel für die eingesparte Arbeit, Preisrahmen …">{{ t.briefing_notiz or '' }}</textarea></label>
+      <button class="os-btn small quiet">Briefing speichern</button>
+    </form>
+  </section>
+  {% endif %}
+
+  {% if darf_aendern and t.status != 'abgesagt' %}
+  <section class="os-section">
+    <ul class="os-list">
+      <li><a class="os-row" href="#" data-sheet="sheet-aendern"><span class="os-ico">{{ i('kalender') }}</span>
+        <span class="os-txt"><b>Verschieben oder ändern</b><span>{% if t.gaeste %}Google informiert die Gäste{% else %}Titel, Zeit, Ort, Notiz{% endif %}</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>
+      <li><a class="os-row danger" href="#" data-sheet="sheet-absagen"><span class="os-ico red">–</span>
+        <span class="os-txt"><b>Absagen</b><span>{% if t.gaeste and t.status == 'geplant' %}Google sagt den Gästen ab{% else %}Für alle Teilnehmenden{% endif %}</span></span></a></li>
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if verlauf %}
+  <section class="os-section">
+    <h2 class="os-headline">Verlauf</h2>
+    <ul class="os-list">{% for e in verlauf %}<li class="os-row" style="min-height:0;padding:8px 0">
+      <span class="os-txt"><span>{{ e.at|kurzdatum }} · {{ namen.get(e.wer, e.wer) }}</span><b style="font-weight:500;font-size:17px">{{ e.text }}</b></span></li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('kalender.uebersicht') }}" aria-label="Zurück zum Kalender">{{ i('back') }}</a>
+</div>
+
+{% if darf_aendern and t.status != 'abgesagt' %}
+<dialog class="os-sheet" id="sheet-aendern" aria-label="Termin ändern">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('kalender.aendern', tid=t.id) }}" data-os-fetch="reload" data-os-require=".os-ask">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <span class="os-eyebrow">Ändern</span>
+      <textarea class="os-ask" name="titel" rows="2" maxlength="200" required>{{ t.titel }}</textarea>
+      <div class="os-grid2">
+        <label class="os-field"><span>Datum</span><input type="date" name="datum" value="{{ t.start[:10] }}" required></label>
+        <label class="os-field"><span>Uhrzeit</span><input type="time" name="uhrzeit" value="{{ t.start[11:16] }}" step="900" required></label>
+      </div>
+      {% set dauer = ((t.ende|datumzeit) - (t.start|datumzeit)).seconds // 60 %}
+      <label class="os-field"><span>Dauer (Minuten)</span><input type="number" name="dauer" min="5" max="720" value="{{ dauer }}"></label>
+      <label class="os-field"><span>Ort</span><input type="text" name="ort" maxlength="200" value="{{ t.ort or '' }}"></label>
+      <label class="os-field"><span>Notiz</span><textarea name="beschreibung" rows="3" maxlength="4000">{{ t.beschreibung or '' }}</textarea></label>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Speichern</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+<dialog class="os-sheet" id="sheet-absagen" aria-label="Termin absagen">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('kalender.absagen', tid=t.id) }}" data-os-fetch="reload">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <span class="os-eyebrow">Absagen</span>
+      <textarea class="os-ask" name="grund" rows="2" maxlength="500" placeholder="Grund (optional)"></textarea>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Absagen</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endif %}
+{% if freigabe %}
+<dialog class="os-sheet" id="sheet-verwerfen" aria-label="Einladung verwerfen">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('kalender.freigabe', tid=t.id) }}" data-os-fetch="reload" data-os-require="textarea">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="ok" value="0">
+      <span class="os-eyebrow">Verwerfen</span>
+      <textarea class="os-ask" name="grund" rows="3" maxlength="500" placeholder="Warum nicht? Zeit, Person, Inhalt …" required></textarea>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Verwerfen</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endif %}
+{% endblock %}

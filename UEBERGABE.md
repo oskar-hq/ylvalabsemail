@@ -62,6 +62,13 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   Kontakte und Preisgespräche in der Akte. Nach dem Update: Omid als Recherche-Person bei „Handwerk“ und
   „Hausverwaltungen und Ingenieurbüros“ eintragen (Branchentest → Branche → Bearbeiten) und seine Lernstufe auf 1
   setzen (Einstellungen → Personen). Hamza steht auf Lernstufe 1, Oskar prüft also jeden seiner Leads.
+- **Firmen-OS Stufe 3 (01.11.2026):** Kalender und Termine. Nach dem Update: unter Einstellungen → Google Kalender
+  Client-ID und Clientschlüssel aus der JSON-Datei des Google-Projekts eintragen (die App startet kurz neu).
+  Dann verbindet jede Person unter „Mein Kalender“ ihr Google-Konto. Unter Einstellungen → Kalender das
+  Wochengespräch als Serie anlegen. **Noch nie echt getestet:** die Verbindung zu Google selbst (in der
+  Entwicklungsumgebung gesperrt, in den Tests nachgebaut). Erster Test: Oskar verbindet sich und legt einen
+  internen Termin mit sich selbst an; erscheint er im Google-Kalender, einen Kundentermin an die eigene
+  zweite Adresse mit Meet probieren.
 
 - Die automatischen Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.

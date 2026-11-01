@@ -202,6 +202,20 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
 - **In der Akte**: Testbranche und warm/kalt, „Kontakt protokollieren“ (Telefon, Brief, LinkedIn, vor Ort),
   „Ernsthaftes Preisgespräch geführt“.
 
+## Kalender und Termine (Stufe 3)
+
+- **Kalender**: Meine Termine oder die der Firma, zwei Wochen am Stück, filterbar nach Person. „Neuer Termin“
+  schlägt freie Zeiten vor, in denen alle können (Google frei/belegt plus Termine im OS, Arbeitszeit und Puffer).
+- **Mein Kalender**: eigenen Google-Kalender verbinden (nur frei/belegt lesen, Firmentermine eintragen) oder eine
+  geheime Abo-Adresse (ICS) für Apple-Kalender und andere erzeugen.
+- **Kundentermine** mit Gast-E-Mail: Google legt sie im Kalender der verantwortlichen Person an, erzeugt den
+  Meet-Link und verschickt die Einladung, aber erst nach ihrer Freigabe.
+- **Erinnerungen** 24 h und 1 h vorher, danach „Wie war der Termin?“ mit Ergebnis, Preisgespräch und Folgeaufgabe.
+  Bei Leads ein **Briefing** aus der Akte. **Serientermine** wie das Wochengespräch.
+- **Einrichten**: Einstellungen → Google Kalender: Client-ID und Clientschlüssel aus dem Google-Projekt
+  „Firmen OS“ eintragen. Danach verbindet jede Person unter „Mein Kalender“ ihr eigenes Konto. Google zeigt dabei
+  einmal „App nicht überprüft“ (über „Erweitert“ weiter).
+
 ## Team: Konten, eigenes CRM, Vorlage, Zahlen
 
 - **Anmelden mit Name und Passwort**. Passwörter liegen nur als scrypt-Hash in der Datenbank, nach Fehlversuchen
@@ -355,6 +369,9 @@ app/aufgaben_views.py  Seiten „Mein Tag“, „Aufgaben“, Kommentare
 app/personen_views.py  Einstellungen → Personen, Rollen, Bereiche, Protokoll; Einladungslink
 app/branchentest.py    Testbranchen, Lead-Prüfung (Freigaben), Kontakte, Preisgespräche, Auswertung
 app/branchentest_views.py  Seiten Branchentest, Testbranche, Leads prüfen; Knöpfe in der Akte
+app/kalender.py        Termine, Freigabe der Einladung, Vorschläge, Erinnerungen, Ergebnis, Briefing, Serien, ICS
+app/google_kalender.py Google OAuth, frei/belegt, Termine mit Meet (ohne Zusatzbibliothek)
+app/kalender_views.py  Seiten Kalender, Termin, Mein Kalender, Einstellungen → Kalender
 app/scoring.py         Bewertung nach Regeln und Einordnen von Antworten, beides ohne KI
 app/regions.py         Kreise: Grenzen, Statistik je Kreis, Wachstumsregionen
 app/agent.py           Hintergrund-Arbeiter: suchen, bewerten, Antworten lesen, Entwürfe auf Wunsch
