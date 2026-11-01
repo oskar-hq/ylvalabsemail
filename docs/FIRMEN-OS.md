@@ -495,7 +495,8 @@ Bitte direkt hier beantworten (Antwort: …), dann wird der Plan angepasst.
    Offen: Zu welcher Organisation gehört das Google-Konto, unter dem das Projekt „Firmen OS“ liegt? Liegen die
    Kalender von Oskar, Finn, Hamza und Omid in genau dieser Organisation (dann „Intern“ lassen) oder auf privaten
    Gmail-Konten bzw. bei Apple (dann „Als extern festlegen“ und „App veröffentlichen“)?
-   Antwort:
+   Antwort (01.11.2026): Finn, Hamza und Omid haben private Google-Konten. Auf „Extern“ lässt sich die App nur im
+   Modus „Test“ betreiben, „In production“ verlangt bei Google noch weitere Angaben. Wird gerade geklärt.
 2. **Status von Hamza und Omid** (Mitgründer oder Mitarbeit) – davon hängen Rechte im OS ab (Finanzen, Entscheidungen).
    Antwort:
 3. **Wie viele Stunden pro Woche** hat jede Person neben der Schule? Das OS kann Aufgaben nur sinnvoll verteilen und
@@ -513,7 +514,7 @@ Bitte direkt hier beantworten (Antwort: …), dann wird der Plan angepasst.
 8. **Läuft die App schon auf dem Server?** Google braucht für das Verbinden der Kalender die echte Adresse mit HTTPS
    (`https://mail.ylvalabs.de`). Und damit nie wieder jemand auf den Server muss, sollten „Updates per Knopf“ und die
    tägliche Sicherung beim Einrichten eingeschaltet worden sein (siehe [UEBERGABE.md](../UEBERGABE.md)).
-   Antwort:
+   Antwort (01.11.2026): Ja, die App läuft unter `https://mail.ylvalabs.de`.
 9. **Wer darf Personen und Rechte verwalten?** Vorschlag: Oskar und Finn als Gründer; Hamza und Omid nicht, bis ihr
    Status geklärt ist. In der App später jederzeit änderbar.
-   Antwort:
+   Antwort (01.11.2026): So machen wir es, Oskar und Finn.
