@@ -8,7 +8,9 @@ Vor jeder größeren Änderung lesen:
 2. [docs/ROLLEN-UND-ABLAEUFE.md](docs/ROLLEN-UND-ABLAEUFE.md) – Bereiche, Personen, Entscheidungsrechte, Lernstufen,
    Customer Journey. Das OS setzt diese Regeln durch.
 3. [UEBERGABE.md](UEBERGABE.md) und [README.md](README.md) – was heute schon läuft und wie es betrieben wird.
-4. [docs/DESIGN.md](docs/DESIGN.md) – verbindliches Design („Clean Finance“), hell und dunkel. Bausteine dafür in
+4. [docs/BAU-UEBERGABE.md](docs/BAU-UEBERGABE.md) – wo der Bau gerade steht, Arbeitsweise, Muster im Code und der
+   Vorschlag für die nächste Stufe. **Wer weiterbaut, fängt hier an.**
+5. [docs/DESIGN.md](docs/DESIGN.md) – verbindliches Design („Clean Finance“), hell und dunkel. Bausteine dafür in
    `static/os.css`, `static/os.js` und `templates/_os.html`; neue Seiten nutzen diese statt eigener Stile.
 
 **Grundregel für jeden Code: alles in den Einstellungen, nie auf den Server.** Das OS wird bedient wie eine normale
