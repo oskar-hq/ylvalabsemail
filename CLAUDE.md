@@ -9,6 +9,11 @@ Vor jeder größeren Änderung lesen:
    Customer Journey. Das OS setzt diese Regeln durch.
 3. [UEBERGABE.md](UEBERGABE.md) und [README.md](README.md) – was heute schon läuft und wie es betrieben wird.
 
+**Grundregel für jeden Code: alles in den Einstellungen, nie auf den Server.** Das OS wird bedient wie eine normale
+App. Schlüssel, Zugänge, Personen, Rollen, Rechte, Regeln, Anbindungen und Updates müssen in der Web-App änderbar
+sein. Niemand soll für den Alltag per Konsole auf den Server, in die `.env` oder in den Code müssen. Jede neue
+Funktion bringt ihre Einstellungen gleich mit (Details: FIRMEN-OS.md, Abschnitt 4.13).
+
 Kurz zur Technik: Python/Flask, SQLite (`app/leaddb.py`, Schema + `MIGRATIONS`), genau ein Gunicorn-Worker mit
 Hintergrund-Arbeiter (`app/agent.py`). Tests: `python -m unittest discover tests`. Oberfläche, Doku und
 Fachbegriffe auf Deutsch. Erstkontakt per Mail bleibt gesperrt, bis § 7 UWG geklärt ist; nichts geht ohne Freigabe

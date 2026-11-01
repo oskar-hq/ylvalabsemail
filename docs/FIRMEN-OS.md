@@ -1,6 +1,6 @@
 # Ylva Labs Firmen-OS – Bauplan
 
-**Stand:** 01.11.2026 · Skizze, noch kein Code · Kalender-Entscheidung eingetragen · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
+**Stand:** 01.11.2026 · Skizze, noch kein Code · Kalender und „alles in den Einstellungen“ eingetragen · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
 
 Aus dem Ylva Labs Mailer (Akquise, CRM, Mailer) wird das Betriebssystem der Firma. Diese Datei hält fest, **was**
 gebaut werden soll und **nach welchen Prinzipien**, damit alle, die am Code arbeiten (Menschen und KI), dasselbe
@@ -37,6 +37,8 @@ KPIs ausrechnen, Aufgaben anlegen, Fristen überwachen.
 | G6 | **Alles ist nachvollziehbar.** | Jede Änderung erzeugt ein Ereignis im Firmen-Protokoll: wer, wann, was, warum. Daraus entstehen KPIs, Berichte und die Case Studys. |
 | G7 | **Regeln stehen im OS, nicht in Köpfen.** | Entscheidungsrechte, Lernstufen, Preise, Abnahme-Checklisten und Bewertungsregeln sind Daten im OS und werden dort durchgesetzt. |
 | G8 | **Kostenlos und regelbasiert zuerst, KI wo sie wirklich hilft.** | Wie bisher beim Lead-Scoring: feste Regeln, sichtbare Kosten, Budgets als harte Grenze. |
+| G9 | **Alles in den Einstellungen, nie auf den Server.** | Das OS wird bedient wie eine normale App. Schlüssel, Zugänge, Personen, Rechte, Regeln, Anbindungen und Updates ändert man in der Web-App. Niemand muss für den Alltag per Konsole auf den Server, in die `.env` oder in den Code. Siehe 4.13. |
+| G10 | **Neue Fälle sind Daten, kein Code.** | Neue Person, neuer Bereich, neue Rolle, neue Rechte, neue Testbranche, neue Vorlage: alles in den Einstellungen anlegbar. Code ändert sich nur, wenn eine wirklich neue Funktion gebraucht wird. |
 
 ---
 
@@ -166,7 +168,14 @@ Kalender, dort wo sie ihn ohnehin führt.
 - Einmalig ein Projekt in der Google Cloud Console anlegen (kostenlos), Google Kalender API einschalten,
   OAuth-Zugang vom Typ „Webanwendung“ mit Rücksprung-Adresse `https://mail.ylvalabs.de/kalender/google/zurueck`.
   Kein Google Workspace nötig, normale Google-Konten reichen, und Meet-Links gehen damit auch.
-- Die Kalender-Berechtigungen gelten bei Google als „sensibel“. Solange die App nicht von Google geprüft ist:
+- **Client-ID und Clientschlüssel trägt man in der App ein** (Einstellungen → Anbindungen → Google), nicht in der
+  `.env` (G9). Die App zeigt dort auch die Rücksprung-Adresse zum Kopieren an.
+- Berechtigungen (nur diese zwei): `calendar.events.freebusy` (frei/belegt, gilt als nicht vertraulich) und
+  `calendar.events` (Termine anlegen mit Meet-Link und Einladung).
+- **Zielgruppe „Intern“ oder „Extern“:** „Intern“ geht nur, wenn das Projekt zu einer Google-Organisation
+  (Workspace) gehört, und dann können sich nur Konten dieser Organisation verbinden, ohne Prüfung und ohne Ablauf.
+  Haben Teammitglieder private Gmail-Konten, muss die App auf „Extern“ stehen. Dann gilt:
+- Bei „Extern“ gelten die Kalender-Berechtigungen als „sensibel“. Solange die App nicht von Google geprüft ist:
   - Im Modus **„Testing“** laufen die Anmeldungen **nach 7 Tagen ab**, alle müssten sich jede Woche neu verbinden.
     Deshalb nicht im Testmodus lassen.
   - Im Modus **„In production“ ohne Prüfung** zeigt Google beim Verbinden einmal den Hinweis „App nicht
@@ -177,6 +186,11 @@ Kalender, dort wo sie ihn ohnehin führt.
   installiert). In der App gibt es „Verbindung trennen“, und Google zeigt die Verbindung auch unter
   myaccount.google.com → Sicherheit.
 - Der Hintergrund-Arbeiter gleicht frei/belegt regelmäßig ab (z. B. alle 10 Minuten) und vor jedem Terminvorschlag.
+
+**Stand der Google-Einrichtung (01.11.2026, Oskar):** Projekt „Firmen OS“ angelegt, Google Calendar API aktiviert,
+beide Berechtigungen eingetragen, OAuth-Client (Webanwendung) erstellt, JSON-Datei mit dem Clientschlüssel bei
+Oskar gespeichert (nie ins Repository, nie in Chats). Zielgruppe steht auf **„Intern“**. Offen: ob das passt
+(siehe Abschnitt 10, Frage 1).
 
 ### 4.4 Akquise und Recherche (gibt es schon, wird erweitert)
 
@@ -306,6 +320,48 @@ Die KI ist der „Büroleiter“ des OS, aber nie ohne Leitplanken:
 - Schlägt Aufgaben und Prioritäten vor, legt sie aber nur auf Stufe A/B selbst an, wenn die Regel das erlaubt.
 - Budget je Person und Monat wie heute, Kosten je Kunde getrennt.
 
+
+### 4.13 Einstellungen: das Systemmenü des OS
+
+Grundsatz G9: Wie bei einem Betriebssystem auf dem Handy oder Rechner wird alles über die Einstellungen gesteuert.
+Die Konsole auf dem Server braucht man genau einmal, bei der Ersteinrichtung (`deploy/setup.sh`), und danach nur
+noch im Notfall (Server startet gar nicht mehr).
+
+**Was es schon gibt** (`app/config_store.py`, `app/settings_views.py`, `app/updater.py`): Einstellungen in der App
+statt in der `.env` (gespeichert in `settings.json` im Datenordner, Passwörter und Schlüssel verschlüsselt, in der
+Oberfläche nie wieder angezeigt), Neustart nach dem Speichern, Updates per Knopf mit Sicherung und automatischem
+Zurückrollen, Sicherung herunter- und hochladen.
+
+**Was dazukommt:**
+
+| Bereich in den Einstellungen | Inhalt |
+|---|---|
+| **Personen** | Mitarbeitende anlegen, einladen (Einladungslink setzt das Passwort), sperren, archivieren. Daten bleiben beim Archivieren erhalten. Heute ist das Team fest im Code (`leaddb.py`, `INSERT INTO team`), das wird abgelöst. |
+| **Rollen und Rechte** | Rollen (z. B. Gründer, Bereichsleitung, Recherche) mit Rechten je Modul: sehen / bearbeiten / freigeben / verwalten. Rechte zusätzlich je Person. Beispiele: Omid sieht keine Finanzen; nur Gründer dürfen Personen und Rechte ändern. |
+| **Bereiche** | anlegen, teilen, verantwortliche Person, KPIs je Bereich (Team-Roadmap ohne Code umsetzbar) |
+| **Lernstufen und Freigabe-Stufen** | Stufen, Aufstiegsbedingungen, Stufe A–D je Aktion, Stichprobenquote |
+| **Entscheidungsrechte** | die Tabelle aus den Rollen, inklusive Betragsgrenzen (200 €) |
+| **Anbindungen** | Google (Client-ID und Clientschlüssel), iCloud, Postfächer, KI-Schlüssel und Budgets, später Unipile und Bank. Jede Anbindung mit Knopf „Verbindung testen“ und Status. |
+| **Vorlagen und Regeln** | Angebote, Rechnungen, Abnahme-Checkliste, Anforderungsdokument, Mails, Bewertungsregeln, Branchen und Nischen |
+| **Firma** | Name, Adresse, Logo, Bankdaten für Rechnungen, Preise und Pauschalen |
+| **Software und Updates** | gibt es schon; dazu eine Liste „Was ist neu“ je Version |
+| **Sicherung** | gibt es schon; dazu Zeitplan und Speicherort (z. B. zusätzlich in die Cloud) |
+| **Protokoll** | wer hat wann welche Einstellung geändert (Ereignisse, G6) |
+
+**Regeln für die Umsetzung:**
+
+- Jede neue Funktion bringt ihre Einstellungen gleich mit. Ein Wert, den jemand ändern wollen könnte, gehört in die
+  Einstellungen, nicht als Konstante in den Code und nicht nur in die `.env`.
+- Die `.env` bleibt nur für den Start (Datenordner, Port) und als Rückfall. Was in der App gespeichert ist, gilt vor
+  der `.env` (so ist es schon heute).
+- **Aussperren verhindern:** Mindestens eine Person mit Recht „Personen und Rechte verwalten“ muss es immer geben;
+  die eigene Verwaltungsberechtigung kann man sich nicht selbst entziehen. Werte, die heute aus Sicherheitsgründen nur
+  in der `.env` stehen (`ALLOWED_DOMAINS`, `ADMIN_USERS`, `SECRET_KEY` …), werden durch Personen/Rollen in der App
+  ersetzt oder automatisch erzeugt, mit genau diesen Sicherungen. Für den Notfall gibt es einen dokumentierten
+  Wiederherstellungsweg über die Konsole.
+- Geheimnisse (Schlüssel, Passwörter, Tokens) werden verschlüsselt gespeichert, nach dem Speichern nie wieder
+  angezeigt, nur ersetzt oder gelöscht.
+
 ---
 
 ## 5. Datenmodell (Skizze)
@@ -369,6 +425,10 @@ Grundregel: **Jede schreibende Funktion erzeugt ein Ereignis.** Am besten über 
   Regeln (z. B. „Abnahme seit 3 Tagen offen“) und legt Aufgaben/Meldungen an.
 - **Handy zuerst:** Alles, was im Alltag gebraucht wird (Mein Tag, Freigaben, Aufgaben, Termine), muss auf dem Handy
   in der installierten Web-App gut gehen.
+- **Bedienung nur über die App (G9):** Neue Einstellungen werden in `app/config_store.py` (Gruppen) bzw. in
+  eigenen Einstellungsseiten ergänzt, nie nur als Umgebungsvariable. Personen, Rollen und Rechte liegen in der
+  Datenbank, nicht im Code. Updates laufen über `app/updater.py` (Knopf in der App); Migrationen der Datenbank laufen
+  beim Start automatisch (`MIGRATIONS`), damit ein Update nie Handarbeit auf dem Server braucht.
 - **Sicherheit und Datenschutz:** Kundendaten bleiben auf dem eigenen Server; AV-Verträge mit Kunden; Rechte je
   Rolle (Omid sieht z. B. keine Finanzen); Kunden-Zugang nur auf eigene Daten; Kalender-Token geheim und erneuerbar;
   `.env` nie ins Repository.
@@ -382,8 +442,9 @@ Grundregel: **Jede schreibende Funktion erzeugt ein Ereignis.** Am besten über 
 
 Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, dass das Team sie im Alltag benutzt.
 
-- [ ] **Stufe 1 – Fundament: Aufgaben, Bereiche, Protokoll**
-  Omid als Person anlegen, Rollen und Bereiche, Firmen-Protokoll (`ereignisse`) mit zentraler Log-Funktion,
+- [ ] **Stufe 1 – Fundament: Personen, Rechte, Aufgaben, Protokoll**
+  Personen in den Einstellungen anlegen und einladen (statt fest im Code; Omid als erster neuer), Rollen und
+  Rechte je Modul, Bereiche, Schutz gegen Aussperren, Firmen-Protokoll (`ereignisse`) mit zentraler Log-Funktion,
   Aufgaben mit Bereich/Person/Termin (Wiedervorlagen übernehmen), Anfragen an andere Bereiche, Seite „Mein Tag“,
   Kommentare mit @-Erwähnung. *Ab hier gilt: Was nicht im OS steht, ist keine Aufgabe.*
 - [ ] **Stufe 2 – Branchentest**
@@ -431,7 +492,9 @@ Bitte direkt hier beantworten (Antwort: …), dann wird der Plan angepasst.
 
 1. ~~**Google oder nicht?**~~ Entschieden (01.11.2026): Jede Person verbindet ihren eigenen Kalender (Google,
    Apple). Meet-Links erzeugt das OS über das Google-Konto der zuständigen Person. Siehe 4.3.
-   Offen: Nutzen Finn, Hamza und Omid Google oder Apple?
+   Offen: Zu welcher Organisation gehört das Google-Konto, unter dem das Projekt „Firmen OS“ liegt? Liegen die
+   Kalender von Oskar, Finn, Hamza und Omid in genau dieser Organisation (dann „Intern“ lassen) oder auf privaten
+   Gmail-Konten bzw. bei Apple (dann „Als extern festlegen“ und „App veröffentlichen“)?
    Antwort:
 2. **Status von Hamza und Omid** (Mitgründer oder Mitarbeit) – davon hängen Rechte im OS ab (Finanzen, Entscheidungen).
    Antwort:
@@ -446,4 +509,11 @@ Bitte direkt hier beantworten (Antwort: …), dann wird der Plan angepasst.
 6. **Was ist heute der größte Schmerz?** Danach richtet sich, ob nach Stufe 1 der Branchentest oder der Kalender kommt.
    Antwort:
 7. **Name:** Bleibt es „Ylva Labs Mailer“, oder bekommt das OS einen eigenen Namen in der Oberfläche?
+   Antwort:
+8. **Läuft die App schon auf dem Server?** Google braucht für das Verbinden der Kalender die echte Adresse mit HTTPS
+   (`https://mail.ylvalabs.de`). Und damit nie wieder jemand auf den Server muss, sollten „Updates per Knopf“ und die
+   tägliche Sicherung beim Einrichten eingeschaltet worden sein (siehe [UEBERGABE.md](../UEBERGABE.md)).
+   Antwort:
+9. **Wer darf Personen und Rechte verwalten?** Vorschlag: Oskar und Finn als Gründer; Hamza und Omid nicht, bis ihr
+   Status geklärt ist. In der App später jederzeit änderbar.
    Antwort:
