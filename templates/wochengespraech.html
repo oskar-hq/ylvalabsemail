@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 {% from "_os.html" import i, toasts, avatar, sheet_neu %}
 {% from "_ziele.html" import ziele_liste, ziel_sheet %}
+{% from "_entscheidung.html" import sheet_entscheidung, entscheidung_zeile %}
 {% block title %}Wochengespräch · Ylva Labs{% endblock %}
 {% block content %}
 {% set hier = url_for('cockpit.wochengespraech', woche=a.woche) %}
@@ -39,7 +40,7 @@
         {% for x in p.ueberfaellig[:5] %}<li><a class="os-row" href="{{ url_for('aufgaben.detail', aid=x.id) }}"><span class="os-ico red">!</span><span class="os-txt"><b>{{ x.titel }}</b><span>überfällig seit {{ x.tag }}</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
         {% for x in p.anfragen %}<li><a class="os-row" href="{{ url_for('aufgaben.detail', aid=x.id) }}"><span class="os-ico">{{ i('anfrage') }}</span><span class="os-txt"><b>{{ x.titel }}</b><span>Anfrage von {{ x.anfrage_von_name }}, unentschieden</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
         {% for x in p.ergebnisse %}<li><a class="os-row" href="{{ url_for('kalender.detail', tid=x.id) }}#ergebnis"><span class="os-ico">{{ i('kalender') }}</span><span class="os-txt"><b>{{ x.titel }}</b><span>Ergebnis fehlt</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
-        {% if p.pruefungen %}<li class="os-row"><span class="os-ico">{{ p.pruefungen }}</span><span class="os-txt"><b>Offene Freigaben</b><span>Prüfungen und Einladungen, die auf {{ p.person.name.split(' ')[0] }} warten</span></span></li>{% endif %}
+        {% if p.pruefungen %}<li class="os-row"><span class="os-ico">{{ p.pruefungen }}</span><span class="os-txt"><b>Offene Freigaben</b><span>Was in der Freigabe-Zentrale auf {{ p.person.name.split(' ')[0] }} wartet</span></span></li>{% endif %}
       </ul>
       {% endif %}
       {% if p.lernstand %}<p class="os-caption" style="margin-top:12px">Lernstufe {{ p.lernstand.stufe }}: {{ p.lernstand.text }}</p>{% endif %}
@@ -62,10 +63,30 @@
         <button class="os-link" name="ok" value="1">Freigeben</button></form>
         <button type="button" class="os-link danger" data-sheet="sheet-aufstieg-{{ f.id }}">Noch nicht</button>{% endif %}
     </li>{% endfor %}</ul>{% endif %}
-    {% set labels = {'lead_pruefung': 'Lead-Prüfungen', 'termin_einladung': 'Einladungen an Kunden', 'lernstufe': 'Aufstiege'} %}
-    {% if a.offen %}<dl class="os-kv" style="margin-top:16px">{% for art, n in a.offen.items() %}<dt>{{ labels.get(art, art) }}</dt><dd>{{ n }} offen</dd>{% endfor %}</dl>
-    {% elif not a.aufstiege %}<p class="os-empty">Nichts offen.</p>{% endif %}
-    <p class="os-caption" style="margin-top:16px">Notfälle der Woche und das Entscheidungs-Log kommen mit Stufe 6.</p>
+    {% if a.entscheidungen_offen %}<ul class="os-list" style="margin-top:8px">{% for e in a.entscheidungen_offen %}{{ entscheidung_zeile(e) }}{% endfor %}</ul>{% endif %}
+    {% if a.offen %}<dl class="os-kv" style="margin-top:16px">{% for label, n in a.offen.items() %}<dt>{{ label }}</dt><dd>{{ n }} offen</dd>{% endfor %}</dl>
+    <a class="os-btn small quiet" style="margin-top:12px" href="{{ url_for('freigaben.zentrale', alle='1') }}">Zur Freigabe-Zentrale</a>
+    {% elif not a.aufstiege and not a.entscheidungen_offen %}<p class="os-empty">Nichts offen.</p>{% endif %}
+  </section>
+
+  <section class="os-section">
+    <h2 class="os-headline">4. Notfälle der Woche</h2>
+    {% if a.notfaelle %}<ul class="os-list">{% for n in a.notfaelle %}<li><a class="os-row" href="{{ url_for('freigaben.notfall') }}#n{{ n.id }}">
+      <span class="os-ico {{ 'red' if not n.behoben_am }}">{{ '!' if not n.behoben_am else i('check') }}</span>
+      <span class="os-txt"><b>{{ n.art_label }}{% if n.lead_name %} · {{ n.lead_name }}{% endif %}</b><span>{{ n.text }}</span>
+        <span>{% if n.behoben_am %}behoben von {{ n.behoben_name }}: {{ n.notiz }}{% else %}läuft noch · zuständig {{ n.zustaendig_namen|join(', ') }}{% endif %}</span></span>
+      <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}</ul>
+    {% else %}<p class="os-empty">Keine Notfälle in dieser Woche.</p>{% endif %}
+  </section>
+
+  <section class="os-section">
+    <h2 class="os-headline">5. Entscheidungen der Woche</h2>
+    {% if a.entscheidungen %}<ul class="os-list">{% for e in a.entscheidungen %}{{ entscheidung_zeile(e) }}{% endfor %}</ul>
+    {% else %}<p class="os-empty">Noch nichts festgehalten.</p>{% endif %}
+    <div class="os-btns" style="margin-top:12px">
+      {% if darf('entscheidungen', 2) %}<button type="button" class="os-btn small quiet" data-sheet="sheet-entscheidung">Entscheidung festhalten</button>{% endif %}
+      {% if darf('entscheidungen') %}<a class="os-btn small quiet" href="{{ url_for('freigaben.log') }}">Ganzes Log</a>{% endif %}
+    </div>
   </section>
 </main>
 <div class="os-float">
@@ -88,5 +109,6 @@
   </div>
 </dialog>
 {% endfor %}
+{% if darf('entscheidungen', 2) %}{{ sheet_entscheidung(rechte, hier, 'wochengespraech') }}{% endif %}
 {% if darf('aufgaben', 2) %}{{ sheet_neu(bereiche, personen, [], account.team, heute, hier) }}{% endif %}
 {% endblock %}

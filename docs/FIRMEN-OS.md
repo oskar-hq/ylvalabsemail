@@ -1,6 +1,6 @@
 # Ylva Labs Firmen-OS – Bauplan
 
-**Stand:** 01.11.2026 · Stufe 1 bis 5 gebaut, als Nächstes Stufe 6 (Freigabe-Zentrale und Regeln als Daten) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
+**Stand:** 01.11.2026 · Stufe 1 bis 6 gebaut, als Nächstes Stufe 7 (Kunden-Bereich) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
 
 Aus dem Ylva Labs Mailer (Akquise, CRM, Mailer) wird das Betriebssystem der Firma. Diese Datei hält fest, **was**
 gebaut werden soll und **nach welchen Prinzipien**, damit alle, die am Code arbeiten (Menschen und KI), dasselbe
@@ -19,7 +19,7 @@ hier ab und trägt Abweichungen ein.
   ist eingerichtet und in Produktion (4.3). Apple/iCloud und ICS-Abo erst danach.
 - WhatsApp kommt später über Unipile, nicht jetzt.
 
-**Stand des Baus:** Stufe 1 bis 5 sind gebaut. Weiter geht es mit Stufe 6, Übergabe dazu in
+**Stand des Baus:** Stufe 1 bis 6 sind gebaut. Weiter geht es mit Stufe 7, Übergabe dazu in
 [BAU-UEBERGABE.md](BAU-UEBERGABE.md).
 
 **Womit der Bau anfing: Stufe 1** (Abschnitt 8). Der Kalender ist Stufe 3. Für Stufe 1 und 2 wird nichts von
@@ -589,9 +589,42 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
     Ausfallzeit braucht den Notfall-Knopf (Stufe 6). Neues Rechte-Modul „Kunden, Projekte und Änderungen“
     (Gründer verwalten, Recherche ohne Zugriff).
   - Der wöchentliche Check-in ist eine Kalender-Serie, die man am Projekt mit einem Klick anlegt.
-- [ ] **Stufe 6 – Freigabe-Zentrale und Regeln als Daten**
+- [x] **Stufe 6 – Freigabe-Zentrale und Regeln als Daten** (gebaut 01.11.2026, Abweichungen unten)
   Alle Vorschläge in einer Freigabe-Warteschlange, Freigabe-Stufen und Entscheidungsrechte einstellbar,
   Entscheidungs-Log.
+  *Umsetzung und Abweichungen:*
+  - `app/freigaben.py` (Zentrale, Stufen, Entscheidungsrechte, Log), `app/notfall.py`, Seiten in
+    `app/freigaben_views.py`. Neue Tabellen `entscheidungsrechte`, `entscheidungen`, `notfaelle`. Neues
+    Rechte-Modul „Freigabe-Stufen, Entscheidungsrechte und Entscheidungs-Log“ (Gründer verwalten, Recherche
+    bearbeitet: eigene Entscheidungen festhalten).
+  - **Freigabe-Zentrale** (`/freigaben`): Jede Art steht einmal in `freigaben.ARTEN` (Beschreibung, Entscheiden,
+    Modul). Aus der Tabelle `freigaben`: Lead-Prüfung, Einladung an Kunden, Aufstieg, Entscheidung. Abgeleitet aus
+    den Daten: Anforderung im Projekt (nur „Freigeben“; ändern geht im Projekt) und Erstkontakt-Entwürfe (nur Link
+    zur Akte, dort wird weiter geprüft und versendet). Ablehnen immer mit Grund. „Alle offenen“ für alle, die ein
+    betroffenes Modul verwalten. Zähler in der Navigation, Mein Tag zeigt die Freigaben in einem Abschnitt statt
+    getrennt nach Leads, Kalender und Aufstiegen. Die Seite „Leads prüfen“ (Branchentest) bleibt zusätzlich.
+  - **Freigabe-Stufen A–D je Aktion** als Einstellung (kv `regel:stufen`) mit erlaubten Stufen je Aktion. Wirklich
+    umschaltbar ist jetzt die Einladung an Kunden (A/B/C, Standard C). Stufe B legt eine Freigabe mit Frist an
+    (Frist im Feld `vorschlag`, keine eigene Spalte); der Takt im Hintergrund-Arbeiter verschickt nach der
+    Einspruchsfrist (Standard 24 Stunden, einstellbar 1–168), „Stoppen“ macht daraus eine normale Freigabe (C).
+    Ist die Aktion nicht mehr ausführbar (Termin abgesagt), bleibt sie als C stehen und steht im Protokoll. Feste
+    Aktionen (Erstkontakt C, Anforderung C, Abnahme D, Lead-Prüfung über Lernstufen, Team-Meldungen A) stehen zur
+    Übersicht im Katalog; Wochenbericht, Erinnerung, Angebot, Rechnung sind als „kommt mit Stufe 7/8“ sichtbar,
+    aber noch gesperrt. Erstkontakt per Mail bleibt hart gesperrt (§ 7 UWG).
+  - **Entscheidungsrechte** als Daten mit Startwerten aus ROLLEN-UND-ABLAEUFE.md: Wer entscheidet (verantwortliche
+    Person des eigenen Bereichs, die Person selbst, Bereich, Rolle, Person), „eine reicht“ oder „alle gemeinsam“,
+    wer vorher gefragt wird, Betragsgrenze und welches Recht ab der Grenze gilt (Startwert: ab 200 € das
+    Gründerteam). Anlegen, ändern, löschen in Einstellungen → Freigaben und Entscheidungen.
+  - **Entscheidungs-Log** (`/entscheidungen`): Was, wer, warum, Grundlage, Recht, Betrag. Darf die Person nach dem
+    Recht nicht allein entscheiden, landet die Entscheidung bei den übrigen in der Zentrale (Push); eine Ablehnung
+    beendet sie. Gefragte Personen bekommen eine Meldung. Änderungen an Regeln, Kennzahl-Zielen und Rollen trägt das
+    OS selbst ein (Haken in `firma.log`). Im Wochengespräch: offene Entscheidungen, Entscheidungen der Woche und
+    „Entscheidung festhalten“ direkt aus der Agenda.
+  - **Notfall-Knopf** (`/notfall`, im Konto-Menü): Arten Kundensystem gestört, Kundendaten in Gefahr, Kunde droht
+    abzuspringen. Benachrichtigt sofort per Glocke und Push die Verantwortlichen der eingestellten Bereiche
+    (Startwerte wie im Rollen-Dokument), rotes Band oben für alle, bis „Behoben“ mit Notiz. Notfälle der Woche im
+    Wochengespräch. Die KPI „Ausfallzeit“ ist jetzt berechnet (Stunden mit gestörtem Kundensystem, Überschneidungen
+    einmal gezählt).
 - [ ] **Stufe 7 – Kunden-Bereich**
   Portal mit Einmal-Link-Login, Termine, Projektstand, Änderungswünsche, Dokumente.
 - [ ] **Stufe 8 – Finanzen**

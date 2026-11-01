@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import aufgaben, branchentest, firma, kalender, kpis, projekte  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
+from . import aufgaben, branchentest, firma, freigaben, kalender, kpis, notfall, projekte  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
 
 ROOT = Path(__file__).resolve().parent.parent
 BRAIN_SEED = Path(__file__).resolve().parent / "brain_seed.md"
@@ -206,6 +206,13 @@ DATA_MIGRATIONS = [
        AND json_extract(rechte, '$.kunden') IS NULL""",
     """UPDATE rollen SET rechte = json_set(rechte, '$.kunden', 0) WHERE key = 'recherche'
        AND json_extract(rechte, '$.kunden') IS NULL""",
+    # Stufe 6: neues Modul „Freigabe-Stufen, Entscheidungsrechte und Entscheidungs-Log“ (Gründer verwalten,
+    # Recherche hält eigene Entscheidungen fest) und die Entscheidungsrechte aus docs/ROLLEN-UND-ABLAEUFE.md
+    """UPDATE rollen SET rechte = json_set(rechte, '$.entscheidungen', 4) WHERE key = 'gruender'
+       AND json_extract(rechte, '$.entscheidungen') IS NULL""",
+    """UPDATE rollen SET rechte = json_set(rechte, '$.entscheidungen', 2) WHERE key = 'recherche'
+       AND json_extract(rechte, '$.entscheidungen') IS NULL""",
+    *freigaben.SEED,
 ]
 
 FOLLOWUP_DAYS = 7  # wird beim Start aus LEADS_FOLLOWUP_DAYS gesetzt, 0 = aus
@@ -239,6 +246,8 @@ def connect(path):
     conn.executescript(kalender.SCHEMA)
     conn.executescript(kpis.SCHEMA)
     conn.executescript(projekte.SCHEMA)
+    conn.executescript(freigaben.SCHEMA)
+    conn.executescript(notfall.SCHEMA)
     for stmt in MIGRATIONS:
         try:
             conn.execute(stmt)

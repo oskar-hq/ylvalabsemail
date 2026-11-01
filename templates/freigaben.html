@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, avatar %}
+{% block title %}Freigaben · Ylva Labs{% endblock %}
+{% block content %}
+{% set hier = url_for('freigaben.zentrale', alle='1' if alle else None) %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Freigabe-Zentrale</span>
+    <h1 class="os-title-l">{% if n %}{{ n }} {{ 'wartet' if n == 1 else 'warten' }} auf {{ 'Freigabe' if alle else 'dich' }}{% else %}Nichts offen{% endif %}</h1>
+    <p class="os-sub os-lead">Alles, was ohne Freigabe nicht passiert, an einer Stelle. Ablehnen geht nur mit Grund, damit das Team daraus lernt.</p>
+  </header>
+  {% if darf_alle %}<div class="os-chips">
+    <a href="{{ url_for('freigaben.zentrale') }}" class="{{ 'on' if not alle }}" aria-current="{{ 'page' if not alle else 'false' }}">Wartet auf mich</a>
+    <a href="{{ url_for('freigaben.zentrale', alle='1') }}" class="{{ 'on' if alle }}" aria-current="{{ 'page' if alle else 'false' }}">Alle offenen</a>
+  </div>{% endif %}
+
+  {% if not gruppen %}<p class="os-empty" style="margin-top:24px">Hier ist gerade nichts. Neue Freigaben kommen auch in die Glocke.</p>{% endif %}
+  {% for label, liste in gruppen.items() %}
+  <section class="os-section" {{ 'style=margin-top:24px' if loop.first }}>
+    <h2 class="os-headline">{{ label }}</h2>
+    <div>{% for f in liste %}
+      <article class="os-freigabe" id="f-{{ f.art }}-{{ f.oid }}">
+        <div class="os-freigabe-kopf">
+          {% if f.von_name and f.von_name != 'System' %}{{ avatar(f.von_name) }}{% else %}<span class="os-ico {{ 'red' if f.frist }}">{{ i('kalender' if f.art == 'termin_einladung' else 'check') }}</span>{% endif %}
+          <span class="os-txt"><span class="os-caption">{{ f.eyebrow }}{% if f.stufe == 'B' %} · Stufe B{% endif %}</span>
+            <b><a href="{{ f.url }}">{{ f.titel }}</a></b>
+            <span>{% if f.text %}{{ f.text }}{% endif %}{% if f.von_name and f.von_name != 'System' %}{{ ' · ' if f.text }}von {{ f.von_name }}{% endif %}{% if alle and f.pruefer_name %} · prüft {{ f.pruefer_name }}{% endif %}</span>
+            {% if f.frist %}<span class="os-frist">Geht von selbst raus am {{ f.frist[8:10] }}.{{ f.frist[5:7] }}. um {{ f.frist[11:16] }} Uhr, wenn niemand stoppt.</span>{% endif %}
+          </span>
+        </div>
+        <div class="os-btns">
+          {% if f.nur_link %}<a class="os-btn small quiet" href="{{ f.url }}">{{ f.nur_link }}</a>
+          {% elif f.darf %}
+          <form method="post" action="{{ url_for('freigaben.entscheiden', art=f.art, oid=f.oid) }}" data-os-fetch="reload">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}"><input type="hidden" name="ok" value="1">
+            <button class="os-btn small ink">{{ f.ja }}</button></form>
+          {% if f.nein %}<button type="button" class="os-btn small quiet" data-sheet="sheet-nein-{{ f.art }}-{{ f.oid }}">{{ f.nein }}</button>{% endif %}
+          {% if f.frist %}<form method="post" action="{{ url_for('freigaben.stoppen', fid=f.oid) }}" data-os-fetch="reload">
+            <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="os-link danger">Stoppen</button></form>{% endif %}
+          {% else %}<a class="os-btn small quiet" href="{{ f.url }}">Ansehen</a>{% endif %}
+        </div>
+      </article>
+    {% endfor %}</div>
+  </section>
+  {% endfor %}
+  <p class="os-caption" style="margin-top:32px">Was auf welcher Stufe läuft (A automatisch, B mit Einspruch, C mit Freigabe, D nur Mensch), steht unter {% if darf('entscheidungen') %}<a href="{{ url_for('freigaben.einstellungen') }}">Einstellungen → Freigaben und Entscheidungen</a>{% else %}Einstellungen → Freigaben und Entscheidungen{% endif %}.</p>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('aufgaben.mein_tag') }}" aria-label="Zu Mein Tag">{{ i('back') }}</a>
+</div>
+{% for liste in gruppen.values() %}{% for f in liste if f.nein and f.darf and not f.nur_link %}
+<dialog class="os-sheet" id="sheet-nein-{{ f.art }}-{{ f.oid }}" aria-label="{{ f.nein }}: {{ f.titel }}">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('freigaben.entscheiden', art=f.art, oid=f.oid) }}" data-os-fetch="reload" data-os-require="textarea">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}"><input type="hidden" name="ok" value="0">
+      <span class="os-eyebrow">{{ f.eyebrow }} · {{ f.titel }}</span>
+      <textarea class="os-ask" name="grund" rows="3" maxlength="500" placeholder="{{ f.frage or 'Warum nicht?' }}" required></textarea>
+      {% if f.folge %}<p class="os-caption">{{ f.folge }}</p>{% endif %}
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>{{ f.nein }}</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endfor %}{% endfor %}
+{% endblock %}

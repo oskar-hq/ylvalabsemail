@@ -305,7 +305,9 @@ def anlegen(c, wer, titel, start, ende=None, dauer=None, verantwortlich=None, pe
         raise KalenderError("Erst die Lead-Prüfung abwarten, dann einen Termin vereinbaren.")
     art = "serie" if serie_id else ("kunde" if gaeste or lead else "intern")
     status = "geplant"
-    if gaeste and not (einladung_freigeben and wer == verantwortlich):
+    from . import freigaben
+    stufe = freigaben.stufe(c, "termin_einladung") if gaeste else "A"  # Einstellungen → Freigabe-Stufen
+    if gaeste and stufe != "A" and not (einladung_freigeben and wer == verantwortlich):
         status = "vorschlag"
     cur = c.execute("""INSERT INTO termine (titel, art, start, ende, ort, beschreibung, verantwortlich, lead_id, status,
                        meet, serie_id, erstellt_von, erstellt_am) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
@@ -326,7 +328,7 @@ def anlegen(c, wer, titel, start, ende=None, dauer=None, verantwortlich=None, pe
         leaddb.add_event(c, lead_id, "termin", f"Termin {'vorgeschlagen' if status == 'vorschlag' else 'geplant'}: "
                          f"{titel}, {zeitraum_text(get(c, tid))}.", author=firma.name_von(c, wer) or wer)
     if status == "vorschlag":
-        _freigabe_anfragen(c, wer, tid)
+        _freigabe_anfragen(c, wer, tid, stufe)
     else:
         sync(c, tid, einladen=bool(gaeste))
         _melden_neu(c, wer, tid)
@@ -342,9 +344,17 @@ def _melden_neu(c, wer, tid):
                             f"/kalender/{tid}")
 
 
-def _freigabe_anfragen(c, wer, tid):
-    from . import aufgaben, firma
+def _freigabe_anfragen(c, wer, tid, stufe="C"):
+    """Stufe C: wartet auf die verantwortliche Person. Stufe B: geht nach der Einspruchsfrist von selbst raus."""
+    from . import aufgaben, firma, freigaben
     t = get(c, tid)
+    if stufe == "B":
+        _, frist = freigaben.b_anlegen(c, wer, "termin_einladung", "termin", tid, t["verantwortlich"],
+                                       {"gaeste": t["gaeste"]})
+        aufgaben.melden(c, t["verantwortlich"], f"Einladung geht raus: {t['titel']}",
+                        f"{t['zeit']} · an {', '.join(t['gaeste'])} · automatisch am {frist[:16].replace('T', ' um ')}"
+                        ", wenn niemand stoppt", "/freigaben", push=True)
+        return
     c.execute("INSERT INTO freigaben (art, objekt_typ, objekt_id, stufe, angefragt_von, angefragt_am, pruefer, vorschlag)"
               " VALUES ('termin_einladung', 'termin', ?, 'C', ?, ?, ?, ?)",
               (tid, wer, now(), t["verantwortlich"], json.dumps({"gaeste": t["gaeste"]})))
@@ -371,9 +381,10 @@ def freigeben(c, wer, tid, ok, grund=""):
     from . import aufgaben, firma, leaddb
     t = get(c, tid)
     f = offene_freigabe(c, tid)
-    if not t or not f:
+    if not t or not f or t["status"] == "abgesagt":
         raise KalenderError("Hier wartet keine Einladung auf Freigabe.")
-    if wer != f["pruefer"] and not firma.darf(c, wer, "kalender", firma.VERWALTEN):
+    system = wer == "System" and f["stufe"] == "B"  # Stufe B: Frist abgelaufen, niemand hat gestoppt
+    if not system and wer != f["pruefer"] and not firma.darf(c, wer, "kalender", firma.VERWALTEN):
         raise KalenderError("Freigeben darf nur die verantwortliche Person.")
     grund = (grund or "").strip()
     if not ok and len(grund) < 3:
@@ -381,7 +392,8 @@ def freigeben(c, wer, tid, ok, grund=""):
     c.execute("UPDATE freigaben SET status=?, grund=?, entschieden_von=?, entschieden_am=? WHERE id=?",
               ("angenommen" if ok else "abgelehnt", grund or None, wer, now(), f["id"]))
     c.execute("UPDATE termine SET status=? WHERE id=?", ("geplant" if ok else "abgesagt", tid))
-    firma.log(c, wer, "freigabe", "termin", tid, f"Einladung {'freigegeben' if ok else 'verworfen'}: {t['titel']}",
+    firma.log(c, wer, "freigabe", "termin", tid, f"Einladung {'freigegeben' if ok else 'verworfen'}: {t['titel']}"
+              + (" (Stufe B, Frist ohne Einspruch abgelaufen)" if system else ""),
               {"grund": grund or None}, commit=False)
     c.commit()
     if t["lead_id"]:

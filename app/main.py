@@ -274,10 +274,15 @@ MODUL_JE_SEITE = {"compose": "mailer", "preview": "mailer", "send": "mailer", "u
                   "history": "mailer", "history_html": "mailer", "leads.costs": "kosten",
                   "leads.system": "einstellungen", "personen.protokoll": "protokoll",
                   # Zeiterfassung gibt es auch an Aufgaben: zählt zum Modul Aufgaben
-                  "kunden.zeit_start": "aufgaben", "kunden.zeit_stopp": "aufgaben", "kunden.zeit_nachtragen": "aufgaben"}
+                  "kunden.zeit_start": "aufgaben", "kunden.zeit_stopp": "aufgaben", "kunden.zeit_nachtragen": "aufgaben",
+                  # Stufe 6: Entscheidungs-Log und Einstellungen gehören zum eigenen Modul, Zentrale und Notfall
+                  # zu den Aufgaben (jede Art prüft selbst, wer entscheiden darf)
+                  "freigaben.log": "entscheidungen", "freigaben.festhalten": "entscheidungen",
+                  "freigaben.einstellungen": "entscheidungen", "freigaben.stufen_speichern": "entscheidungen",
+                  "freigaben.recht_speichern": "entscheidungen", "freigaben.notfall_speichern": "entscheidungen"}
 MODUL_JE_BEREICH = {"leads": "leads", "crm": "crm", "settings": "einstellungen", "aufgaben": "aufgaben",
                     "personen": "personen", "branchentest": "leads", "kalender": "kalender", "cockpit": "cockpit",
-                    "kunden": "kunden"}
+                    "kunden": "kunden", "freigaben": "aufgaben"}
 
 
 def modul_der_seite(endpoint):
@@ -914,6 +919,9 @@ app.register_blueprint(cockpit_bp)
 from .projekte_views import bp as kunden_bp  # noqa: E402
 
 app.register_blueprint(kunden_bp)
+from .freigaben_views import bp as freigaben_bp  # noqa: E402
+
+app.register_blueprint(freigaben_bp)
 
 
 @app.errorhandler(403)

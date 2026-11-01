@@ -202,6 +202,11 @@ def _projekte():
     return projekte
 
 
+def _notfall():
+    from . import notfall
+    return notfall
+
+
 def _k(key, label, bereich, fn, einheit="anzahl", richtung="hoch", je_person=True, quelle="", stufe=None):
     return {"key": key, "label": label, "bereich": bereich, "fn": fn, "einheit": einheit, "richtung": richtung,
             "je_person": je_person, "quelle": quelle, "kommt_mit": stufe}
@@ -231,7 +236,8 @@ KATALOG = [
        "runter", quelle="Zeiterfassung an Projekten, live in der Woche"),
     _k("freigaben_ohne_aenderung", "Abnahmen beim ersten Mal", "technik",
        lambda *a: _projekte().kpi_abnahmen_erstes_mal(*a), "prozent", quelle="Erste Abnahme bestanden"),
-    _k("ausfallzeit", "Ausfallzeit", "technik", None, "stunden", "runter", stufe=6),
+    _k("ausfallzeit", "Ausfallzeit", "technik", lambda *a: _notfall().ausfallzeit(*a), "stunden", "runter",
+       je_person=False, quelle="Notfälle „Kundensystem gestört“"),
     _k("aufgaben_erledigt", "Aufgaben erledigt", "alle", aufgaben_erledigt, quelle="Aufgaben im OS"),
     _k("aufgaben_ueberfaellig", "Aufgaben überfällig", "alle", aufgaben_ueberfaellig, richtung="runter",
        quelle="Stand jetzt"),
@@ -592,7 +598,7 @@ def takt(c):
 def agenda(c, wer, woche):
     """Pro Person (die `wer` sehen darf): Zahlen der Woche, Ziele, wo es hängt. Dazu Teamzahlen und offene
     Entscheidungen. Ergebnisse werden im Gespräch direkt als Aufgaben und Ziele erfasst."""
-    from . import aufgaben, kalender
+    from . import aufgaben, freigaben, kalender, notfall
     von, bis = woche_grenzen(woche)
     personen = []
     for p in sichtbare_personen(c, wer):
@@ -606,12 +612,13 @@ def agenda(c, wer, woche):
             "ziele": ziele_der_woche(c, woche, key), "naechste_ziele": ziele_der_woche(c, woche_plus(woche, 1), key),
             "ueberfaellig": tag["ueberfaellig"], "anfragen": tag["anfragen"],
             "ergebnisse": kalender.offene_ergebnisse(c, key),
-            "pruefungen": c.execute("SELECT COUNT(*) FROM freigaben WHERE status='offen' AND pruefer=?", (key,)
-                                    ).fetchone()[0],
+            "pruefungen": freigaben.zaehlen(c, key),
             "lernstand": lernstand(c, key) if p.get("lernstufe") else None,
         })
     team = [zeile(c, k, woche) for k in ("qualifizierte_leads", "kontakte", "termine_gebucht", "erstgespraeche",
                                          "preisgespraeche", "neue_kunden", "ki_kosten")]
-    offen = {r["art"]: r["n"] for r in c.execute("SELECT art, COUNT(*) n FROM freigaben WHERE status='offen' GROUP BY art")}
-    return {"woche": woche, "text": woche_text(woche), "personen": personen, "team": team, "offen": offen,
-            "aufstiege": aufstiege(c), "von": von, "bis": bis}
+    return {"woche": woche, "text": woche_text(woche), "personen": personen, "team": team,
+            "offen": freigaben.offen_je_art(c), "aufstiege": aufstiege(c), "von": von, "bis": bis,
+            "notfaelle": notfall.liste(c, von, bis),
+            "entscheidungen": freigaben.entscheidungen(c, von, bis),
+            "entscheidungen_offen": freigaben.entscheidungen(c, status="wartet")}

@@ -1216,5 +1216,285 @@ class ProjektWebTest(WebBasis):
         self.assertEqual(self.post("/zeit/start", {"typ": "projekt", "id": pid}).status_code, 403)
 
 
+class FreigabeZentraleTest(unittest.TestCase):
+    """Stufe 6: Freigabe-Zentrale über alle Arten, Stufen A–D je Aktion, Frist auf Stufe B."""
+
+    def setUp(self):
+        from unittest import mock
+        from app import freigaben, google_kalender, kalender
+        self.f, self.k = freigaben, kalender
+        self.fake = FakeGoogle()
+        p1 = mock.patch.object(google_kalender, "_http", self.fake)
+        p2 = mock.patch.dict(os.environ, {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "sec"})
+        p1.start(), p2.start()
+        self.addCleanup(p1.stop), self.addCleanup(p2.stop)
+        self.c = frische_db()
+        self.k.konto_speichern(self.c, "oskar", "r-oskar")
+        self.morgen10 = MORGEN + "T10:00"
+
+    def einladung(self, wer="hamza"):
+        lid = lead_anlegen(self.c, "Kunde Zentrale")
+        return self.k.anlegen(self.c, wer, "Erstgespräch", self.morgen10, verantwortlich="oskar", personen=["hamza"],
+                              gaeste="kunde@example.de", lead_id=lid)
+
+    def test_alle_arten_an_einer_stelle(self):
+        from app import branchentest as bt, projekte, crm
+        f, c = self.f, self.c
+        tid = self.einladung()
+        omid = firma.person_anlegen(c, "oskar", "Omid Beispiel", "recherche", bereiche_neu=["akquise"], lernstufe=1)
+        lid = lead_anlegen(c, "Sanitär Zentrale", "sanitaer")
+        bt.eingang(c, lid, omid)
+        # Anforderung im Projekt: wartet auf beide Freigaben (Verantwortlich und Technik)
+        kid = lead_anlegen(c, "Projekt Zentrale", stage="angebot", owner="oskar")
+        crm.set_stage(c, kid, "kunde", author="Oskar")
+        pid = projekte.zum_lead(c, kid)["id"]
+        projekte.weiter(c, "oskar", pid)
+        projekte.aendern(c, "oskar", pid, anforderung="Anfragen sortieren.")
+        projekte.kunde_bestaetigt(c, "oskar", pid)
+        projekte.schaetzen(c, "finn", pid, "12")
+        # Erstkontakt-Entwurf ohne schreibende Person: bei der zuständigen Person
+        eid = lead_anlegen(c, "Entwurf Zentrale", owner="oskar")
+        c.execute("UPDATE leads SET status='entwurf' WHERE id=?", (eid,))
+        c.commit()
+        oskar = {(x["art"], x["oid"]) for x in f.offen(c, "oskar")}
+        self.assertIn(("termin_einladung", f.offen(c, "oskar")[0]["oid"]), oskar)
+        self.assertEqual({a for a, _ in oskar}, {"termin_einladung", "anforderung", "erstkontakt"})
+        self.assertIn(("anforderung", pid), oskar)
+        self.assertEqual({x["art"] for x in f.offen(c, "hamza")}, {"lead_pruefung"})
+        self.assertEqual({x["art"] for x in f.offen(c, "finn")}, {"anforderung"})  # Technik gibt das Wie frei
+        self.assertEqual(f.zaehlen(c, "oskar"), len(oskar))
+        # Entscheiden aus der Zentrale: jede Art prüft selbst, wer darf
+        fid = c.execute("SELECT id FROM freigaben WHERE art='termin_einladung' AND objekt_id=?", (tid,)).fetchone()[0]
+        with self.assertRaises(self.k.KalenderError):
+            f.entscheiden(c, "hamza", "termin_einladung", fid, True)
+        f.entscheiden(c, "oskar", "termin_einladung", fid, True)
+        self.assertEqual(self.k.get(c, tid)["status"], "geplant")
+        with self.assertRaises(f.FreigabeError):
+            f.entscheiden(c, "oskar", "termin_einladung", fid, True)  # schon entschieden
+        with self.assertRaises(f.FreigabeError):
+            f.entscheiden(c, "oskar", "anforderung", pid, False, "nein")  # Anforderung: nur freigeben
+        f.entscheiden(c, "oskar", "anforderung", pid, True)
+        f.entscheiden(c, "finn", "anforderung", pid, True)
+        self.assertEqual({x["art"] for x in f.offen(c, "oskar")}, {"erstkontakt"})
+        pf = f.offen(c, "hamza")[0]
+        with self.assertRaises(Exception):
+            f.entscheiden(c, omid, "lead_pruefung", pf["oid"], True)  # nicht die eigene Recherche
+        f.entscheiden(c, "hamza", "lead_pruefung", pf["oid"], False, "Keine Website")
+        self.assertEqual(leaddb.get_lead(c, lid)["pruef_status"], "abgelehnt")
+        # „Alle offenen“: wer verwaltet, sieht auch, was bei anderen liegt
+        alle = f.offen(c, "finn", alle=True)
+        self.assertIn("erstkontakt", {x["art"] for x in alle})
+        self.assertEqual(f.offen(c, omid, alle=True), [])
+
+    def test_stufen_je_aktion_und_frist_b(self):
+        f, k, c = self.f, self.k, self.c
+        self.assertEqual(f.stufe(c, "termin_einladung"), "C")
+        with self.assertRaises(f.FreigabeError):
+            f.stufen_speichern(c, "oskar", {"termin_einladung": "D"})  # nicht erlaubt
+        with self.assertRaises(f.FreigabeError):
+            f.stufen_speichern(c, "oskar", {"frist_h": "0"})
+        f.stufen_speichern(c, "oskar", {"termin_einladung": "B", "frist_h": "24", "erstkontakt": "A",
+                                        "wochenbericht": "C"})
+        s = f.stufen(c)
+        self.assertEqual((s["termin_einladung"], s["frist_h"]), ("B", 24))
+        self.assertEqual(s["erstkontakt"], "C")  # fest: nie ohne Freigabe (§ 7 UWG, hart im Code)
+        self.assertEqual(s["wochenbericht"], "B")  # kommt erst mit Stufe 7
+        self.assertTrue(any(e["quelle"] == "regel" and "Freigabe-Stufen" in e["titel"]
+                            for e in f.entscheidungen(c)))  # Regeländerung steht im Entscheidungs-Log
+        # Stufe B: angekündigt, nicht verschickt; nach der Frist geht es ohne Einspruch raus
+        tid = self.einladung()
+        self.assertEqual(k.get(c, tid)["status"], "vorschlag")
+        self.assertEqual(self.fake.events, {})
+        offen = f.offen(c, "oskar")[0]
+        self.assertEqual((offen["stufe"], offen["art"]), ("B", "termin_einladung"))
+        self.assertTrue(offen["frist"] > leaddb.now())
+        self.assertEqual(f.takt(c), 0)  # Frist läuft noch
+        self.assertEqual(f.takt(c, jetzt=(date.today() + timedelta(days=3)).isoformat()), 1)
+        self.assertEqual(k.get(c, tid)["status"], "geplant")
+        self.assertEqual(len(self.fake.anfragen("POST", "/events")), 1)
+        self.assertIn("Frist ohne Einspruch", firma.protokoll(c, objekt=("termin", tid))[0]["text"])
+        # Stoppen: aus B wird C, der Takt tut nichts mehr
+        tid2 = self.einladung()
+        fid = f.offen(c, "oskar")[0]["oid"]
+        with self.assertRaises(f.FreigabeError):
+            f.stoppen(c, "finn", fid + 999)
+        f.stoppen(c, "oskar", fid)
+        self.assertEqual(f.takt(c, jetzt=(date.today() + timedelta(days=3)).isoformat()), 0)
+        self.assertEqual(k.get(c, tid2)["status"], "vorschlag")
+        self.assertEqual(f.offen(c, "oskar")[0]["stufe"], "C")
+        # Stufe A: Einladung geht sofort raus
+        f.stufen_speichern(c, "oskar", {"termin_einladung": "A"})
+        tid3 = self.einladung()
+        self.assertEqual(k.get(c, tid3)["status"], "geplant")
+        # Abgesagter Termin auf B: nicht ausführbar, bleibt als Freigabe stehen statt still zu verschwinden
+        f.stufen_speichern(c, "oskar", {"termin_einladung": "B"})
+        tid4 = self.einladung()
+        c.execute("UPDATE termine SET status='abgesagt' WHERE id=?", (tid4,))
+        c.commit()
+        self.assertEqual(f.takt(c, jetzt=(date.today() + timedelta(days=3)).isoformat()), 0)
+        self.assertEqual(k.get(c, tid4)["status"], "abgesagt")  # nicht wieder aufgeweckt
+        f4 = c.execute("SELECT stufe, status FROM freigaben WHERE objekt_id=? AND art='termin_einladung'",
+                       (str(tid4),)).fetchone()
+        self.assertEqual(tuple(f4), ("C", "offen"))
+        self.assertIn("nicht ausführbar", firma.protokoll(c, objekt=("termin", tid4))[0]["text"])
+
+
+class EntscheidungenTest(unittest.TestCase):
+    """Stufe 6: Entscheidungsrechte als Daten und Entscheidungs-Log."""
+
+    def setUp(self):
+        from app import freigaben
+        self.f = freigaben
+        self.c = frische_db()
+
+    def test_rechte_startwerte_und_aufloesen(self):
+        f, c = self.f, self.c
+        keys = [r["key"] for r in f.rechte(c)]
+        self.assertEqual(keys, ["eigener_bereich", "lernstufe", "kundenversprechen", "preis", "gruenderteam"])
+        self.assertEqual(firma.rechte(c, "oskar")["entscheidungen"], 4)
+        self.assertEqual(firma.rechte(c, "hamza")["entscheidungen"], 2)
+        r, noetig, gefragt = f.wer_entscheidet(c, "eigener_bereich", "hamza", 50)
+        self.assertEqual((r["key"], noetig), ("eigener_bereich", ["hamza"]))  # Hamza verantwortet Akquise
+        r, noetig, _ = f.wer_entscheidet(c, "eigener_bereich", "hamza", 250)  # über der Grenze: Gründerteam
+        self.assertEqual((r["key"], sorted(noetig)), ("gruenderteam", ["finn", "oskar"]))
+        _, noetig, gefragt = f.wer_entscheidet(c, "preis", "hamza")
+        self.assertEqual((noetig, gefragt), (["oskar"], ["finn"]))
+        omid = firma.person_anlegen(c, "oskar", "Omid Beispiel", "recherche", bereiche_neu=["akquise"])
+        self.assertEqual(f.wer_entscheidet(c, "eigener_bereich", omid)[1], ["hamza"])
+
+    def test_log_allein_gemeinsam_und_ablehnen(self):
+        f, c = self.f, self.c
+        with self.assertRaises(f.FreigabeError):
+            f.entscheiden_festhalten(c, "oskar", "Ohne Grund", "", recht_key="eigener_bereich")
+        e1 = f.entscheiden_festhalten(c, "oskar", "Neue Visitenkarten", "Alte sind leer", recht_key="eigener_bereich",
+                                      betrag="80")
+        self.assertEqual(f.entscheidung_get(c, e1)["status"], "gilt")
+        # Kundenversprechen: Markt und Technik gemeinsam, wartet auf Finn in der Zentrale
+        e2 = f.entscheiden_festhalten(c, "oskar", "Sonderanpassung für Sievers", "Großer Kunde",
+                                      recht_key="kundenversprechen")
+        e = f.entscheidung_get(c, e2)
+        self.assertEqual((e["status"], e["fehlt"]), ("wartet", ["Finn Adams"]))
+        offen = f.offen(c, "finn")
+        self.assertEqual([(x["art"], x["titel"]) for x in offen], [("entscheidung", "Sonderanpassung für Sievers")])
+        self.assertEqual(f.offen(c, "oskar"), [])
+        with self.assertRaises(f.FreigabeError):
+            f.entscheiden(c, "hamza", "entscheidung", offen[0]["oid"], True)
+        f.entscheiden(c, "finn", "entscheidung", offen[0]["oid"], True)
+        self.assertEqual(f.entscheidung_get(c, e2)["status"], "gilt")
+        self.assertIn("Entscheidung gilt jetzt: Sonderanpassung für Sievers",
+                      [r["title"] for r in leaddb.notices(c, "o", 20, "oskar")[0]])
+        # Ausgabe über der Grenze von Hamza: Gründerteam gemeinsam, eine Ablehnung reicht
+        e3 = f.entscheiden_festhalten(c, "hamza", "Neues Recherche-Tool", "Spart Zeit", recht_key="eigener_bereich",
+                                      betrag="1.200,00")
+        e = f.entscheidung_get(c, e3)
+        self.assertEqual((e["status"], e["recht"], e["betrag"]), ("wartet", "gruenderteam", 1200.0))
+        fid = f.offen(c, "oskar")[0]["oid"]
+        with self.assertRaises(f.FreigabeError):
+            f.entscheiden(c, "oskar", "entscheidung", fid, False, "")
+        f.entscheiden(c, "oskar", "entscheidung", fid, False, "Erst im Wochengespräch")
+        self.assertEqual(f.entscheidung_get(c, e3)["status"], "abgelehnt")
+        self.assertEqual(f.offen(c, "finn"), [])  # Finns Anfrage ist hinfällig
+
+    def test_rechte_pflegen_und_regel_im_log(self):
+        f, c = self.f, self.c
+        with self.assertRaises(f.FreigabeError):
+            f.recht_speichern(c, "oskar", "", "Werbung", "", ["unbekannt:x"], "eine", [])
+        key = f.recht_speichern(c, "oskar", "", "Werbebudget", "Anzeigen", ["bereich:markt"], "eine", [], "500",
+                                "gruenderteam")
+        self.assertEqual(f.recht(c, key)["grenze_eur"], 500)
+        f.recht_speichern(c, "oskar", key, "Werbebudget", "Anzeigen", ["person:finn"], "eine", ["bereich:markt"])
+        self.assertEqual(f.wer_entscheidet(c, key, "hamza")[1:], (["finn"], ["oskar"]))
+        with self.assertRaises(f.FreigabeError):
+            f.recht_loeschen(c, "oskar", "gruenderteam")  # „Alles im eigenen Bereich“ verweist ab 200 € darauf
+        f.recht_loeschen(c, "oskar", key)
+        log = [e["titel"] for e in f.entscheidungen(c)]
+        self.assertTrue(any("Werbebudget" in t and "gelöscht" in t for t in log))
+        firma.rolle_speichern(c, "oskar", "", "Praktikum", {"aufgaben": 2})
+        self.assertTrue(any(e["quelle"] == "regel" and "Praktikum" in e["titel"] for e in f.entscheidungen(c)))
+
+
+class NotfallTest(unittest.TestCase):
+    def setUp(self):
+        from app import notfall
+        self.n = notfall
+        self.c = frische_db()
+
+    def test_melden_band_beheben_und_ausfallzeit(self):
+        n, c = self.n, self.c
+        with self.assertRaises(n.NotfallError):
+            n.melden(c, "hamza", "kundensystem", "")
+        nid = n.melden(c, "hamza", "kundensystem", "Buchungsseite zeigt Fehler")
+        self.assertEqual(n.get(c, nid)["zustaendig"], ["finn"])  # Technik
+        self.assertIn("Notfall: Kundensystem gestört", [r["title"] for r in leaddb.notices(c, "f", 9, "finn")[0]])
+        self.assertEqual(sorted(n.zustaendige(c, "kundendaten")), ["finn", "oskar"])
+        self.assertEqual([x["id"] for x in n.aktive(c)], [nid])
+        with self.assertRaises(n.NotfallError):
+            n.beheben(c, "finn", nid, "")
+        # Ausfallzeit: zwei Stunden in dieser Woche, Überschneidungen zählen einmal
+        from app import kpis
+        von, bis = kpis.woche_grenzen(kpis.woche_von())
+        start = von[:10] + "T09:00:00"
+        c.execute("UPDATE notfaelle SET gemeldet_am=? WHERE id=?", (start, nid))
+        n.beheben(c, "finn", nid, "Zertifikat erneuert")
+        c.execute("UPDATE notfaelle SET behoben_am=? WHERE id=?", (von[:10] + "T11:00:00", nid))
+        n2 = n.melden(c, "oskar", "kundensystem", "Noch ein Fehler")
+        c.execute("UPDATE notfaelle SET gemeldet_am=?, behoben_am=? WHERE id=?",
+                  (von[:10] + "T10:00:00", von[:10] + "T10:30:00", n2))
+        n.melden(c, "oskar", "abschluss", "Kunde will kündigen")  # zählt nicht zur Ausfallzeit
+        c.commit()
+        self.assertEqual(n.ausfallzeit(c, von, bis), 2.0)
+        self.assertEqual(kpis.wert(c, "ausfallzeit", kpis.woche_von()), 2.0)
+        self.assertEqual(len(n.aktive(c)), 1)
+        # Zuständigkeit in den Einstellungen
+        from werkzeug.datastructures import MultiDict
+        with self.assertRaises(n.NotfallError):
+            n.regeln_speichern(c, "oskar", MultiDict({"kundensystem": "technik", "kundendaten": "", "abschluss": "markt"}))
+        n.regeln_speichern(c, "oskar", MultiDict([("kundensystem", "technik"), ("kundensystem", "akquise"),
+                                                  ("kundendaten", "technik"), ("abschluss", "markt")]))
+        self.assertEqual(sorted(n.zustaendige(c, "kundensystem")), ["finn", "hamza"])
+
+
+class FreigabenWebTest(WebBasis):
+    def test_seiten_rechte_und_ablauf(self):
+        from app import freigaben, notfall
+        c = self.c
+        for url in ("/freigaben", "/freigaben?alle=1", "/entscheidungen", "/notfall", "/einstellungen/freigaben",
+                    "/mein-tag", "/wochengespraech", "/einstellungen"):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+        r = self.post("/entscheidungen", {"titel": "Web-Entscheidung", "begruendung": "Weil es passt",
+                                          "recht": "kundenversprechen", "quelle": "wochengespraech"},
+                      headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"], r.get_data(as_text=True))
+        e = freigaben.entscheidungen(c, limit=1)[0]
+        self.addCleanup(lambda: (c.execute("DELETE FROM entscheidungen WHERE id=?", (e["id"],)),
+                                 c.execute("DELETE FROM freigaben WHERE art='entscheidung'"), c.commit()))
+        self.assertEqual((e["status"], e["quelle"]), ("wartet", "wochengespraech"))
+        self.assertIn("Web-Entscheidung", self.client.get("/wochengespraech").get_data(as_text=True))
+        self.als("finn")
+        html = self.client.get("/freigaben").get_data(as_text=True)
+        self.assertIn("Web-Entscheidung", html)
+        self.assertIn("Freigaben", self.client.get("/mein-tag").get_data(as_text=True))
+        fid = next(x["oid"] for x in freigaben.offen(c, "finn") if x["art"] == "entscheidung")
+        r = self.post(f"/freigaben/entscheidung/{fid}", {"ok": "1"}, headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json().get("ok"), r.get_json())
+        self.assertEqual(freigaben.entscheidung_get(c, e["id"])["status"], "gilt")
+        # Notfall: Band für alle, bis behoben
+        self.als("hamza")
+        r = self.post("/notfall", {"art": "abschluss", "text": "Kunde springt ab"}, headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"])
+        nid = notfall.aktive(c)[0]["id"]
+        self.addCleanup(lambda: (c.execute("DELETE FROM notfaelle WHERE id=?", (nid,)), c.commit()))
+        self.assertIn("os-notfall-band", self.client.get("/aufgaben").get_data(as_text=True))
+        self.post(f"/notfall/{nid}/behoben", {"notiz": "Telefoniert, bleibt"})
+        self.assertNotIn("os-notfall-band", self.client.get("/aufgaben").get_data(as_text=True))
+        # Einstellungen nur mit Verwalten
+        self.assertEqual(self.client.get("/einstellungen/freigaben").status_code, 200)  # Sehen geht
+        self.assertEqual(self.post("/einstellungen/freigaben/stufen", {"termin_einladung": "A"}).status_code, 403)
+        self.als("oskar")
+        r = self.post("/einstellungen/freigaben/stufen", {"termin_einladung": "C", "frist_h": "24"},
+                      headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"])
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -236,6 +236,21 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
 - **Einstellungen → Projekte**: Checkliste, kostenlose Tage, Grenze für kleine Änderungen, Pauschale,
   Umsetzungstag, Stundensatz, Serverkosten, Annahme an Stunden je Kunde und Monat.
 
+## Freigaben, Entscheidungen, Notfall (Stufe 6)
+
+- **Freigaben**: alles, was auf dich wartet, an einer Stelle (Lead-Prüfungen, Einladungen an Kunden, Aufstiege,
+  Entscheidungen, Anforderungen im Projekt, Erstkontakt-Entwürfe mit Link zur Akte). Ablehnen nur mit Grund.
+  Zähler in der Navigation, auf Mein Tag ein Abschnitt. Wer verwaltet, sieht auch „Alle offenen“.
+- **Freigabe-Stufen A–D je Aktion** (Einstellungen → Freigaben und Entscheidungen): A automatisch, B mit Einspruch
+  (geht nach der Frist von selbst raus, Standard 24 Stunden, „Stoppen“ jederzeit), C mit Freigabe, D nur Mensch.
+  Umschaltbar ist heute die Einladung an Kunden; der Erstkontakt per Mail bleibt hart gesperrt (§ 7 UWG).
+- **Entscheidungsrechte**: wer allein entscheidet, was nur gemeinsam geht, wer gefragt wird, Betragsgrenze
+  (Startwerte aus den Rollen, ab 200 € das Gründerteam). In den Einstellungen änderbar.
+- **Entscheidungs-Log**: was, wer, warum, Grundlage. Reicht das eigene Recht nicht, warten die übrigen in ihren
+  Freigaben. Regeländerungen trägt das OS selbst ein. Auch im Wochengespräch.
+- **Notfall-Knopf** (Konto-Menü → Notfall melden): ruft sofort die Zuständigen per Push, rotes Band für alle, bis
+  behoben. Daraus die Kennzahl „Ausfallzeit“.
+
 ## Team: Konten, eigenes CRM, Vorlage, Zahlen
 
 - **Anmelden mit Name und Passwort**. Passwörter liegen nur als scrypt-Hash in der Datenbank, nach Fehlversuchen

@@ -1,0 +1,38 @@
+{# Formular „Entscheidung festhalten“ (Entscheidungs-Log und Wochengespräch) #}
+{% from "_os.html" import i %}
+{% macro sheet_entscheidung(rechte, next, quelle='hand', id='sheet-entscheidung') -%}
+<dialog class="os-sheet" id="{{ id }}" aria-label="Entscheidung festhalten">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('freigaben.festhalten') }}" data-os-fetch="reload" data-os-require="[name=titel]">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ next }}"><input type="hidden" name="quelle" value="{{ quelle }}">
+      <span class="os-eyebrow">Entscheidung festhalten</span>
+      <textarea class="os-ask" name="titel" rows="2" maxlength="200" placeholder="Was wurde entschieden?" required></textarea>
+      <label class="os-field"><span>Warum?</span><textarea name="begruendung" rows="3" maxlength="2000" required placeholder="Die Gründe, kurz. Daraus lernt das Team später."></textarea></label>
+      <label class="os-field"><span>Auf welcher Grundlage? (optional)</span><input name="grundlage" maxlength="1000" placeholder="Zahlen, Gespräch, Angebot, Link"></label>
+      <div class="os-grid2">
+        <label class="os-field"><span>Nach welchem Recht?</span><select name="recht">{% for r in rechte %}<option value="{{ r.key }}">{{ r.titel }}</option>{% endfor %}</select></label>
+        <label class="os-field"><span>Betrag in € (optional)</span><input name="betrag" inputmode="decimal" placeholder="z. B. 150"></label>
+      </div>
+      <p class="os-caption">Darfst du das nach dem Recht nicht allein, landet die Entscheidung bei den übrigen in der Freigabe-Zentrale. Über der Betragsgrenze entscheidet das übergeordnete Recht.</p>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Festhalten</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{%- endmacro %}
+
+{% macro entscheidung_zeile(e) -%}
+<li class="os-row" id="e{{ e.id }}">
+  <span class="os-ico {{ 'red' if e.status == 'wartet' }}">{{ i('check' if e.status == 'gilt' else 'anfrage' if e.status == 'wartet' else 'back') }}</span>
+  <span class="os-txt"><b>{{ e.titel }}</b>
+    <span>{{ e.wer_name }} · {{ e.at[8:10] }}.{{ e.at[5:7] }}.{{ e.at[:4] }}{% if e.recht_titel %} · {{ e.recht_titel }}{% endif %}{% if e.betrag is not none %} · {{ '%g'|format(e.betrag) }} €{% endif %} · {{ e.quelle_label }}</span>
+    {% if e.begruendung and e.quelle != 'regel' %}<span>Warum: {{ e.begruendung }}</span>{% endif %}
+    {% if e.grundlage and e.quelle != 'regel' %}<span>Grundlage: {{ e.grundlage }}</span>{% endif %}
+    {% if e.status == 'wartet' %}<span class="os-frist">Wartet auf {{ e.fehlt|join(', ') }}</span>{% endif %}
+    {% if e.status == 'abgelehnt' %}<span class="os-frist">Abgelehnt</span>{% endif %}
+  </span>
+</li>
+{%- endmacro %}

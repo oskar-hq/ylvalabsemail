@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Notfall · Ylva Labs{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Notfall-Knopf</span>
+    <h1 class="os-title-l">{% if aktiv %}{{ aktiv|length }} {{ 'Notfall läuft' if aktiv|length == 1 else 'Notfälle laufen' }}{% else %}Etwas brennt?{% endif %}</h1>
+    <p class="os-sub os-lead">Wähle die Art und schreib in einem Satz, was los ist. Die Zuständigen bekommen es sofort aufs Handy, alle sehen ein Band oben, bis es behoben ist.</p>
+  </header>
+
+  <form method="post" action="{{ url_for('freigaben.notfall_melden') }}" data-os-fetch="reload" data-os-require="textarea" class="os-section" style="margin-top:0">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <div class="os-list">{% for k, (label, erklaerung, _) in arten.items() %}
+      <label class="os-row" style="cursor:pointer">
+        <input type="radio" name="art" value="{{ k }}" {{ 'checked' if loop.first }} style="accent-color:var(--destructive);width:20px;height:20px;flex:none">
+        <span class="os-txt"><b>{{ label }}</b><span>{{ erklaerung }} Benachrichtigt: {{ zustaendig[k]|join(', ') or 'Verwaltung' }}.</span></span>
+      </label>{% endfor %}
+    </div>
+    <label class="os-field" style="margin-top:16px"><span>Was ist los?</span><textarea name="text" rows="3" maxlength="1000" required placeholder="z. B. Buchungsseite von Sievers zeigt seit 10 Uhr einen Fehler"></textarea></label>
+    {% if leads %}<label class="os-field"><span>Welcher Kunde? (optional)</span><select name="lead_id"><option value="">Kein bestimmter</option>{% for l in leads %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}</select></label>{% endif %}
+    <button class="os-btn" style="background:var(--destructive);color:#fff"><span>Notfall melden</span></button>
+  </form>
+
+  {% if aktiv %}
+  <section class="os-section">
+    <h2 class="os-headline">Läuft gerade</h2>
+    <ul class="os-list">{% for n in aktiv %}<li class="os-row" id="n{{ n.id }}">
+      <span class="os-ico red">!</span>
+      <span class="os-txt"><b>{{ n.art_label }}{% if n.lead_name %} · {{ n.lead_name }}{% endif %}</b><span>{{ n.text }}</span>
+        <span>gemeldet von {{ n.von_name }}, {{ n.gemeldet_am[8:10] }}.{{ n.gemeldet_am[5:7] }}. um {{ n.gemeldet_am[11:16] }} · zuständig {{ n.zustaendig_namen|join(', ') }}</span></span>
+      <span class="os-end"><button type="button" class="os-btn small ink" data-sheet="sheet-behoben-{{ n.id }}">Behoben</button></span>
+    </li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  {% if behoben %}
+  <section class="os-section">
+    <h2 class="os-headline">Zuletzt behoben</h2>
+    <ul class="os-list">{% for n in behoben %}<li class="os-row" id="n{{ n.id }}">
+      <span class="os-ico">{{ i('check') }}</span>
+      <span class="os-txt"><b>{{ n.art_label }}{% if n.lead_name %} · {{ n.lead_name }}{% endif %}</b><span>{{ n.text }}</span>
+        <span>{{ n.gemeldet_am[8:10] }}.{{ n.gemeldet_am[5:7] }}. {{ n.gemeldet_am[11:16] }} bis {{ n.behoben_am[8:10] }}.{{ n.behoben_am[5:7] }}. {{ n.behoben_am[11:16] }} · {{ n.behoben_name }}: {{ n.notiz }}</span></span>
+    </li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+  {% if darf('entscheidungen', 4) %}<p class="os-caption" style="margin-top:32px">Wer bei welcher Art benachrichtigt wird: <a href="{{ url_for('freigaben.einstellungen') }}#notfall">Einstellungen → Freigaben und Entscheidungen</a>.</p>{% endif %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('aufgaben.mein_tag') }}" aria-label="Zu Mein Tag">{{ i('back') }}</a>
+</div>
+{% for n in aktiv %}
+<dialog class="os-sheet" id="sheet-behoben-{{ n.id }}" aria-label="Notfall behoben">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('freigaben.notfall_behoben', nid=n.id) }}" data-os-fetch="reload" data-os-require="textarea">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <span class="os-eyebrow">{{ n.art_label }}</span>
+      <textarea class="os-ask" name="notiz" rows="3" maxlength="2000" placeholder="Was war die Ursache, was wurde getan?" required></textarea>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Behoben</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endfor %}
+{% endblock %}
