@@ -96,7 +96,10 @@ AKTIONEN = [
     _a("wochenbericht", "Wochenbericht an Kunden", "B", ["B", "C"],
        "Aus Projektstand, Änderungen und Terminen, am eingestellten Tag (Einstellungen → Kunden-Bereich). Vor dem "
        "Versand am Projekt bearbeitbar."),
-    _a("angebot", "Angebot verschicken", "C", ["C", "D"], kommt_mit="später"),
+    _a("angebot", "Angebot verschicken", "C", ["C", "D"],
+       "Entwurf (auf Wunsch vom Assistenten), Preise aus den Daten, nie von der KI. Auf C gibt die verantwortliche "
+       "Person frei, dann gehen Nummer, PDF, Kunden-Bereich und Mail raus. Auf D legt das OS PDF und eine Aufgabe "
+       "„persönlich übergeben“ an."),
     _a("rechnung", "Rechnung ausstellen und verschicken", "C", ["B", "C"],
        "Bekommt erst mit der Freigabe ihre Nummer, dann PDF, Kunden-Bereich und Mail. Monatsrechnungen bereitet das OS "
        "am eingestellten Tag vor (Einstellungen → Finanzen)."),
@@ -599,6 +602,29 @@ def _entscheide_rechnung(c, wer, f, ok, grund):
         raise FreigabeError(str(exc)) from exc
 
 
+def _angebot(c, f):
+    from . import assistent
+    a = assistent.angebot_get(c, int(f["objekt_id"]))
+    if not a:
+        return None
+    teile = [f"einmalig {assistent._euro(a['summe'])}" if a["summe"] else "",
+             f"{assistent._euro(a['monatlich'])} je Monat" if a["monatlich"] else "",
+             f"{a['schaetzung_h']:g} h geschätzt" if a["schaetzung_h"] else "",
+             f"an {a['email']}" if a["email"] and f["stufe"] != "D" else ("persönlich übergeben" if f["stufe"] == "D"
+                                                                          else "ohne Mailadresse")]
+    return {"titel": f"{a['kunde']}: {a['titel']}", "text": " · ".join(x for x in teile if x), "eyebrow": "Angebot",
+            "url": f"/angebote/{a['id']}", "frage": "Was muss am Angebot anders?",
+            "folge": "Das Angebot geht zurück in den Entwurf.", "ja": "Freigeben", "nein": "Zurück"}
+
+
+def _entscheide_angebot(c, wer, f, ok, grund):
+    from . import assistent
+    try:
+        assistent.entscheiden(c, wer, int(f["objekt_id"]), ok, grund)
+    except assistent.AssistentError as exc:
+        raise FreigabeError(str(exc)) from exc
+
+
 def _darf_selbst(c, wer, f):
     return wer == f["pruefer"]
 
@@ -619,6 +645,8 @@ ARTEN = {
                          "entscheiden": _entscheide_erinnerung, "darf": _darf_alle},
     "rechnung": {"label": "Rechnungen", "modul": "finanzen", "beschreiben": _rechnung,
                  "entscheiden": _entscheide_rechnung, "darf": _darf_alle},
+    "angebot": {"label": "Angebote", "modul": "kunden", "beschreiben": _angebot, "entscheiden": _entscheide_angebot,
+                "darf": _darf_alle},
 }
 # Aus den Daten abgeleitet (keine Zeile in `freigaben`): nur mit Link zum Ort, wo entschieden wird
 ABGELEITET = {"anforderung": "Anforderungen im Projekt", "erstkontakt": "Erstkontakt-Entwürfe"}

@@ -95,6 +95,11 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   Adressen eintragen (z. B. kontakt@ oder persönliche), je Postfach „Jetzt abrufen“ drücken und prüfen, ob die Ampel
   grün wird. Persönliche Postfächer der richtigen Person zuordnen. Mails, die gleichzeitig ans Akquise-Postfach
   gehen, erscheinen nur einmal. WhatsApp und LinkedIn bis zur Unipile-Anbindung im Gespräch von Hand festhalten.
+- **Firmen-OS Stufe 10 (01.11.2026):** Assistent und Angebote. Nach dem Update: unter Einstellungen → Assistent
+  Modell und Denk-Aufwand prüfen (Start: Opus 5.5, mittel) und unter KI und Budget das Monatsbudget. Einmal unter
+  „Assistent“ eine Frage stellen und prüfen, ob die Quellen stimmen. Für Angebote unter Einstellungen → Finanzen die
+  Firmendaten eintragen (stehen auch im Angebots-PDF); die Freigabe-Stufe für Angebote steht auf C (Freigabe, dann
+  Mail mit PDF), auf D wird nur das PDF vorbereitet und persönlich übergeben.
 
 - Die automatischen Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.

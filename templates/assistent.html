@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, avatar %}
+{% block title %}Assistent · Ylva Labs{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Assistent</span>
+    <h1 class="os-title-l">Frag die Firma</h1>
+    <p class="os-sub os-lead">Der Assistent liest Akten, Projekte, Aufgaben, Termine, Zahlen und Rechnungen, aber nur, was du selbst sehen darfst. Er verschickt und ändert nichts.</p>
+  </header>
+
+  {% if not bereit %}<p class="os-hinweis">{{ warum }}{% if darf('assistent', 4) %} <a href="{{ url_for('assistent.einstellungen') }}">Einstellungen → Assistent</a>{% endif %}</p>
+  {% else %}
+  <form method="post" action="{{ url_for('assistent.frage') }}" id="frageForm" data-os-fetch="reload" data-os-require=".os-ask" data-os-warten="Denkt nach …">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <textarea class="os-ask" name="frage" rows="3" maxlength="2000" placeholder="Was möchtest du wissen?" required></textarea>
+    <div class="os-chips" aria-label="Beispiele">{% for b in beispiele %}<button type="button" data-os-fuellen="{{ b }}">{{ b }}</button>{% endfor %}</div>
+    <p class="os-caption">Kostet ein paar Cent je Frage, zählt für dein KI-Budget. Diesen Monat bisher {{ eur(monat)|kpi('euro') }}.</p>
+  </form>
+  {% endif %}
+
+  {% if darf('assistent', 4) %}<div class="os-chips" style="margin-top:32px">
+    <a href="{{ url_for('assistent.seite') }}" class="{{ 'on' if not alle }}">Meine Fragen</a>
+    <a href="{{ url_for('assistent.seite', alle='1') }}" class="{{ 'on' if alle }}">Alle im Team</a></div>{% endif %}
+
+  {% for f in verlauf %}
+  <section class="os-section os-antwort" id="frage-{{ f.id }}" style="{{ 'margin-top:32px' if loop.first }}">
+    <span class="os-eyebrow">{{ f.at|kurzdatum }}{% if alle %} · {{ f.person_name }}{% endif %} · {{ {'frage': 'Frage', 'prioritaet': 'Was zuerst?', 'antwort': 'Antwort-Entwurf', 'briefing': 'Briefing', 'case_study': 'Case Study', 'angebot': 'Angebot'}.get(f.art, f.art) }}</span>
+    <h2 class="os-headline">{{ f.frage }}</h2>
+    {% if f.status == 'fehler' %}<p class="os-hinweis err">{{ f.fehler }}</p>
+    {% elif f.art == 'frage' %}<div class="os-assistent-text">{{ f.antwort|assistent_text }}</div>
+    {% else %}<p class="os-sub">Ergebnis steht dort, wo es gebraucht wird.</p>{% endif %}
+    {% if f.quellen %}<div class="os-chips os-quellen" aria-label="Quellen">{% for q in f.quellen[:8] %}<a href="{{ q.url }}">{{ q.titel }}</a>{% endfor %}</div>{% endif %}
+    <p class="os-caption">{{ eur(f.kosten_usd)|kpi('euro') }} · {{ f.modell }}</p>
+  </section>
+  {% else %}
+  <p class="os-empty" style="margin-top:32px">Noch keine Fragen.</p>
+  {% endfor %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('aufgaben.mein_tag') }}" aria-label="Zurück">{{ i('back') }}</a>
+  {% if bereit %}<button type="submit" form="frageForm" class="os-btn"><span>Fragen</span>{{ i('pfeil') }}</button>{% endif %}
+</div>
+{% endblock %}

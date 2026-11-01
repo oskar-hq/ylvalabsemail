@@ -287,6 +287,17 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
   einen Änderungswunsch zu machen. Die verantwortliche Person entscheidet mit einem Klick.
 - **WhatsApp und LinkedIn über Unipile** sind vorbereitet (Zugang in den Einstellungen), aber noch nicht verbunden.
 
+## Assistent und Angebote (Stufe 10)
+
+- **Assistent** (`/assistent`): Fragen an die Firmendaten auf Deutsch, z. B. „Welche Rechnungen sind überfällig?“.
+  Er liest gezielt Akten, Projekte, Aufgaben, Termine, Kennzahlen und Rechnungen, aber nur, was die fragende Person
+  sehen darf, und nennt die Quellen. Er verschickt und ändert nichts. Kosten zählen fürs KI-Budget der Person.
+- **Was zuerst?** auf Mein Tag: Reihenfolge nach festen Regeln, auf Knopfdruck von der KI geordnet und begründet.
+- **Entwürfe** für Antworten im Gespräch, Briefings am Termin und Case Studys am Projekt.
+- **Angebote** (`/angebote`): Entwurf mit oder ohne KI, Preise aus Projekt oder Schätzung, PDF, Versand nur über
+  die Freigabe (Stufe C: Mail mit PDF, Stufe D: persönlich übergeben), danach angenommen oder abgelehnt.
+- **Einstellungen → Assistent:** ein/aus, Modell, Denk-Aufwand, Schritte, Gültigkeit und Nummern der Angebote.
+
 ## Team: Konten, eigenes CRM, Vorlage, Zahlen
 
 - **Anmelden mit Name und Passwort**. Passwörter liegen nur als scrypt-Hash in der Datenbank, nach Fehlversuchen

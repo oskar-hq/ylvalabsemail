@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import aufgaben, branchentest, firma, finanzen, freigaben, kalender, kpis, notfall, portal, posteingang, projekte  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
+from . import assistent, aufgaben, branchentest, firma, finanzen, freigaben, kalender, kpis, notfall, portal, posteingang, projekte  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
 
 ROOT = Path(__file__).resolve().parent.parent
 BRAIN_SEED = Path(__file__).resolve().parent / "brain_seed.md"
@@ -164,6 +164,8 @@ MIGRATIONS = [
     # Firmen-OS Stufe 4: Entwurf, wie ihn die schreibende Person hinterlassen hat (Lernstufen-Messung)
     "ALTER TABLE leads ADD COLUMN entwurf_original TEXT",
     "ALTER TABLE leads ADD COLUMN entwurf_von TEXT",
+    # Firmen-OS Stufe 10: Case-Study-Entwurf am Projekt (veröffentlichen nur mit Einverständnis des Kunden)
+    "ALTER TABLE projekte ADD COLUMN case_study TEXT",
     # Firmen-OS Stufe 9: ein Posteingang für alle Kanäle und Postfächer, Wünsche aus Nachrichten
     "ALTER TABLE messages ADD COLUMN kanal TEXT NOT NULL DEFAULT 'mail'",
     "ALTER TABLE messages ADD COLUMN postfach_id INTEGER",
@@ -224,6 +226,11 @@ DATA_MIGRATIONS = [
        AND json_extract(rechte, '$.finanzen') IS NULL""",
     """UPDATE rollen SET rechte = json_set(rechte, '$.finanzen', 0) WHERE key = 'recherche'
        AND json_extract(rechte, '$.finanzen') IS NULL""",
+    # Stufe 10: neues Modul „Assistent“ (Gründer verwalten, Recherche darf fragen; die Werkzeuge prüfen die Daten)
+    """UPDATE rollen SET rechte = json_set(rechte, '$.assistent', 4) WHERE key = 'gruender'
+       AND json_extract(rechte, '$.assistent') IS NULL""",
+    """UPDATE rollen SET rechte = json_set(rechte, '$.assistent', 2) WHERE key = 'recherche'
+       AND json_extract(rechte, '$.assistent') IS NULL""",
 ]
 
 FOLLOWUP_DAYS = 7  # wird beim Start aus LEADS_FOLLOWUP_DAYS gesetzt, 0 = aus
@@ -257,6 +264,7 @@ def connect(path):
     conn.executescript(kalender.SCHEMA)
     conn.executescript(kpis.SCHEMA)
     conn.executescript(projekte.SCHEMA)
+    conn.executescript(assistent.SCHEMA)
     conn.executescript(freigaben.SCHEMA)
     conn.executescript(notfall.SCHEMA)
     conn.executescript(portal.SCHEMA)

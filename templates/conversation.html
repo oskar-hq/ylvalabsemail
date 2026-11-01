@@ -65,6 +65,7 @@
     <textarea name="text" rows="5" placeholder="Ihre Antwort an {{ lead.contact_name or lead.name }} …" required></textarea>
     <div class="reply-actions">
       <span class="muted small">Gruß, Unterschrift und die zitierte Nachricht kommen automatisch dazu.{% if account.demo %} Demo: wird nicht verschickt.{% endif %}</span>
+      {% if darf('assistent', 2) and assistent_an() %}<button type="button" class="btn" id="entwurfAssistent" data-url="{{ url_for('assistent.entwurf_antwort', lead_id=lead.id) }}">Entwurf vom Assistenten</button>{% endif %}
       <button class="btn primary">Antworten</button>
     </div>
   </form>

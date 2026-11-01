@@ -362,3 +362,19 @@ body.os-sheet-open .os-page,body.os-sheet-open main.page{transform:scale(.94);bo
 .os-pos{display:grid;grid-template-columns:1fr 90px 130px;gap:12px}
 .os-pos .os-field{margin-bottom:12px}
 @media (max-width:479px){.os-pos{grid-template-columns:1fr 1fr}.os-pos .os-field:first-child{grid-column:1/-1}}
+
+/* Stufe 10: Assistent (Antworttext, Quellen, „Was zuerst?“) und Angebots-Positionen */
+.os-assistent-text{font:400 17px/26px var(--sans);color:var(--text-primary);margin-top:12px}
+.os-assistent-text p{margin:0 0 12px}
+.os-assistent-text ul{margin:0 0 12px;padding-left:20px}
+.os-assistent-text li{margin:0 0 4px}
+.os-assistent-text a{color:var(--link);text-decoration:none}
+.os-assistent-text a:hover{text-decoration:underline}
+.os-quellen{margin:12px 0 4px}
+.os-quellen a{height:30px;font-size:14px}
+.os-prio{list-style:none;padding:0}
+.os-nr{flex:none;display:inline-grid;place-items:center;width:32px;height:32px;border-radius:var(--radius-full);
+  background:var(--surface-sunken);font:600 15px/1 var(--sans);color:var(--text-primary);font-variant-numeric:tabular-nums}
+.os-position{display:grid;grid-template-columns:1fr 120px auto;gap:12px;align-items:center;margin:8px 0}
+.os-position .os-chips{margin:0}
+@media (max-width:479px){.os-position{grid-template-columns:1fr 1fr}.os-position input[name=pos_text]{grid-column:1/-1}}
