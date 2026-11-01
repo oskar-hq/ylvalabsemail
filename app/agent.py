@@ -1355,6 +1355,11 @@ def tick():
                 kpis.takt(c)
             except Exception:
                 log.exception("Fehler bei der Lernstufen-Messung")
+            try:  # Projekte: einmal im Monat Zeit je Kunde gegen die Annahme prüfen (Firmen-OS Stufe 5)
+                from . import projekte
+                projekte.takt(c)
+            except Exception:
+                log.exception("Fehler im Projekte-Takt")
             reports.notify_released(c, notify)
             start_scheduled(c)
             run = c.execute("SELECT id FROM runs WHERE status='wartet' ORDER BY id LIMIT 1").fetchone()

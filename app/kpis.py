@@ -197,6 +197,11 @@ def entwuerfe_ohne_aenderung(c, von, bis, person=None):
 # ---------------------------------------------------------------- KPI-Katalog (docs/FIRMEN-OS.md, 4.9)
 
 
+def _projekte():
+    from . import projekte
+    return projekte
+
+
 def _k(key, label, bereich, fn, einheit="anzahl", richtung="hoch", je_person=True, quelle="", stufe=None):
     return {"key": key, "label": label, "bereich": bereich, "fn": fn, "einheit": einheit, "richtung": richtung,
             "je_person": je_person, "quelle": quelle, "kommt_mit": stufe}
@@ -216,13 +221,17 @@ KATALOG = [
     _k("neue_kunden", "Neue Kunden", "markt", neue_kunden, quelle="Stufe „Kunde“ erreicht"),
     _k("abschlussquote", "Abschlussquote", "markt", abschlussquote, "prozent",
        quelle="Neue Kunden / geführte Erstgespräche"),
-    _k("tage_bis_live", "Tage bis live", "markt", None, "tage", "runter", stufe=5),
-    _k("kunden_bleiben", "Kunden, die bleiben", "markt", None, "prozent", stufe=5),
+    _k("tage_bis_live", "Tage bis live", "markt", lambda *a: _projekte().kpi_tage_bis_live(*a), "tage", "runter",
+       quelle="Beauftragt bis live, Projekte live in der Woche"),
+    _k("kunden_bleiben", "Kunden, die bleiben", "markt", lambda *a: _projekte().kpi_kunden_bleiben(*a), "prozent",
+       je_person=False, quelle="Vor 3+ Monaten live, noch aktiv"),
     _k("kassenstand", "Kassenstand", "markt", None, "euro", stufe=8),
     _k("ki_kosten", "KI-Kosten", "technik", ki_kosten, "euro", "runter", quelle="Abrechnung der KI je Aufruf"),
-    _k("stunden_pro_build", "Stunden pro Build", "technik", None, "stunden", "runter", stufe=5),
-    _k("freigaben_ohne_aenderung", "Abnahmen beim ersten Mal", "technik", None, "prozent", stufe=5),
-    _k("ausfallzeit", "Ausfallzeit", "technik", None, "stunden", "runter", stufe=5),
+    _k("stunden_pro_build", "Stunden pro Build", "technik", lambda *a: _projekte().kpi_stunden_pro_build(*a), "stunden",
+       "runter", quelle="Zeiterfassung an Projekten, live in der Woche"),
+    _k("freigaben_ohne_aenderung", "Abnahmen beim ersten Mal", "technik",
+       lambda *a: _projekte().kpi_abnahmen_erstes_mal(*a), "prozent", quelle="Erste Abnahme bestanden"),
+    _k("ausfallzeit", "Ausfallzeit", "technik", None, "stunden", "runter", stufe=6),
     _k("aufgaben_erledigt", "Aufgaben erledigt", "alle", aufgaben_erledigt, quelle="Aufgaben im OS"),
     _k("aufgaben_ueberfaellig", "Aufgaben überfällig", "alle", aufgaben_ueberfaellig, richtung="runter",
        quelle="Stand jetzt"),

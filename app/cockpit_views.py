@@ -35,6 +35,10 @@ def _kpi_format(value, einheit="anzahl"):
         return "–"
     if einheit == "prozent":
         return f"{value:.0f} %"
+    if einheit == "stunden":
+        return f"{value:.1f} h".replace(".", ",").replace(",0 h", " h")
+    if einheit == "tage":
+        return f"{value:.0f} Tage"
     if einheit == "euro":
         return f"{value:,.2f} €".replace(",", "X").replace(".", ",").replace("X", ".")
     if isinstance(value, float) and not value.is_integer():

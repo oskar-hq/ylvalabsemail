@@ -155,6 +155,10 @@ def _zeile(row):
     if d.get("objekt_typ") == "lead":
         d["objekt_url"] = f"/leads/{d['objekt_id']}"
         d["objekt_name"] = d.get("lead_name") or f"Lead {d['objekt_id']}"
+    elif d.get("objekt_typ") == "projekt":
+        d["objekt_url"], d["objekt_name"] = f"/kunden/{d['objekt_id']}", "Projekt"
+    elif d.get("objekt_typ") == "aenderung":
+        d["objekt_url"], d["objekt_name"] = f"/kunden/aenderung/{d['objekt_id']}", "Änderungswunsch"
     return d
 
 

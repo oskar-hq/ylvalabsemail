@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, avatar, aufgabe_zeile, kommentare as os_kommentare %}
+{% block title %}{{ p.kunde }} · Kunden{% endblock %}
+{% macro aktion(was, label, cls='os-btn small', extra={}) -%}
+<form method="post" action="{{ url_for('kunden.aktion', pid=p.id) }}" data-os-fetch="reload" style="display:inline">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="{{ was }}">
+  {% for k, v in extra.items() %}<input type="hidden" name="{{ k }}" value="{{ v }}">{% endfor %}
+  <button class="{{ cls }}">{{ label }}</button></form>
+{%- endmacro %}
+{% block content %}
+{% set me = account.team %}
+{% set ich_v = me == p.verantwortlich %}{% set ich_t = me == p.technik %}{% set verw = darf('kunden', 4) %}
+{% set hier = url_for('kunden.detail', pid=p.id) %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Projekt · {{ p.status_label }}</span>
+    <h1 class="os-title-l"><a href="{{ url_for('leads.detail', lead_id=p.lead_id) }}" style="color:inherit;text-decoration:none">{{ p.kunde }}</a></h1>
+    {% if p.titel != 'Projekt ' ~ p.kunde %}<p class="os-sub os-lead">{{ p.titel }}</p>{% endif %}
+  </header>
+
+  <ol class="os-journey" aria-label="Customer Journey">{% for k, label, _ in status if k != 'beendet' %}
+    <li class="{{ 'on' if k == p.status else ('done' if loop.index0 < p.status_index else '') }}">{{ label }}</li>{% endfor %}</ol>
+
+  <section class="os-section" style="margin-top:32px" id="schritt">
+    <h2 class="os-headline">Jetzt</h2>
+    {% if p.status == 'beauftragt' %}
+    <p class="os-sub">AV-Vertrag abschließen, Rechnung über den Einmalbetrag vorbereiten, Anforderungstermin mit Finn buchen. Danach die Anforderung klären.</p>
+    {% elif p.status == 'anforderung' %}
+    <p class="os-sub">Der Bau startet, wenn die Anforderung schriftlich steht, der Kunde sie bestätigt hat, Finn geschätzt hat und beide freigegeben haben.</p>
+    <form method="post" action="{{ url_for('kunden.aktion', pid=p.id) }}" data-os-fetch="reload" style="margin-top:16px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="aendern">
+      <label class="os-field"><span>Anforderung (was der Kunde bekommt)</span><textarea name="anforderung" rows="8" maxlength="20000" {{ 'readonly' if not (ich_v or verw) }} placeholder="Ausgangslage, was die Software tun soll, was nicht, woran man sieht, dass es fertig ist">{{ p.anforderung or '' }}</textarea></label>
+      {% if ich_v or verw %}<button class="os-btn small quiet">Anforderung speichern</button><span class="os-caption"> Ändern setzt Bestätigung und Freigaben zurück.</span>{% endif %}
+    </form>
+    <ul class="os-list" style="margin-top:16px">
+      <li class="os-row"><span class="os-check {{ 'done' if p.kunde_bestaetigt_am }}">{{ i('check') }}</span>
+        <span class="os-txt"><b>Kunde hat bestätigt</b><span>{{ p.kunde_bestaetigt_am|kurzdatum if p.kunde_bestaetigt_am else 'Noch nicht' }}</span></span>
+        {% if (ich_v or verw) and p.anforderung %}{{ aktion('bestaetigt', 'Zurücknehmen' if p.kunde_bestaetigt_am else 'Bestätigt', 'os-link', {'ja': '0' if p.kunde_bestaetigt_am else '1'}) }}{% endif %}</li>
+      <li class="os-row"><span class="os-check {{ 'done' if p.schaetzung_h }}">{{ i('check') }}</span>
+        <span class="os-txt"><b>Aufwandsschätzung</b><span>{{ (p.schaetzung_h|kpi ~ ' Stunden · ' ~ p.technik_name) if p.schaetzung_h else 'Fehlt noch (Pflicht)' }}</span></span>
+        {% if ich_t %}<button type="button" class="os-link" data-sheet="sheet-schaetzen">Schätzen</button>{% endif %}</li>
+      <li class="os-row"><span class="os-check {{ 'done' if p.freigabe_markt_von }}">{{ i('check') }}</span>
+        <span class="os-txt"><b>Freigabe: was ({{ p.verantwortlich_name }})</b><span>{{ 'Freigegeben' if p.freigabe_markt_von else 'Offen' }}</span></span>
+        {% if ich_v and not p.freigabe_markt_von %}{{ aktion('freigeben', 'Freigeben', 'os-link') }}{% endif %}</li>
+      <li class="os-row"><span class="os-check {{ 'done' if p.freigabe_technik_von }}">{{ i('check') }}</span>
+        <span class="os-txt"><b>Freigabe: wie ({{ p.technik_name }})</b><span>{{ 'Freigegeben' if p.freigabe_technik_von else 'Offen' }}</span></span>
+        {% if ich_t and not p.freigabe_technik_von %}{{ aktion('freigeben', 'Freigeben', 'os-link') }}{% endif %}</li>
+    </ul>
+    {% elif p.status == 'bau' %}
+    <p class="os-sub">{{ p.technik_name }} baut{% if p.bau_ende_plan %}, geplant bis {{ tag(p.bau_ende_plan) }}{% endif %}. Bisher {{ (p.zeit_min / 60)|round(1)|kpi }} Stunden erfasst{% if p.schaetzung_h %} von {{ p.schaetzung_h|kpi }} geschätzt{% endif %}.{% if p.abnahmen %} Letzte Abnahme: nicht bestanden.{% endif %}</p>
+    {% if p.schaetzung_h %}<span class="os-bar" style="margin-top:12px" aria-hidden="true"><i style="width:{{ [100, (100 * p.zeit_min / 60 / p.schaetzung_h)|round]|min }}%"></i></span>{% endif %}
+    {% elif p.status == 'abnahme' %}
+    {% set offen = p.punkte|rejectattr('erledigt_am')|list %}
+    <p class="os-sub">Alles abgehakt → Live. Sonst geht das Projekt zurück in den Bau. {{ p.verantwortlich_name }} hat das letzte Wort.</p>
+    <ul class="os-list" style="margin-top:16px">{% for x in p.punkte %}<li class="os-row">
+      {% if ich_v %}<form method="post" action="{{ url_for('kunden.aktion', pid=p.id) }}" data-os-check="reload">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="punkt">
+        <input type="hidden" name="punkt" value="{{ x.id }}"><input type="hidden" name="erledigt" value="{{ '0' if x.erledigt_am else '1' }}">
+        <button class="os-check {{ 'done' if x.erledigt_am }}" aria-label="{{ x.text }}">{{ i('check') }}</button></form>
+      {% else %}<span class="os-check {{ 'done' if x.erledigt_am }}">{{ i('check') }}</span>{% endif %}
+      <span class="os-txt"><b style="font-weight:500">{{ x.text }}</b>{% if x.erledigt_am %}<span>{{ namen.get(x.erledigt_von, x.erledigt_von) }}</span>{% endif %}</span></li>{% endfor %}</ul>
+    {% elif p.status == 'live' %}
+    <p class="os-sub">Einweisung, erste Freigabeliste. {% if p.kostenlos %}Kostenlose Anpassungen bis {{ tag(p.kostenlos_bis) }}.{% else %}Die kostenlosen {{ regeln.kostenlose_tage }} Tage sind vorbei.{% endif %}</p>
+    {% elif p.status == 'betrieb' %}
+    <p class="os-sub">Wöchentlicher Check-in, Zahlen für die Case Study sammeln, Pauschale abrechnen.</p>
+    {% else %}
+    <p class="os-sub">Beendet{% if p.beendet_am %} am {{ p.beendet_am|kurzdatum }}{% endif %}.</p>
+    {% endif %}
+    {% if p.status in ('live', 'betrieb') and (ich_v or verw) %}
+    <div class="os-btns"><button type="button" class="os-btn small quiet" data-sheet="sheet-checkin">Wöchentlichen Check-in planen</button></div>
+    {% endif %}
+  </section>
+
+  <section class="os-section">
+    <dl class="os-kv">
+      <dt>Verantwortlich</dt><dd>{{ p.verantwortlich_name or '–' }}</dd>
+      <dt>Technik</dt><dd>{{ p.technik_name or '–' }}</dd>
+      <dt>Einmalbetrag</dt><dd>{{ p.preis_einmal|kpi('euro') }}</dd>
+      <dt>Pauschale je Monat</dt><dd>{{ p.pauschale_monat|kpi('euro') }}</dd>
+      <dt>Beauftragt</dt><dd>{{ p.beauftragt_am|kurzdatum }}</dd>
+      {% if p.live_am %}<dt>Live</dt><dd>{{ p.live_am|kurzdatum }}</dd>{% endif %}
+    </dl>
+  </section>
+
+  <section class="os-section" id="aenderungen">
+    <h2 class="os-headline">Änderungswünsche</h2>
+    <p class="os-sub">{% if p.kostenlos %}Bis {{ tag(p.kostenlos_bis) }} inklusive.{% elif p.live_am %}Klein ({{ regeln.klein_min }} Min.): Pauschale {{ regeln.pauschale_klein }} €, umgesetzt jeden {{ ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag', 'Samstag', 'Sonntag'][regeln.umsetzungstag] }}. Groß: eigenes Angebot.{% else %}Vor Live: kleine inklusive, große als eigenes Angebot.{% endif %} Wünsche kommen hierher, nie direkt an die Technik.</p>
+    <ul class="os-list">{% for a in aenderungen %}<li class="os-row" id="aenderung-{{ a.id }}">
+      <span class="os-ampel {{ 'gruen' if a.status == 'erledigt' else ('grau' if a.status == 'abgelehnt' else ('rot' if a.vorrang == 1 else 'gelb')) }}"></span>
+      <span class="os-txt"><b style="font-weight:500">{{ a.text }}</b>
+        <span>{{ a.status_label }}{% if a.groesse %} · {{ 'klein' if a.groesse == 'klein' else 'groß' }}{% endif %}{% if a.abrechnung %} · {{ a.abrechnung_label }}{% endif %}{% if a.schaetzung_min %} · {{ a.schaetzung_min }} Min. geschätzt{% endif %}{% if a.zeit_min %} · {{ a.zeit_min }} Min. erfasst{% endif %}{% if a.grund %} · {{ a.grund }}{% endif %}</span></span>
+      <span class="os-zielknoepfe">
+        {% if a.status == 'neu' and (ich_v or verw) %}<button type="button" class="os-link" data-sheet="sheet-einordnen" data-set-aid="{{ a.id }}">Einordnen</button>{% endif %}
+        {% if a.status in ('eingeordnet', 'geschaetzt') and (ich_t or verw) %}{% if ich_t %}<button type="button" class="os-link" data-sheet="sheet-aschaetzen" data-set-aid="{{ a.id }}">Schätzen</button>{% endif %}
+          <form method="post" action="{{ url_for('kunden.aenderung_aktion', aid=a.id) }}" data-os-fetch="reload" style="display:inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="os-link" name="was" value="erledigt">Erledigt</button></form>{% endif %}
+        {% if a.status not in ('erledigt', 'abgelehnt') %}<form method="post" action="{{ url_for('kunden.zeit_start') }}" data-os-fetch="reload" style="display:inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="typ" value="aenderung"><input type="hidden" name="id" value="{{ a.id }}"><input type="hidden" name="next" value="{{ hier }}"><button class="os-link leise">Zeit starten</button></form>{% endif %}
+      </span></li>
+    {% else %}<li class="os-empty">Keine Wünsche.</li>{% endfor %}</ul>
+    <div class="os-btns"><button type="button" class="os-btn small quiet" data-sheet="sheet-wunsch">Wunsch eintragen</button></div>
+  </section>
+
+  <section class="os-section" id="zeit">
+    <h2 class="os-headline">Zeit</h2>
+    <p class="os-sub">{{ (p.zeit_min / 60)|round(1)|kpi }} Stunden insgesamt.{% if laeuft %} Läuft gerade: {{ laeuft.titel }} seit {{ laeuft.seit_min }} Min.{% endif %}</p>
+    <div class="os-btns">
+      {% if laeuft %}<form method="post" action="{{ url_for('kunden.zeit_stopp') }}" data-os-fetch="reload"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}"><button class="os-btn small ink">Stopp ({{ laeuft.seit_min }} Min.)</button></form>
+      {% else %}<form method="post" action="{{ url_for('kunden.zeit_start') }}" data-os-fetch="reload"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="typ" value="projekt"><input type="hidden" name="id" value="{{ p.id }}"><input type="hidden" name="next" value="{{ hier }}"><button class="os-btn small ink">Zeit starten</button></form>{% endif %}
+      <button type="button" class="os-btn small quiet" data-sheet="sheet-nachtragen">Nachtragen</button>
+    </div>
+    {% if zeiten %}<ul class="os-list" style="margin-top:8px">{% for z in zeiten[:8] %}<li class="os-row" style="min-height:0;padding:8px 0">
+      <span class="os-txt"><span>{{ z.start|kurzdatum }} · {{ z.person_name }}{% if z.notiz %} · {{ z.notiz }}{% endif %}</span><b style="font-weight:500;font-size:17px">{{ z.titel }}</b></span>
+      <span class="os-end">{{ z.minuten ~ ' Min.' if z.minuten else 'läuft' }}</span></li>{% endfor %}</ul>{% endif %}
+  </section>
+
+  <section class="os-section">
+    <h2 class="os-headline">Kosten und Umsatz</h2>
+    <dl class="os-kv" style="margin-top:16px">
+      <dt>KI-Kosten</dt><dd>{{ kosten.ki|kpi('euro') }}</dd>
+      <dt>Zeit ({{ kosten.zeit_h|kpi }} h × {{ regeln.stundensatz }} €)</dt><dd>{{ kosten.zeit_eur|kpi('euro') }}</dd>
+      <dt>Serveranteil</dt><dd>{{ kosten.server|kpi('euro') }}</dd>
+      <dt>Kosten gesamt</dt><dd>{{ kosten.summe|kpi('euro') }}</dd>
+      <dt>Umsatz{% if kosten.monate %} ({{ kosten.monate }} Monate){% endif %}</dt><dd>{{ kosten.umsatz|kpi('euro') }}</dd>
+      <dt>Ergebnis</dt><dd class="{{ 'late' if kosten.marge < 0 }}">{{ kosten.marge|kpi('euro') }}</dd>
+    </dl>
+  </section>
+
+  {% if projekt_aufgaben %}
+  <section class="os-section">
+    <h2 class="os-headline">Offene Aufgaben</h2>
+    <ul class="os-list">{% for a in projekt_aufgaben %}{{ aufgabe_zeile(a, me, loop.index0, True, hier) }}{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  {{ os_kommentare(komm, 'lead', p.lead_id, os_personen) }}
+
+  {% if verlauf %}
+  <section class="os-section">
+    <h2 class="os-headline">Verlauf</h2>
+    <ul class="os-list">{% for e in verlauf %}<li class="os-row" style="min-height:0;padding:8px 0">
+      <span class="os-txt"><span>{{ e.at|kurzdatum }} · {{ namen.get(e.wer, e.wer) }}</span><b style="font-weight:500;font-size:17px">{{ e.text }}</b></span></li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  {% if p.status != 'beendet' and (ich_v or verw) %}
+  <section class="os-section">
+    <ul class="os-list">
+      <li><a class="os-row" href="#" data-sheet="sheet-projekt"><span class="os-ico">{{ i('aufgabe') }}</span><span class="os-txt"><b>Projekt bearbeiten</b><span>Titel, Preise, Verantwortlich, Technik</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>
+      <li><a class="os-row danger" href="#" data-sheet="sheet-beenden"><span class="os-ico red">–</span><span class="os-txt"><b>Kunde beendet</b><span>Projekt abschließen, Daten bleiben</span></span></a></li>
+    </ul>
+  </section>
+  {% endif %}
+</main>
+
+{% set weiter_label = {'beauftragt': 'Anforderung klären', 'anforderung': 'Bau starten', 'bau': 'Build fertig', 'abnahme': 'Abnahme abschließen', 'live': 'In den Betrieb'} %}
+{% set darf_weiter = (p.status in ('beauftragt', 'anforderung', 'live') and (ich_v or verw)) or (p.status == 'bau' and (ich_t or verw)) or (p.status == 'abnahme' and ich_v) %}
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('kunden.uebersicht') }}" aria-label="Zurück zu den Kunden">{{ i('back') }}</a>
+  {% if p.status in weiter_label and darf_weiter %}
+  <form method="post" action="{{ url_for('kunden.aktion', pid=p.id) }}" data-os-fetch="reload" style="display:contents" {% if p.status == 'abnahme' and p.punkte|rejectattr('erledigt_am')|list %}data-confirm="Noch nicht alles abgehakt: Das Projekt geht zurück in den Bau. Weiter?"{% endif %}>
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="weiter">
+    <button type="submit" class="os-btn" {{ 'disabled' if p.status == 'anforderung' and not (p.freigabe_markt_von and p.freigabe_technik_von) }}><span>{{ weiter_label[p.status] }}</span>{{ i('chev') }}</button>
+  </form>
+  {% endif %}
+</div>
+
+{% macro sheet(id, eyebrow, aufgabe=None) -%}
+<dialog class="os-sheet" id="{{ id }}" aria-label="{{ eyebrow }}">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body"><span class="os-eyebrow">{{ eyebrow }}</span>{{ caller() }}</div>
+</dialog>
+{%- endmacro %}
+{% macro fuss(label='Speichern') -%}
+<div class="os-sheet-foot"><button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+  <button type="submit" class="os-btn"><span>{{ label }}</span>{{ i('check') }}</button></div>
+{%- endmacro %}
+
+{% call sheet('sheet-wunsch', 'Änderungswunsch') %}
+<form method="post" action="{{ url_for('kunden.aktion', pid=p.id) }}" data-os-fetch="reload" data-os-require=".os-ask">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="aenderung">
+  <textarea class="os-ask" name="text" rows="3" maxlength="4000" placeholder="Was wünscht sich {{ p.kunde }}?" required></textarea>
+  <p class="os-caption">{{ p.verantwortlich_name }} ordnet ein (klein oder groß, Vorrang). Die Abrechnung ergibt sich aus der Regel.</p>
+  {{ fuss('Eintragen') }}</form>
+{% endcall %}
+{% call sheet('sheet-einordnen', 'Einordnen') %}
+<form method="post" action="{{ url_for('kunden.aenderung_aktion', aid=0) }}" data-os-fetch="reload" data-os-aktion-aid>
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="einordnen"><input type="hidden" name="aid" value="">
+  <h2 class="os-title-m" style="margin-bottom:24px">Wie groß ist der Wunsch?</h2>
+  <div class="os-chips"><label><input type="radio" name="groesse" value="klein" checked>Klein (bis {{ regeln.klein_min }} Min.)</label><label><input type="radio" name="groesse" value="gross">Groß</label></div>
+  <div class="os-chips"><label><input type="radio" name="vorrang" value="1">Vorrang</label><label><input type="radio" name="vorrang" value="2" checked>Normal</label><label><input type="radio" name="vorrang" value="3">Später</label></div>
+  {{ fuss() }}</form>
+{% endcall %}
+{% call sheet('sheet-aschaetzen', 'Schätzen') %}
+<form method="post" action="{{ url_for('kunden.aenderung_aktion', aid=0) }}" data-os-fetch="reload" data-os-aktion-aid>
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="schaetzen"><input type="hidden" name="aid" value="">
+  <input class="os-ask" name="minuten" inputmode="numeric" placeholder="Minuten" required>
+  <p class="os-caption">Bis {{ regeln.klein_min }} Minuten ist es eine kleine Änderung.</p>
+  {{ fuss() }}</form>
+{% endcall %}
+{% call sheet('sheet-schaetzen', 'Aufwandsschätzung') %}
+<form method="post" action="{{ url_for('kunden.aktion', pid=p.id) }}" data-os-fetch="reload" data-os-require=".os-ask">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="schaetzen">
+  <input class="os-ask" name="stunden" inputmode="decimal" value="{{ p.schaetzung_h|kpi if p.schaetzung_h else '' }}" placeholder="Stunden" required>
+  <p class="os-caption">Daraus plant das OS den Bau ({{ regeln.stunden_pro_tag }} Stunden pro Arbeitstag). Eine neue Schätzung braucht eine neue Freigabe der Technik.</p>
+  {{ fuss() }}</form>
+{% endcall %}
+{% call sheet('sheet-nachtragen', 'Zeit nachtragen') %}
+<form method="post" action="{{ url_for('kunden.zeit_nachtragen') }}" data-os-fetch="reload">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="typ" value="projekt"><input type="hidden" name="id" value="{{ p.id }}"><input type="hidden" name="next" value="{{ hier }}">
+  <div class="os-grid2">
+    <label class="os-field"><span>Stunden</span><input type="text" name="stunden" inputmode="decimal" placeholder="1,5"></label>
+    <label class="os-field"><span>Tag</span><input type="date" name="tag"></label>
+  </div>
+  <label class="os-field"><span>Was (optional)</span><input type="text" name="notiz" maxlength="300"></label>
+  {{ fuss('Nachtragen') }}</form>
+{% endcall %}
+{% call sheet('sheet-checkin', 'Wöchentlicher Check-in') %}
+<form method="post" action="{{ url_for('kunden.aktion', pid=p.id) }}" data-os-fetch="reload">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="checkin">
+  <div class="os-grid2">
+    <label class="os-field"><span>Wochentag</span><select name="wochentag">{% for t in ['Montag', 'Dienstag', 'Mittwoch', 'Donnerstag', 'Freitag'] %}<option value="{{ loop.index0 }}" {{ 'selected' if loop.index0 == 2 }}>{{ t }}</option>{% endfor %}</select></label>
+    <label class="os-field"><span>Uhrzeit</span><input type="time" name="uhrzeit" value="10:00" step="900"></label>
+  </div>
+  <label class="os-field"><span>Dauer (Minuten)</span><input type="number" name="dauer" value="30" min="5" max="120"></label>
+  <p class="os-caption">Steht als Serie im Kalender von {{ p.verantwortlich_name }}. Den Kunden ladet ihr am einzelnen Termin ein.</p>
+  {{ fuss('Planen') }}</form>
+{% endcall %}
+{% call sheet('sheet-projekt', 'Projekt bearbeiten') %}
+<form method="post" action="{{ url_for('kunden.aktion', pid=p.id) }}" data-os-fetch="reload">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="aendern">
+  <label class="os-field"><span>Titel</span><input type="text" name="titel" value="{{ p.titel }}" maxlength="200"></label>
+  <div class="os-grid2">
+    <label class="os-field"><span>Einmalbetrag (€)</span><input type="text" name="preis_einmal" inputmode="decimal" value="{{ p.preis_einmal|kpi if p.preis_einmal is not none else '' }}"></label>
+    <label class="os-field"><span>Pauschale je Monat (€)</span><input type="text" name="pauschale_monat" inputmode="decimal" value="{{ p.pauschale_monat|kpi if p.pauschale_monat is not none else '' }}"></label>
+    <label class="os-field"><span>Verantwortlich</span><select name="verantwortlich">{% for x in personen %}<option value="{{ x.key }}" {{ 'selected' if x.key == p.verantwortlich }}>{{ x.name }}</option>{% endfor %}</select></label>
+    <label class="os-field"><span>Technik</span><select name="technik">{% for x in personen %}<option value="{{ x.key }}" {{ 'selected' if x.key == p.technik }}>{{ x.name }}</option>{% endfor %}</select></label>
+  </div>
+  {{ fuss() }}</form>
+{% endcall %}
+{% call sheet('sheet-beenden', 'Kunde beendet') %}
+<form method="post" action="{{ url_for('kunden.aktion', pid=p.id) }}" data-os-fetch="reload">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="beenden">
+  <textarea class="os-ask" name="grund" rows="2" maxlength="500" placeholder="Warum? (zählt für „Kunden, die bleiben“)"></textarea>
+  {{ fuss('Beenden') }}</form>
+{% endcall %}
+{% endblock %}

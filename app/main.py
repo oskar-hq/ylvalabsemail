@@ -272,9 +272,12 @@ OHNE_PERSON = {"compose", "preview", "send", "upload", "history", "history_html"
                "palette.search"}
 MODUL_JE_SEITE = {"compose": "mailer", "preview": "mailer", "send": "mailer", "upload": "mailer",
                   "history": "mailer", "history_html": "mailer", "leads.costs": "kosten",
-                  "leads.system": "einstellungen", "personen.protokoll": "protokoll"}
+                  "leads.system": "einstellungen", "personen.protokoll": "protokoll",
+                  # Zeiterfassung gibt es auch an Aufgaben: zählt zum Modul Aufgaben
+                  "kunden.zeit_start": "aufgaben", "kunden.zeit_stopp": "aufgaben", "kunden.zeit_nachtragen": "aufgaben"}
 MODUL_JE_BEREICH = {"leads": "leads", "crm": "crm", "settings": "einstellungen", "aufgaben": "aufgaben",
-                    "personen": "personen", "branchentest": "leads", "kalender": "kalender", "cockpit": "cockpit"}
+                    "personen": "personen", "branchentest": "leads", "kalender": "kalender", "cockpit": "cockpit",
+                    "kunden": "kunden"}
 
 
 def modul_der_seite(endpoint):
@@ -908,6 +911,9 @@ app.register_blueprint(kalender_bp)
 from .cockpit_views import bp as cockpit_bp  # noqa: E402
 
 app.register_blueprint(cockpit_bp)
+from .projekte_views import bp as kunden_bp  # noqa: E402
+
+app.register_blueprint(kunden_bp)
 
 
 @app.errorhandler(403)

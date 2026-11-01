@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Kunden · Ylva Labs{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Customer Journey</span>
+    <h1 class="os-title-l">Kunden</h1>
+    <p class="os-sub os-lead">Vom unterschriebenen Angebot bis zum laufenden Betrieb, in derselben Akte. Oskar entscheidet, was geliefert wird, Finn, wie gebaut wird.</p>
+  </header>
+  <div class="os-chips">
+    <a href="{{ url_for('kunden.uebersicht') }}" class="{{ 'on' if not beendet }}">Aktiv</a>
+    <a href="{{ url_for('kunden.uebersicht', beendet='1') }}" class="{{ 'on' if beendet }}">Beendet</a>
+    {% if darf('kunden', 4) %}<a href="{{ url_for('kunden.einstellungen') }}">Regeln</a>{% endif %}
+  </div>
+
+  {% for key, label, hint, liste in gruppen %}
+  <section class="os-section" style="{{ 'margin-top:24px' if loop.first }}">
+    <h2 class="os-headline">{{ label }} <span class="os-sub" style="display:inline">· {{ liste|length }}</span></h2>
+    <p class="os-sub">{{ hint }}</p>
+    <ul class="os-list anim">{% for p in liste %}<li style="--i:{{ loop.index0 }}"><a class="os-row" href="{{ url_for('kunden.detail', pid=p.id) }}">
+      <span class="os-ico">{{ p.kunde[:1] if p.kunde else '?' }}</span>
+      <span class="os-txt"><b>{{ p.kunde }}</b><span>{{ p.titel if p.titel != 'Projekt ' ~ p.kunde else p.verantwortlich_name }}
+        {%- if p.status == 'bau' and p.bau_ende_plan %} · geplant bis {{ tag(p.bau_ende_plan) }}{% endif %}
+        {%- if p.status == 'live' and p.kostenlos %} · kostenlose Anpassungen bis {{ tag(p.kostenlos_bis) }}{% endif %}</span></span>
+      {% if p.status == 'anforderung' and not (p.freigabe_markt_von and p.freigabe_technik_von) %}<span class="os-tag muted">Freigabe offen</span>{% endif %}
+      <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}</ul>
+  </section>
+  {% else %}
+  <p class="os-empty" style="margin-top:24px">Noch keine Projekte. Ein Projekt entsteht automatisch, sobald ein Lead im CRM auf „Kunde“ steht.</p>
+  {% endfor %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('aufgaben.mein_tag') }}" aria-label="Zurück">{{ i('back') }}</a>
+  {% if ohne and darf('kunden', 2) %}<button type="button" class="os-btn" data-sheet="sheet-projekt"><span>Projekt anlegen</span>{{ i('plus') }}</button>{% endif %}
+</div>
+{% if ohne and darf('kunden', 2) %}
+<dialog class="os-sheet" id="sheet-projekt" aria-label="Projekt anlegen">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('kunden.neu') }}">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <span class="os-eyebrow">Neues Projekt</span>
+      <h2 class="os-title-m" style="margin-bottom:32px">Für welchen Kunden?</h2>
+      <label class="os-field"><span>Kunde (im CRM auf „Kunde“, noch ohne Projekt)</span><select name="lead_id">{% for l in ohne %}<option value="{{ l.id }}">{{ l.name }}</option>{% endfor %}</select></label>
+      <label class="os-field"><span>Titel (optional)</span><input type="text" name="titel" maxlength="200" placeholder="z. B. Anfragen automatisch sortieren"></label>
+      <div class="os-grid2">
+        <label class="os-field"><span>Einmalbetrag (€)</span><input type="text" name="preis_einmal" inputmode="decimal"></label>
+        <label class="os-field"><span>Pauschale je Monat (€)</span><input type="text" name="pauschale_monat" inputmode="decimal"></label>
+      </div>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Anlegen</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endif %}
+{% endblock %}
