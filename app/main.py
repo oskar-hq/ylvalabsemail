@@ -274,7 +274,7 @@ MODUL_JE_SEITE = {"compose": "mailer", "preview": "mailer", "send": "mailer", "u
                   "history": "mailer", "history_html": "mailer", "leads.costs": "kosten",
                   "leads.system": "einstellungen", "personen.protokoll": "protokoll"}
 MODUL_JE_BEREICH = {"leads": "leads", "crm": "crm", "settings": "einstellungen", "aufgaben": "aufgaben",
-                    "personen": "personen", "branchentest": "leads"}
+                    "personen": "personen", "branchentest": "leads", "kalender": "kalender"}
 
 
 def modul_der_seite(endpoint):
@@ -902,6 +902,9 @@ from .branchentest_views import bp as branchentest_bp  # noqa: E402
 app.register_blueprint(aufgaben_bp)
 app.register_blueprint(personen_bp)
 app.register_blueprint(branchentest_bp)
+from .kalender_views import bp as kalender_bp  # noqa: E402
+
+app.register_blueprint(kalender_bp)
 
 
 @app.errorhandler(403)

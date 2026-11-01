@@ -548,5 +548,284 @@ class BranchentestWebTest(WebBasis):
         self.assertTrue(leaddb.get_lead(c, lid)["preisgespraech_am"])
 
 
+# ---------------------------------------------------------------- Stufe 3: Kalender und Termine
+
+
+class FakeGoogle:
+    """Nachgebautes Google: merkt sich jede Anfrage, legt Termine an, liefert frei/belegt."""
+
+    def __init__(self):
+        from app import google_kalender
+        self.g = google_kalender
+        self.calls, self.events, self.busy, self.kaputt = [], {}, [], set()
+
+    def __call__(self, method, url, form=None, body=None, token=None):
+        self.calls.append((method, url, form, body, token))
+        if url == self.g.TOKEN_URL:
+            if form.get("grant_type") == "authorization_code":
+                return {"refresh_token": "r-" + form["code"], "access_token": "a", "scope": " ".join(self.g.SCOPES)}
+            if form["refresh_token"] in self.kaputt:
+                raise self.g.GoogleError("Google: invalid_grant (400)", abgelaufen=True)
+            return {"access_token": "tok-" + form["refresh_token"]}
+        if url == self.g.REVOKE_URL:
+            return {}
+        if url.endswith("/freeBusy"):
+            return {"calendars": {"primary": {"busy": self.busy}}}
+        if "/events" in url and method == "POST":
+            eid = f"ev{len(self.events) + 1}"
+            self.events[eid] = {"token": token, "body": body, "url": url}
+            res = {"id": eid}
+            if body.get("conferenceData"):
+                res["hangoutLink"] = f"https://meet.google.com/{eid}"
+            return res
+        if "/events/" in url and method in ("PATCH", "DELETE"):
+            return {"id": url.split("/events/")[1].split("?")[0]}
+        raise AssertionError(url)
+
+    def anfragen(self, method, teil):
+        return [x for x in self.calls if x[0] == method and teil in x[1]]
+
+
+class KalenderTest(unittest.TestCase):
+    def setUp(self):
+        from unittest import mock
+        from app import google_kalender, kalender
+        self.k = kalender
+        self.fake = FakeGoogle()
+        p1 = mock.patch.object(google_kalender, "_http", self.fake)
+        p2 = mock.patch.dict(os.environ, {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "sec"})
+        p1.start(), p2.start()
+        self.addCleanup(p1.stop), self.addCleanup(p2.stop)
+        self.c = frische_db()
+        self.morgen10 = (date.today() + timedelta(days=1)).isoformat() + "T10:00"
+
+    def verbinden(self, *personen):
+        for p in personen:
+            self.k.konto_speichern(self.c, p, "r-" + p)
+
+    def test_interner_termin_in_alle_kalender(self):
+        k, c = self.k, self.c
+        self.verbinden("oskar", "finn")
+        tid = k.anlegen(c, "oskar", "Wochenplanung", self.morgen10, dauer=30, personen=["finn", "hamza"])
+        t = k.get(c, tid)
+        self.assertEqual((t["status"], t["art"], t["ende"][11:]), ("geplant", "intern", "10:30"))
+        self.assertEqual(sorted(e["token"] for e in self.fake.events.values()), ["tok-r-finn", "tok-r-oskar"])
+        self.assertTrue(all("attendees" not in e["body"] for e in self.fake.events.values()))  # keine Einladungen
+        self.assertTrue(all("sendUpdates=none" in e["url"] for e in self.fake.events.values()))
+        self.assertIsNone(t["sync_fehler"])  # Hamza ist nicht verbunden: kein Fehler, nur kein Eintrag
+        self.assertIn("Neuer Termin: Wochenplanung", [r["title"] for r in leaddb.notices(c, "f", 9, "finn")[0]])
+        with self.assertRaises(k.KalenderError):
+            k.anlegen(c, "oskar", "Kaputt", self.morgen10, ende=self.morgen10)
+
+    def test_kundentermin_braucht_freigabe(self):
+        k, c = self.k, self.c
+        self.verbinden("oskar")
+        lid = lead_anlegen(c, "Tischlerei Kunde", contact_name="Frau Hansen")
+        tid = k.anlegen(c, "hamza", "Erstgespräch", self.morgen10, verantwortlich="oskar", personen=["hamza"],
+                        gaeste="kunde@tischlerei.de", lead_id=lid, meet=True)
+        t = k.get(c, tid)
+        self.assertEqual((t["status"], t["art"], t["gaeste"]), ("vorschlag", "kunde", ["kunde@tischlerei.de"]))
+        self.assertEqual(self.fake.events, {})  # nichts an den Kunden ohne Freigabe
+        self.assertEqual([x["id"] for x in k.freigaben_fuer(c, "oskar")], [tid])
+        with self.assertRaises(k.KalenderError):
+            k.freigeben(c, "hamza", tid, True)  # nur die verantwortliche Person
+        with self.assertRaises(k.KalenderError):
+            k.freigeben(c, "oskar", tid, False, "")  # Verwerfen nur mit Grund
+        k.freigeben(c, "oskar", tid, True)
+        t = k.get(c, tid)
+        ev = next(iter(self.fake.events.values()))
+        self.assertEqual(ev["body"]["attendees"], [{"email": "kunde@tischlerei.de"}])
+        self.assertIn("sendUpdates=all", ev["url"])
+        self.assertIn("conferenceDataVersion=1", ev["url"])
+        self.assertEqual((t["status"], t["meet_link"]), ("geplant", "https://meet.google.com/ev1"))
+        self.assertIn("Einladung raus: Erstgespräch", [r["title"] for r in leaddb.notices(c, "h", 20, "hamza")[0]])
+        self.assertTrue(firma.protokoll(c, art="freigabe"))
+        # Verantwortlich und selbst freigegeben: geht sofort raus
+        tid2 = k.anlegen(c, "oskar", "Folgetermin", self.morgen10, gaeste="kunde@tischlerei.de", lead_id=lid,
+                         einladung_freigeben=True)
+        self.assertEqual(k.get(c, tid2)["status"], "geplant")
+        # Absagen: Google sagt dem Gast ab
+        k.absagen(c, "oskar", tid2, "Kunde krank")
+        self.assertIn("sendUpdates=all", self.fake.anfragen("DELETE", "/events/")[-1][1])
+
+    def test_ohne_verbindung_und_abgelaufen(self):
+        k, c = self.k, self.c
+        tid = k.anlegen(c, "oskar", "Kunde", self.morgen10, gaeste="a@b.de", einladung_freigeben=True)
+        self.assertIn("nicht verbunden", k.get(c, tid)["sync_fehler"])
+        self.verbinden("finn")
+        self.fake.kaputt.add("r-finn")
+        k.anlegen(c, "finn", "Intern", self.morgen10)
+        self.assertEqual(k.konto(c, "finn")["status"], "abgelaufen")
+        self.assertIn("Google-Kalender neu verbinden", [r["title"] for r in leaddb.notices(c, "f", 9, "finn")[0]])
+        self.assertFalse(k.verbunden(c, "finn"))
+
+    def test_lead_in_pruefung_bekommt_keinen_termin(self):
+        lid = lead_anlegen(self.c, "Wartet", pruef_status="wartet")
+        with self.assertRaises(self.k.KalenderError):
+            self.k.anlegen(self.c, "oskar", "Zu früh", self.morgen10, lead_id=lid)
+
+    def test_vorschlaege_um_alle_herum(self):
+        k, c = self.k, self.c
+        r = dict(k.regeln(c))
+        tag_ = date.today() + timedelta(days=1)
+        while tag_.weekday() > 4:
+            tag_ += timedelta(days=1)
+        d = tag_.isoformat()
+        c.execute("INSERT INTO belegt (person, start, ende) VALUES ('finn', ?, ?)", (d + "T09:00", d + "T12:00"))
+        k.anlegen(c, "oskar", "Schon belegt", d + "T12:30", dauer=60)
+        out = k.vorschlaege(c, ["oskar", "finn"], dauer=45, ab=datetime_combine(tag_))
+        erster = out[0]
+        self.assertEqual(erster["start"], d + "T14:00")  # nach Finns Block und Oskars Termin plus 15 Min. Puffer
+        self.assertTrue(all(datetime_fromiso(s["start"]).weekday() in r["tage_liste"] for s in out))
+        self.assertTrue(all("09:00" <= s["start"][11:] and s["ende"][11:] <= "18:00" for s in out))
+        self.assertEqual(k.konflikte(c, ["finn", "hamza"], d + "T10:00", d + "T11:00"), ["Finn Adams"])
+
+    def test_belegt_abgleich_nur_zeiten(self):
+        k, c = self.k, self.c
+        self.verbinden("oskar")
+        self.fake.busy = [{"start": "2030-01-07T09:00:00Z", "end": "2030-01-07T10:00:00Z"}]
+        self.assertTrue(k.belegt_abgleichen(c, "oskar"))
+        row = c.execute("SELECT start, ende FROM belegt WHERE person='oskar'").fetchone()
+        self.assertEqual((row["start"], row["ende"]), ("2030-01-07T10:00", "2030-01-07T11:00"))  # Winterzeit +1
+        raw = c.execute("SELECT refresh_token FROM kalender_konten WHERE person='oskar'").fetchone()[0]
+        self.assertNotIn("r-oskar", raw)  # verschlüsselt gespeichert
+
+    def test_takt_erinnert_und_fragt_nach(self):
+        from datetime import datetime as dt
+        k, c = self.k, self.c
+        bald = (dt.now() + timedelta(minutes=50)).strftime("%Y-%m-%dT%H:%M")
+        vorbei = (dt.now() - timedelta(hours=2)).strftime("%Y-%m-%dT%H:%M")
+        a = k.anlegen(c, "oskar", "Gleich", bald, dauer=30, personen=["finn"])
+        b = k.anlegen(c, "oskar", "War schon", vorbei, dauer=30)
+        z = k.takt(c)
+        self.assertEqual((z["erinnert"], z["ergebnis"]), (2, 1))  # 24h und 1h für „Gleich“
+        self.assertIn("In einer Stunde: Gleich", [r["title"] for r in leaddb.notices(c, "f", 9, "finn")[0]])
+        self.assertIn("Wie war der Termin? War schon", [r["title"] for r in leaddb.notices(c, "o", 9, "oskar")[0]])
+        self.assertEqual(k.takt(c)["erinnert"], 0)  # nur einmal
+        self.assertEqual([t["id"] for t in k.offene_ergebnisse(c, "oskar")], [b])
+        del a
+
+    def test_ergebnis_schiebt_lead_und_zaehlt(self):
+        from datetime import datetime as dt
+        from app import aufgaben as au
+        k, c = self.k, self.c
+        lid = lead_anlegen(c, "Studio X", stage="kontaktiert")
+        tid = k.anlegen(c, "oskar", "Erstgespräch", (dt.now() - timedelta(hours=3)).strftime("%Y-%m-%dT%H:%M"),
+                        lead_id=lid)
+        with self.assertRaises(k.KalenderError):
+            k.ergebnis(c, "oskar", tid, "super")
+        k.ergebnis(c, "oskar", tid, "stattgefunden", "will Angebot", preisgespraech=True, folge_titel="Angebot schicken",
+                   folge_faellig=MORGEN)
+        lead = leaddb.get_lead(c, lid)
+        self.assertEqual(lead["stage"], "gespraech")
+        self.assertTrue(lead["preisgespraech_am"])
+        self.assertEqual([a["titel"] for a in au.zum_objekt(c, "lead", lid)], ["Angebot schicken"])
+        self.assertEqual(k.offene_ergebnisse(c, "oskar"), [])
+        self.assertTrue(firma.protokoll(c, art="termin_ergebnis"))
+        b = k.briefing(c, k.get(c, tid))
+        self.assertEqual(b["fakten"][0], ("Betrieb", "Studio X"))
+        self.assertEqual(b["aufgaben"][0]["titel"], "Angebot schicken")
+
+    def test_serie_und_abo(self):
+        k, c = self.k, self.c
+        sid = k.serie_anlegen(c, "oskar", "Wochengespräch", 0, "17:00", 60, "oskar", ["finn", "hamza"])
+        n = c.execute("SELECT COUNT(*) FROM termine WHERE serie_id=?", (sid,)).fetchone()[0]
+        self.assertIn(n, (5, 6))
+        self.assertEqual(k.serien_auffuellen(c), 0)  # schon da
+        alle = c.execute("SELECT start FROM termine WHERE serie_id=?", (sid,)).fetchall()
+        self.assertTrue(all(datetime_fromiso(r["start"]).weekday() == 0 and r["start"][11:] == "17:00" for r in alle))
+        token = k.ics_token_erneuern(c, "finn")
+        self.assertEqual(k.ics_person(c, token), "finn")
+        text = k.ics(c, "finn")
+        self.assertIn("SUMMARY:Wochengespräch", text)
+        self.assertIn("BEGIN:VCALENDAR", text)
+        k.ics_token_erneuern(c, "finn")
+        self.assertIsNone(k.ics_person(c, token))  # alte Adresse gilt nicht mehr
+        k.serie_beenden(c, "oskar", sid)
+        self.assertEqual(c.execute("SELECT COUNT(*) FROM termine WHERE serie_id=? AND status != 'abgesagt'",
+                                   (sid,)).fetchone()[0], 0)
+
+    def test_regeln(self):
+        k, c = self.k, self.c
+
+        class Form(dict):
+            def getlist(self, key):
+                return self.get(key, [])
+        gut = Form(von="08:00", bis="16:00", tage=["0", "2"], dauer="30", puffer="10", abgleich="5",
+                   erinnerung_24h="1", zeitzone="Europe/Berlin")
+        k.regeln_speichern(c, "oskar", gut)
+        r = k.regeln(c)
+        self.assertEqual((r["von"], r["tage_liste"], r["dauer"], r["erinnerung_1h"]), ("08:00", [0, 2], 30, False))
+        for schlecht in (dict(gut, von="17:00"), dict(gut, tage=[]), dict(gut, zeitzone="Mars/Olymp"),
+                         dict(gut, dauer="viel")):
+            with self.assertRaises(k.KalenderError):
+                k.regeln_speichern(c, "oskar", Form(schlecht))
+
+
+def datetime_combine(d):
+    from datetime import datetime as dt, time
+    return dt.combine(d, time(7, 0))
+
+
+def datetime_fromiso(v):
+    from datetime import datetime as dt
+    return dt.fromisoformat(v)
+
+
+class KalenderWebTest(WebBasis):
+    def setUp(self):
+        super().setUp()
+        from unittest import mock
+        from app import google_kalender
+        self.fake = FakeGoogle()
+        p1 = mock.patch.object(google_kalender, "_http", self.fake)
+        p2 = mock.patch.dict(os.environ, {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "sec"})
+        p1.start(), p2.start()
+        self.addCleanup(p1.stop), self.addCleanup(p2.stop)
+        self.addCleanup(lambda: (self.c.execute("DELETE FROM kalender_konten"), self.c.commit()))
+
+    def test_google_verbinden(self):
+        r = self.client.get("/kalender/google/verbinden")
+        self.assertTrue(r.headers["Location"].startswith("https://accounts.google.com/"))
+        self.assertIn("calendar.events.freebusy", r.headers["Location"])
+        self.assertIn("kalender%2Fgoogle%2Fzurueck", r.headers["Location"])
+        state = r.headers["Location"].split("state=")[1].split("&")[0]
+        self.client.get("/kalender/google/zurueck?state=falsch&code=x")  # falscher state: nichts gespeichert
+        self.assertIsNone(self.c.execute("SELECT 1 FROM kalender_konten").fetchone())
+        self.client.get("/kalender/google/verbinden")
+        with self.client.session_transaction() as sess:
+            state = sess["google_state"]["state"]
+        r = self.client.get(f"/kalender/google/zurueck?state={state}&code=abc")
+        self.assertEqual(r.headers["Location"], "/kalender/mein")
+        self.assertEqual(self.c.execute("SELECT status FROM kalender_konten WHERE person='oskar'").fetchone()[0], "ok")
+        self.assertIn("Verbunden", self.client.get("/kalender/mein").get_data(as_text=True))
+        self.post("/kalender/google/trennen")
+        self.assertIsNone(self.c.execute("SELECT 1 FROM kalender_konten").fetchone())
+
+    def test_seiten_und_rechte(self):
+        tag_ = (date.today() + timedelta(days=2)).isoformat()
+        r = self.post("/kalender/neu", {"titel": "Webtest Termin", "datum": tag_, "uhrzeit": "11:00", "dauer": "30",
+                                        "personen": ["oskar", "finn"]}, headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"], r.get_data(as_text=True))
+        tid = int(r.get_json()["url"].rsplit("/", 1)[1])
+        self.addCleanup(lambda: (self.c.execute("DELETE FROM termine WHERE id=?", (tid,)),
+                                 self.c.execute("DELETE FROM termin_teilnehmer WHERE termin_id=?", (tid,)),
+                                 self.c.commit()))
+        for url in ("/kalender", "/kalender?ansicht=alle", f"/kalender/{tid}", "/kalender/mein",
+                    "/einstellungen/kalender", "/mein-tag", "/kalender/vorschlaege.json?personen=oskar&dauer=30"):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+        self.assertIn("Webtest Termin", self.client.get("/kalender").get_data(as_text=True))
+        self.post("/kalender/abo/neu")
+        link = self.client.get("/kalender/mein").get_data(as_text=True).split('id="icsLink" value="')[1].split('"')[0]
+        ics = main.app.test_client().get("/kalender/" + link.rsplit("/", 1)[1])
+        self.assertEqual(ics.status_code, 200)
+        self.assertIn("Webtest Termin", ics.get_data(as_text=True))
+        self.assertEqual(main.app.test_client().get("/kalender/falsch.ics").status_code, 404)
+        self.als("hamza")
+        self.assertEqual(self.client.get("/kalender").status_code, 200)
+        self.assertEqual(self.post("/einstellungen/kalender/regeln", {"von": "08:00"}).status_code, 403)
+        self.assertEqual(self.post(f"/kalender/{tid}/absagen").status_code, 403)  # nicht seiner
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -16,6 +16,7 @@
   </header>
 
   <div class="os-tiles" aria-label="Überblick">
+    {% if darf('kalender') %}<a class="os-tile {{ 'zero' if not termine }}" href="#termine"><span>Termine</span><b>{{ termine|length }}</b></a>{% endif %}
     <a class="os-tile {{ 'alert' if t.ueberfaellig else 'zero' }}" href="#ueberfaellig"><span>Überfällig</span><b>{{ t.ueberfaellig|length }}</b></a>
     <a class="os-tile {{ 'zero' if not t.heute }}" href="#heute"><span>Heute</span><b>{{ t.heute|length }}</b></a>
     <a class="os-tile {{ 'zero' if not t.anfragen }}" href="#anfragen"><span>Anfragen</span><b>{{ t.anfragen|length }}</b></a>
@@ -24,6 +25,30 @@
     {% if akquise and darf('crm') %}<a class="os-tile {{ 'zero' if not akquise.wiedervorlagen }}" href="{{ url_for('crm.board') }}"><span>Wieder&shy;vorlagen</span><b>{{ akquise.wiedervorlagen }}</b></a>
     <a class="os-tile {{ 'zero' if not akquise.antworten }}" href="{{ url_for('crm.inbox') }}"><span>Antworten</span><b>{{ akquise.antworten }}</b></a>{% endif %}
   </div>
+
+  {% if termine %}
+  <section class="os-section" id="termine">
+    <h2 class="os-headline">Termine heute</h2>
+    <ul class="os-list anim">{% for k in termine %}<li style="--i:{{ loop.index0 }}" class="os-meet"><a class="os-row" href="{{ url_for('kalender.detail', tid=k.id) }}" style="flex:1">
+      <span class="os-zeit">{{ k.start[11:16] }}<em>{{ k.ende[11:16] }}</em></span>
+      <span class="os-txt"><b>{{ k.titel }}</b><span>{% if k.lead_name %}{{ k.lead_name }} · Briefing{% else %}{{ k.personen|length }} {{ 'Person' if k.personen|length == 1 else 'Personen' }}{% endif %}{% if k.status == 'vorschlag' %} · Freigabe offen{% endif %}</span></span>
+      {% if not k.meet_link %}<span class="os-chev">{{ i('chev') }}</span>{% endif %}</a>
+      {% if k.meet_link %}<a class="os-btn small ink" href="{{ k.meet_link }}" target="_blank" rel="noopener" aria-label="Meet beitreten: {{ k.titel }}">Meet</a>{% endif %}</li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if termin_freigaben or ergebnisse %}
+  <section class="os-section">
+    <h2 class="os-headline">Aus dem Kalender</h2>
+    <ul class="os-list">
+      {% for k in termin_freigaben %}<li><a class="os-row" href="{{ url_for('kalender.detail', tid=k.id) }}"><span class="os-ico red">{{ i('kalender') }}</span>
+        <span class="os-txt"><b>Einladung freigeben: {{ k.titel }}</b><span>{{ k.zeit }} · an {{ k.gaeste|join(', ') }}</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
+      {% for k in ergebnisse %}<li><a class="os-row" href="{{ url_for('kalender.detail', tid=k.id) }}#ergebnis"><span class="os-ico">{{ i('check') }}</span>
+        <span class="os-txt"><b>Wie war es? {{ k.titel }}</b><span>{{ k.zeit }}{% if k.lead_name %} · {{ k.lead_name }}{% endif %}</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
 
   {% if t.anfragen %}
   <section class="os-section" id="anfragen">

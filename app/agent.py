@@ -1345,6 +1345,11 @@ def tick():
                     fetch_inbox(c)
             notify_due(c)
             notify_tasks(c)
+            try:  # Kalender: Erinnerungen, Ergebnis nachfragen, frei/belegt abgleichen, Serien (Firmen-OS Stufe 3)
+                from . import kalender
+                kalender.takt(c)
+            except Exception:
+                log.exception("Fehler im Kalender-Takt")
             reports.notify_released(c, notify)
             start_scheduled(c)
             run = c.execute("SELECT id FROM runs WHERE status='wartet' ORDER BY id LIMIT 1").fetchone()

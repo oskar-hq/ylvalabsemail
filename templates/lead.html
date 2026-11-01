@@ -157,6 +157,15 @@
         </form>
       </div>
 
+      {% if darf('kalender') %}
+      <div class="side-block">
+        <span class="label">Termine</span>
+        {% if lead_termine %}<ul class="tasks small">{% for k in lead_termine %}<li><span><a href="{{ url_for('kalender.detail', tid=k.id) }}"><b>{{ k.zeit }}</b> · {{ k.titel }}</a>{% if k.status == 'vorschlag' %} · Freigabe offen{% elif k.ergebnis %} · {{ {'stattgefunden': 'stattgefunden', 'abgesagt': 'abgesagt', 'nicht_erschienen': 'nicht erschienen'}[k.ergebnis] }}{% endif %}</span></li>{% endfor %}</ul>
+        {% else %}<p class="muted small">Noch kein Termin.</p>{% endif %}
+        {% if lead.pruef_status not in ('wartet', 'abgelehnt') %}<a class="btn small" href="{{ url_for('kalender.uebersicht', lead=lead.id) }}">Termin vereinbaren</a>{% endif %}
+      </div>
+      {% endif %}
+
       <div class="side-block" id="branchentest">
         <span class="label">Branchentest <a class="muted" href="{{ url_for('branchentest.uebersicht') }}">· Auswertung</a></span>
         {% if lead.pruef_status == 'wartet' %}<p class="note warn small">In Prüfung{% if pruefung %} bei {{ people.get(pruefung.pruefer, pruefung.pruefer) }}{% endif %}. Bis dahin nicht kontaktieren.{% if pruefung and pruefung.pruefer == account.team %} <a href="{{ url_for('branchentest.pruefen') }}">Jetzt prüfen</a>{% endif %}</p>

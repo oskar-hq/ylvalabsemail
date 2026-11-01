@@ -64,6 +64,10 @@ GROUPS = [
         ("LEADS_MONTHLY_BUDGET_EUR", "Monatsbudget für die KI (€)", "float", "20", "Harte Grenze. 0 = keine Grenze"),
         ("EUR_PER_USD", "Euro pro US-Dollar", "float", "0.86", "Zum Umrechnen der Preise"),
     ]),
+    ("google", "Google Kalender", [
+        ("GOOGLE_CLIENT_ID", "Client-ID", "text", "", "Aus der Google Cloud Console (OAuth-Client, Webanwendung)"),
+        ("GOOGLE_CLIENT_SECRET", "Clientschlüssel", "secret", "", "Wird verschlüsselt gespeichert und nie wieder angezeigt"),
+    ]),
     ("hinweise", "Benachrichtigungen", [
         ("NOTIFY_EMAILS", "Benachrichtigungen per Mail an", "emails", "", "Mehrere mit Komma trennen"),
         ("BASE_URL", "Adresse der App", "url", "", "z. B. https://mail.ylvalabs.de (für Links in Benachrichtigungen)"),
@@ -84,12 +88,14 @@ PAGES = {
     "ki": [("schluessel", "KI-Schlüssel", ["ANTHROPIC_API_KEY"]),
            ("modelle", "Modelle", ["AI_MODEL", "AI_EFFORT", "AI_MODEL_ANALYSE", "AI_EFFORT_ANALYSE"]),
            ("budget", "Budget", ["LEADS_MONTHLY_BUDGET_EUR", "LEADS_RUN_BUDGET_EUR", "LEADS_RUN_DRAFTS", "EUR_PER_USD"])],
+    "google": [("zugang", "Google-Zugang", ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"])],
     "hinweise": [("hinweise", "Benachrichtigungen", ["BASE_URL", "INBOX_MINUTES"])],
 }
 # Fehlt einer dieser Werte, steht beim Bereich „Fehlt“
 NEEDED = {"SMTP_HOST", "OUTREACH_USER", "OUTREACH_PASSWORD", "IMAP_HOST"}
 GROUP_HINTS = {"postfach": "Strato, Akquise-Postfach, Versand", "absender": "Firmenname, Unterschrift, Fußzeile",
                "suche": "Gebiet, Punkte, wie viele pro Lauf", "ki": "Schlüssel, Modelle, Budget",
+               "google": "Client-ID und Schlüssel für die Kalender",
                "hinweise": "Mail-Benachrichtigungen, Adresse der App"}
 READ_ONLY = ["ALLOWED_DOMAINS", "ALLOWED_USERS", "ADMIN_USERS", "DEMO_MODE", "COOKIE_SECURE", "TRUST_PROXY"]
 FIELDS = {key: dict(key=key, label=label, type=typ, default=default, hint=hint, group=gid)
