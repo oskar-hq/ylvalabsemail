@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Freigaben und Entscheidungen · Einstellungen{% endblock %}
+{% block content %}
+{% macro wer_auswahl(name, gewaehlt, optionen, disabled) -%}
+<div class="os-chips" style="margin:8px 0 0">{% for k, label in optionen %}<label><input type="checkbox" name="{{ name }}" value="{{ k }}" {{ 'checked' if k in gewaehlt }} {{ 'disabled' if disabled }}><span>{{ label }}</span></label>{% endfor %}</div>
+{%- endmacro %}
+{% macro recht_form(r, rechte, optionen, verwalten) -%}
+<form method="post" action="{{ url_for('freigaben.recht_speichern') }}" data-os-fetch="reload">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="key" value="{{ r.key or '' }}">
+  <label class="os-field"><span>Titel</span><input name="titel" maxlength="120" value="{{ r.titel or '' }}" required {{ 'disabled' if not verwalten }}></label>
+  <label class="os-field"><span>Beschreibung</span><textarea name="beschreibung" rows="2" maxlength="500" {{ 'disabled' if not verwalten }}>{{ r.beschreibung or '' }}</textarea></label>
+  <div class="os-field"><span>Wer entscheidet</span>{{ wer_auswahl('wer', r.wer or [], optionen, not verwalten) }}</div>
+  <div class="os-field"><span>Bei mehreren</span><div class="os-chips" style="margin:8px 0 0">
+    <label><input type="radio" name="modus" value="eine" {{ 'checked' if (r.modus or 'eine') == 'eine' }} {{ 'disabled' if not verwalten }}><span>Eine Person reicht</span></label>
+    <label><input type="radio" name="modus" value="alle" {{ 'checked' if r.modus == 'alle' }} {{ 'disabled' if not verwalten }}><span>Alle gemeinsam</span></label></div></div>
+  <div class="os-field"><span>Wird vorher gefragt (entscheidet nicht mit)</span>{{ wer_auswahl('gefragt', r.gefragt or [], optionen, not verwalten) }}</div>
+  <div class="os-grid2">
+    <label class="os-field"><span>Betragsgrenze in € (leer = keine)</span><input name="grenze_eur" inputmode="decimal" value="{{ '%g'|format(r.grenze_eur) if r.grenze_eur is not none else '' }}" {{ 'disabled' if not verwalten }}></label>
+    <label class="os-field"><span>Ab der Grenze entscheidet</span><select name="ab_grenze" {{ 'disabled' if not verwalten }}><option value="">dasselbe Recht</option>{% for x in rechte if x.key != r.key %}<option value="{{ x.key }}" {{ 'selected' if x.key == r.ab_grenze }}>{{ x.titel }}</option>{% endfor %}</select></label>
+  </div>
+  {% if verwalten %}<div class="os-btns"><button class="os-btn small ink">Speichern</button>
+    {% if r.key %}<button class="os-link danger" name="loeschen" value="1" data-confirm="Entscheidungsrecht „{{ r.titel }}“ löschen?">Löschen</button>{% endif %}</div>{% endif %}
+</form>
+{%- endmacro %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Einstellungen</span>
+    <h1 class="os-title-l">Freigaben und Entscheidungen</h1>
+    <p class="os-sub os-lead">Was das OS allein darf, wer was entscheidet und wer im Notfall gerufen wird. Änderungen gelten sofort und stehen im Entscheidungs-Log.</p>
+  </header>
+  {% if not verwalten %}<p class="os-caption">Ändern darf, wer „Freigabe-Stufen, Entscheidungsrechte und Entscheidungs-Log: Verwalten“ hat.</p>{% endif %}
+
+  <section class="os-section" style="margin-top:24px" id="stufen">
+    <h2 class="os-headline">Freigabe-Stufen</h2>
+    <ul class="os-list" style="margin-top:4px">{% for k, (label, text) in stufen.items() %}<li class="os-row" style="min-height:0;padding:10px 0"><span class="os-ico">{{ k }}</span><span class="os-txt"><b>{{ label }}</b><span>{{ text }}</span></span></li>{% endfor %}</ul>
+    <form method="post" action="{{ url_for('freigaben.stufen_speichern') }}" data-os-fetch="reload" style="margin-top:16px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      {% for a in aktionen %}
+      <div class="os-stufe-zeile">
+        <span class="os-txt"><b>{{ a.label }}</b><span>{{ a.bereich }}{% if a.kommt_mit %} · kommt mit Stufe {{ a.kommt_mit }}{% elif a.erlaubt|length < 2 %} · fest{% endif %}{% if a.hinweis %} · {{ a.hinweis }}{% endif %}</span></span>
+        <span class="os-stufen" role="radiogroup" aria-label="Stufe für {{ a.label }}">{% for s in ['A', 'B', 'C', 'D'] %}
+          <label title="{{ stufen[s][0] }}"><input type="radio" name="{{ a.key }}" value="{{ s }}" {{ 'checked' if werte[a.key] == s }} {{ 'disabled' if not verwalten or s not in a.erlaubt or a.kommt_mit or a.erlaubt|length < 2 }}><span>{{ s }}</span></label>{% endfor %}</span>
+      </div>
+      {% endfor %}
+      <label class="os-field" style="margin-top:16px"><span>Einspruchsfrist auf Stufe B (Stunden)</span><input type="number" name="frist_h" min="1" max="168" value="{{ werte.frist_h }}" {{ 'disabled' if not verwalten }}></label>
+      {% if verwalten %}<button class="os-btn small quiet">Stufen speichern</button>{% endif %}
+    </form>
+    <p class="os-caption" style="margin-top:12px">Immer hart im Code und nicht abschaltbar: Erstkontakt per Mail bleibt gesperrt, solange § 7 UWG nicht geklärt ist; die Sperrliste gilt immer.</p>
+  </section>
+
+  <section class="os-section" id="rechte">
+    <h2 class="os-headline">Entscheidungsrechte</h2>
+    <p class="os-sub">Wer allein entscheiden darf und was nur gemeinsam geht. Das Entscheidungs-Log fragt danach.</p>
+    <ul class="os-list">{% for r in rechte %}<li><details>
+      <summary class="os-row" style="cursor:pointer;list-style:none"><span class="os-txt"><b>{{ r.titel }}</b>
+        <span>{{ wer_text(r.wer) }}{% if r.modus == 'alle' %} (gemeinsam){% endif %}{% if r.gefragt %} · gefragt: {{ wer_text(r.gefragt) }}{% endif %}{% if r.grenze_eur is not none %} · Grenze {{ '%g'|format(r.grenze_eur) }} €{% endif %}</span></span><span class="os-chev">{{ i('chev') }}</span></summary>
+      <div style="padding:8px 0 16px">{{ recht_form(r, rechte, optionen, verwalten) }}</div>
+    </details></li>{% endfor %}</ul>
+    {% if verwalten %}<details style="margin-top:12px"><summary class="os-btn small quiet" style="list-style:none">Neues Entscheidungsrecht</summary>
+      <div style="padding:16px 0">{{ recht_form(neu_recht, rechte, optionen, verwalten) }}</div></details>{% endif %}
+  </section>
+
+  <section class="os-section" id="notfall">
+    <h2 class="os-headline">Notfall: wer wird gerufen</h2>
+    <p class="os-sub">Benachrichtigt werden die Verantwortlichen der gewählten Bereiche, sofort und aufs Handy.</p>
+    <form method="post" action="{{ url_for('freigaben.notfall_speichern') }}" data-os-fetch="reload" style="margin-top:12px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      {% for k, (label, erklaerung, _) in notfall_arten.items() %}<div class="os-field"><span>{{ label }}</span>
+        <div class="os-chips" style="margin:8px 0 0">{% for b in bereiche %}<label><input type="checkbox" name="{{ k }}" value="{{ b.key }}" {{ 'checked' if b.key in notfall_regeln[k] }} {{ 'disabled' if not verwalten }}><span>{{ b.name }}{% if b.verantwortlich_name %} ({{ b.verantwortlich_name.split(' ')[0] }}){% endif %}</span></label>{% endfor %}</div></div>{% endfor %}
+      {% if verwalten %}<button class="os-btn small quiet">Zuständigkeit speichern</button>{% endif %}
+    </form>
+  </section>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('settings.settings') }}" aria-label="Zurück zu den Einstellungen">{{ i('back') }}</a>
+</div>
+{% endblock %}

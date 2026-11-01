@@ -47,6 +47,7 @@ MODULE = [
     ("protokoll", "Firmen-Protokoll"),
     ("einstellungen", "Einstellungen, Updates, Sicherung"),
     ("personen", "Personen, Rollen und Bereiche"),
+    ("entscheidungen", "Freigabe-Stufen, Entscheidungsrechte und Entscheidungs-Log"),
 ]
 MODUL_KEYS = [k for k, _ in MODULE]
 STUFEN = [(0, "Kein Zugriff"), (1, "Sehen"), (2, "Bearbeiten"), (3, "Freigeben"), (4, "Verwalten")]
@@ -61,7 +62,8 @@ EINLADUNG_TAGE = 7  # Standard; einstellbar unter Einstellungen → Personen (kv
 
 GRUENDER = {k: VERWALTEN for k in MODUL_KEYS}
 RECHERCHE = {"aufgaben": BEARBEITEN, "kalender": BEARBEITEN, "cockpit": BEARBEITEN, "leads": BEARBEITEN,
-             "crm": BEARBEITEN, "mailer": BEARBEITEN, "kunden": 0, "kosten": 0, "protokoll": 0, "einstellungen": 0, "personen": 0}
+             "crm": BEARBEITEN, "mailer": BEARBEITEN, "kunden": 0, "kosten": 0, "protokoll": 0, "einstellungen": 0, "personen": 0,
+             "entscheidungen": BEARBEITEN}
 
 # Startwerte, laufen genau einmal (leaddb.DATA_MIGRATIONS). Danach wird alles in der App gepflegt.
 SEED = [
@@ -104,6 +106,8 @@ def log(c, wer, art, objekt_typ=None, objekt_id=None, text="", daten=None, commi
     c.execute("INSERT INTO ereignisse (at, wer, art, objekt_typ, objekt_id, text, daten) VALUES (?,?,?,?,?,?,?)",
               (now(), wer or "System", art, objekt_typ, None if objekt_id is None else str(objekt_id), text or "",
                json.dumps(daten, ensure_ascii=False) if daten else None))
+    from . import freigaben  # Änderungen an Regeln, Rollen und Rechten landen auch im Entscheidungs-Log
+    freigaben.aus_protokoll(c, wer, art, objekt_typ, objekt_id, text)
     if commit:
         c.commit()
 
@@ -111,7 +115,8 @@ def log(c, wer, art, objekt_typ=None, objekt_id=None, text="", daten=None, commi
 ART_LABELS = {
     "person": "Person", "rolle": "Rolle", "bereich": "Bereich", "einladung": "Einladung", "anmeldung": "Anmeldung",
     "einstellung": "Einstellung", "aufgabe": "Aufgabe", "anfrage": "Anfrage", "kommentar": "Kommentar",
-    "lead": "Lead", "software": "Software", "sicherung": "Sicherung",
+    "lead": "Lead", "software": "Software", "sicherung": "Sicherung", "freigabe": "Freigabe",
+    "entscheidung": "Entscheidung", "notfall": "Notfall",
 }
 
 

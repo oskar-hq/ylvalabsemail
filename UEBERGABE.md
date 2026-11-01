@@ -75,6 +75,11 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
 - **Firmen-OS Stufe 5 (01.11.2026):** Kunden und Projekte. Nach dem Update: unter Einstellungen → Projekte die
   Abnahme-Checkliste, die Pauschale für kleine Änderungen und den Stundensatz prüfen. Bestehende Kunden im CRM
   bekommen ihr Projekt, sobald jemand sie unter „Kunden“ anlegt oder ihre Stufe neu auf „Kunde“ setzt.
+- **Firmen-OS Stufe 6 (01.11.2026):** Freigabe-Zentrale, Freigabe-Stufen, Entscheidungsrechte, Entscheidungs-Log,
+  Notfall-Knopf. Nach dem Update: unter Einstellungen → Freigaben und Entscheidungen die Entscheidungsrechte und
+  die Notfall-Zuständigkeit prüfen (Startwerte aus den Rollen). Die Einladung an Kunden steht auf Stufe C wie
+  bisher; wer sie auf B (mit Einspruch) stellen will, kann das dort tun. Einmal den Notfall-Knopf mit einer
+  Probemeldung testen (Push kommt bei den Zuständigen an?) und als behoben markieren.
 
 - Die automatischen Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.

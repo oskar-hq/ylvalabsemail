@@ -2,7 +2,7 @@
 die Regeln und Freigaben der Lernstufen."""
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from . import firma, kpis
+from . import firma, freigaben, kpis
 from .leads_views import db, me
 from .main import SETTINGS, darf, login_required, safe_next
 
@@ -161,7 +161,7 @@ def wochengespraech():
                            nach=kpis.woche_plus(woche, 1), naechste=kpis.woche_plus(woche, 1),
                            katalog=[k for k in kpis.KATALOG if k["fn"] and k["je_person"]],
                            bereiche=firma.bereiche(c), personen=firma.aktive_personen(c), prios=aufgaben.PRIOS,
-                           heute=aufgaben.heute(), demo=SETTINGS["DEMO_MODE"])
+                           heute=aufgaben.heute(), demo=SETTINGS["DEMO_MODE"], rechte=freigaben.rechte(c))
 
 
 @bp.post("/lernstufe/<int:fid>")

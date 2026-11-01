@@ -25,7 +25,7 @@
     <a class="os-tile {{ 'alert' if t.ueberfaellig else 'zero' }}" href="#ueberfaellig"><span>Überfällig</span><b>{{ t.ueberfaellig|length }}</b></a>
     <a class="os-tile {{ 'zero' if not t.heute }}" href="#heute"><span>Heute</span><b>{{ t.heute|length }}</b></a>
     <a class="os-tile {{ 'zero' if not t.anfragen }}" href="#anfragen"><span>Anfragen</span><b>{{ t.anfragen|length }}</b></a>
-    {% if pruefungen %}<a class="os-tile alert" href="{{ url_for('branchentest.pruefen') }}"><span>Leads prüfen</span><b>{{ pruefungen|length }}</b></a>{% endif %}
+    {% if freigaben %}<a class="os-tile alert" href="{{ url_for('freigaben.zentrale') }}"><span>Freigaben</span><b>{{ freigaben|length }}</b></a>{% endif %}
     <a class="os-tile {{ 'zero' if not n_spaeter }}" href="#woche"><span>Diese Woche</span><b>{{ n_spaeter }}</b></a>
     {% if akquise and darf('crm') %}<a class="os-tile {{ 'zero' if not akquise.wiedervorlagen }}" href="{{ url_for('crm.board') }}"><span>Wieder&shy;vorlagen</span><b>{{ akquise.wiedervorlagen }}</b></a>
     <a class="os-tile {{ 'zero' if not akquise.antworten }}" href="{{ url_for('crm.inbox') }}"><span>Antworten</span><b>{{ akquise.antworten }}</b></a>{% endif %}
@@ -43,12 +43,10 @@
   </section>
   {% endif %}
 
-  {% if termin_freigaben or ergebnisse %}
+  {% if ergebnisse %}
   <section class="os-section">
     <h2 class="os-headline">Aus dem Kalender</h2>
     <ul class="os-list">
-      {% for k in termin_freigaben %}<li><a class="os-row" href="{{ url_for('kalender.detail', tid=k.id) }}"><span class="os-ico red">{{ i('kalender') }}</span>
-        <span class="os-txt"><b>Einladung freigeben: {{ k.titel }}</b><span>{{ k.zeit }} · an {{ k.gaeste|join(', ') }}</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
       {% for k in ergebnisse %}<li><a class="os-row" href="{{ url_for('kalender.detail', tid=k.id) }}#ergebnis"><span class="os-ico">{{ i('check') }}</span>
         <span class="os-txt"><b>Wie war es? {{ k.titel }}</b><span>{{ k.zeit }}{% if k.lead_name %} · {{ k.lead_name }}{% endif %}</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
     </ul>
@@ -67,14 +65,6 @@
   </section>
   {% endif %}
 
-  {% if aufstiege %}
-  <section class="os-section">
-    <h2 class="os-headline">Aufstieg freigeben</h2>
-    <ul class="os-list">{% for f in aufstiege %}<li><a class="os-row" href="{{ url_for('cockpit.wochengespraech') }}">{{ avatar(f.person_name) }}
-      <span class="os-txt"><b>{{ f.person_name }}: Lernstufe {{ f.nach }}</b><span>{{ f.stand.text }}</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}</ul>
-  </section>
-  {% endif %}
-
   {% if t.anfragen %}
   <section class="os-section" id="anfragen">
     <h2 class="os-headline">Wartet auf dich</h2>
@@ -88,15 +78,16 @@
   </section>
   {% endif %}
 
-  {% if pruefungen %}
-  <section class="os-section" id="pruefen">
-    <h2 class="os-headline">Leads prüfen</h2>
-    <p class="os-sub">Bis du entscheidest, werden sie nicht kontaktiert.</p>
-    <ul class="os-list anim">{% for f in pruefungen[:5] %}
-      <li style="--i:{{ loop.index0 }}"><a class="os-row" href="{{ url_for('branchentest.pruefen') }}">{{ avatar(f.von_name) }}
-        <span class="os-txt"><b>{{ f.name }}</b><span>{{ 'Stichprobe' if f.stufe == 'stichprobe' else 'von ' ~ (f.von_name or '') }} · {{ f.branche_name or 'ohne Testbranche' }}</span></span>
+  {% if freigaben %}
+  <section class="os-section" id="freigaben">
+    <h2 class="os-headline">Freigaben</h2>
+    <p class="os-sub">Bis du entscheidest, passiert nichts davon. Alles an einer Stelle in der Freigabe-Zentrale.</p>
+    <ul class="os-list anim">{% for f in freigaben[:5] %}
+      <li style="--i:{{ loop.index0 }}"><a class="os-row" href="{{ url_for('freigaben.zentrale') }}#f-{{ f.art }}-{{ f.oid }}">{% if f.von_name %}{{ avatar(f.von_name) }}{% else %}<span class="os-ico">{{ i('check') }}</span>{% endif %}
+        <span class="os-txt"><b>{{ f.titel }}</b><span>{{ f.eyebrow }}{% if f.frist %} · geht von selbst raus am {{ f.frist[8:10] }}.{{ f.frist[5:7] }}. um {{ f.frist[11:16] }}{% elif f.text %} · {{ f.text }}{% endif %}</span></span>
         <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
     </ul>
+    {% if freigaben|length > 5 %}<a class="os-btn small quiet" style="margin-top:12px" href="{{ url_for('freigaben.zentrale') }}">Alle {{ freigaben|length }} ansehen</a>{% endif %}
   </section>
   {% endif %}
 

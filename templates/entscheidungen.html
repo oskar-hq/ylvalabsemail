@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% from "_entscheidung.html" import sheet_entscheidung, entscheidung_zeile %}
+{% block title %}Entscheidungs-Log · Ylva Labs{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Firma</span>
+    <h1 class="os-title-l">Entscheidungs-Log</h1>
+    <p class="os-sub os-lead">Was entschieden wurde, von wem, warum und auf welcher Grundlage. Änderungen an Regeln und Rechten trägt das OS selbst ein.</p>
+  </header>
+  <div class="os-chips">
+    <a href="{{ url_for('freigaben.log') }}" class="{{ 'on' if not status }}">Alle</a>
+    {% for k, label in status_label.items() %}<a href="{{ url_for('freigaben.log', status=k) }}" class="{{ 'on' if status == k }}">{{ label }}</a>{% endfor %}
+  </div>
+  {% if darf('entscheidungen', 2) %}<div class="os-btns"><button type="button" class="os-btn small ink" data-sheet="sheet-entscheidung">Entscheidung festhalten</button></div>{% endif %}
+
+  <section class="os-section">
+    {% if liste %}<ul class="os-list">{% for e in liste %}{{ entscheidung_zeile(e) }}{% endfor %}</ul>
+    {% else %}<p class="os-empty">Noch keine Entscheidungen{% if status %} mit diesem Stand{% endif %}.</p>{% endif %}
+  </section>
+
+  <section class="os-section">
+    <h2 class="os-headline">Wer was entscheidet</h2>
+    <p class="os-sub">Aus den Entscheidungsrechten. {% if darf('entscheidungen', 4) %}<a href="{{ url_for('freigaben.einstellungen') }}#rechte">Ändern</a>{% endif %}</p>
+    <ul class="os-list">{% for r in rechte %}<li class="os-row"><span class="os-txt"><b>{{ r.titel }}</b><span>{{ wer_text(r.wer) }}{% if r.modus == 'alle' %}, gemeinsam{% endif %}{% if r.gefragt %}; gefragt: {{ wer_text(r.gefragt) }}{% endif %}{% if r.grenze_eur is not none %}; Grenze {{ '%g'|format(r.grenze_eur) }} €{% endif %}</span></span></li>{% endfor %}</ul>
+  </section>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('aufgaben.mein_tag') }}" aria-label="Zu Mein Tag">{{ i('back') }}</a>
+</div>
+{% if darf('entscheidungen', 2) %}{{ sheet_entscheidung(rechte, url_for('freigaben.log')) }}{% endif %}
+{% endblock %}
