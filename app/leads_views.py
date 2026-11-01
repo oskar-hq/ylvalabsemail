@@ -8,7 +8,7 @@ from datetime import datetime
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from . import agent, ai, claude_research, crm, emailbuild, known, leaddb, mailbox, niches, pixel, reports, schedule, scoring, team, websearch, webpush
+from . import agent, ai, aufgaben, claude_research, crm, emailbuild, firma, known, leaddb, mailbox, niches, pixel, reports, schedule, scoring, team, websearch, webpush
 from .main import DB_PATH, ROOT, SETTINGS, login_required
 
 bp = Blueprint("leads", __name__)
@@ -472,6 +472,7 @@ def detail(lead_id):
                            draft_ct=ai.eur(agent.avg_cost_usd(db(), "entwurf")) * 100,
                            tasks=crm.open_tasks(db(), lead_id=lead_id), can_mail=can_mail, mail_hint=mail_hint,
                            tab=leaddb.tab_of(lead), tabs=leaddb.TABS, people=team.names(db()),
+                           komm=aufgaben.kommentare(db(), "lead", lead_id), os_personen=firma.aktive_personen(db()),
                            demo=SETTINGS["DEMO_MODE"])
 
 
@@ -1072,9 +1073,9 @@ def push_subscribe():
         assert webpush.valid_endpoint(sub["endpoint"]) and sub["keys"]["p256dh"] and sub["keys"]["auth"]
     except Exception:
         return jsonify(error="Ungültiges Abo."), 400
-    db().execute("INSERT INTO push_subs (endpoint, data, user, created_at) VALUES (?,?,?,?) "
-                 "ON CONFLICT(endpoint) DO UPDATE SET data=excluded.data, user=excluded.user",
-                 (sub["endpoint"], json.dumps(sub), who(), leaddb.now()))
+    db().execute("INSERT INTO push_subs (endpoint, data, user, created_at, person) VALUES (?,?,?,?,?) "
+                 "ON CONFLICT(endpoint) DO UPDATE SET data=excluded.data, user=excluded.user, person=excluded.person",
+                 (sub["endpoint"], json.dumps(sub), who(), leaddb.now(), me()))
     db().commit()
     return jsonify(ok=True)
 

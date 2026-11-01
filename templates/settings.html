@@ -1,13 +1,26 @@
 {% extends "base.html" %}
 {% from "_icons.html" import icon %}
+{% from "_os.html" import i as osi %}
 {% block title %}Einstellungen · Ylva Labs{% endblock %}
 {% block content %}
 <main class="page narrow">
   <h1 class="title">Einstellungen</h1>
   {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if ':' in m and 'Gespeichert' not in m else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
   {% if account.demo %}<p class="note warn small">Demo-Modus: Hier wird nichts gespeichert.</p>
-  {% elif not admin %}<p class="note warn small">Ändern dürfen nur Admins (<code>ADMIN_USERS</code> in der .env).</p>
-  {% elif not admins_set %}<p class="note warn small">Noch ist jede Person, die sich anmelden darf, Admin. Sicherer: in der .env <code>ADMIN_USERS=oskar@ylvalabs.de</code> setzen.</p>{% endif %}
+  {% elif not admin %}<p class="note warn small">Ändern darf nur, wer „Einstellungen: Verwalten“ hat (Personen → Rollen und Rechte).</p>{% endif %}
+
+  <p class="menu-title">Firma</p>
+  <ul class="menu">
+    <li><a href="{{ url_for('personen.liste') }}"><span class="ico">{{ osi('person') }}</span>
+      <span class="txt"><b>Personen</b><span>Anlegen, einladen, sperren, archivieren</span></span><span class="chev">›</span></a></li>
+    <li><a href="{{ url_for('personen.rollen') }}"><span class="ico">{{ osi('schloss') }}</span>
+      <span class="txt"><b>Rollen und Rechte</b><span>Wer was sehen, bearbeiten und verwalten darf</span></span><span class="chev">›</span></a></li>
+    <li><a href="{{ url_for('personen.bereiche') }}"><span class="ico">{{ osi('bereich') }}</span>
+      <span class="txt"><b>Bereiche</b><span>Verantwortliche, Wiedervorlagen</span></span><span class="chev">›</span></a></li>
+    {% if darf('protokoll') %}<li><a href="{{ url_for('personen.protokoll') }}"><span class="ico">{{ osi('protokoll') }}</span>
+      <span class="txt"><b>Firmen-Protokoll</b><span>Wer hat wann was geändert</span></span><span class="chev">›</span></a></li>{% endif %}
+  </ul>
+  <p class="menu-title">Anbindungen und Regeln</p>
 
   <ul class="menu">
     {% for grp in menu %}
@@ -28,7 +41,7 @@
     <li><a href="{{ url_for('leads.system') }}"><span class="ico">{{ icon('system') }}</span>
       <span class="txt"><b>Systemcheck</b><span>Ist alles eingerichtet?</span></span><span class="chev">›</span></a></li>
     <li><a href="{{ url_for('settings.access') }}"><span class="ico">{{ icon('zugang') }}</span>
-      <span class="txt"><b>Zugang und Sicherheit</b><span>Wer sich anmelden darf, Admins</span></span><span class="chev">›</span></a></li>
+      <span class="txt"><b>Zugang und Sicherheit</b><span>Anmeldung mit dem Postfach, Notfall-Zugang</span></span><span class="chev">›</span></a></li>
   </ul>
 </main>
 {% endblock %}

@@ -15,7 +15,7 @@ bp = Blueprint("crm", __name__)
 def _crm_globals():
     return {"crm_due": lambda: crm.due_count(db(), me()) + mailbox.unread_count(db(), me()),
             "inbox_unread": lambda: mailbox.unread_count(db(), me()),
-            "notices_unseen": lambda: leaddb.notices(db(), g.account["user"], 1)[1] if g.get("account") else 0}
+            "notices_unseen": lambda: leaddb.notices(db(), g.account["user"], 1, me())[1] if g.get("account") else 0}
 
 
 @bp.get("/crm")
@@ -99,18 +99,18 @@ def add_task(lead_id):
     due = crm.quick_due(request.form.get("quick", "")) or request.form.get("due", "").strip()
     if not text:
         return jsonify(error="Was soll erledigt werden?"), 400
+    crm.claim(db(), lead_id, me())  # zuerst: dann ist die Wiedervorlage bei der zuständigen Person
     try:
-        crm.add_task(db(), lead_id, due, text, who())
+        crm.add_task(db(), lead_id, due, text, who(), wer=me())
     except ValueError:
         return jsonify(error="Bitte ein Datum wählen."), 400
-    crm.claim(db(), lead_id, me())
     return jsonify(ok=True)
 
 
 @bp.post("/crm/aufgabe/<int:task_id>/erledigt")
 @login_required
 def done_task(task_id):
-    if not crm.complete_task(db(), task_id, who()):
+    if not crm.complete_task(db(), task_id, who(), wer=me()):
         return jsonify(error="Schon erledigt oder nicht gefunden."), 400
     return jsonify(ok=True)
 
@@ -239,7 +239,7 @@ def inbox_news():
 @login_required
 def notices_json():
     """Für die Glocke: Meldungen der App (Läufe, Antworten, Wiedervorlagen, Tagesberichte)."""
-    rows, unseen = leaddb.notices(db(), g.account["user"])
+    rows, unseen = leaddb.notices(db(), g.account["user"], person=me())
     return jsonify(count=unseen, items=[{"title": r["title"], "text": (r["body"] or "")[:160], "url": r["url"] or "/",
                                          "at": r["at"], "new": r["new"]} for r in rows])
 

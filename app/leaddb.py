@@ -5,6 +5,8 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
+from . import aufgaben, firma  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
+
 ROOT = Path(__file__).resolve().parent.parent
 BRAIN_SEED = Path(__file__).resolve().parent / "brain_seed.md"
 
@@ -110,9 +112,6 @@ CREATE TABLE IF NOT EXISTS notices (
 CREATE TABLE IF NOT EXISTS remember_tokens (
     token_hash TEXT PRIMARY KEY, member TEXT NOT NULL, created_at TEXT NOT NULL, last_used REAL NOT NULL
 );
-INSERT OR IGNORE INTO team (key, name, sort) VALUES ('finn', 'Finn Adams', 1);
-INSERT OR IGNORE INTO team (key, name, sort) VALUES ('hamza', 'Hamza Al-Shebli', 2);
-INSERT OR IGNORE INTO team (key, name, sort) VALUES ('oskar', 'Oskar Jacobsen', 3);
 """
 
 # Spalten, die nach der ersten Version dazugekommen sind
@@ -142,6 +141,18 @@ MIGRATIONS = [
     "ALTER TABLE leads ADD COLUMN owner TEXT",
     # Wer die KI-Kosten verursacht hat (Schlüssel aus team), für das eigene Monatsbudget
     "ALTER TABLE ai_usage ADD COLUMN person TEXT",
+    # Firmen-OS Stufe 1: Personen mit Rolle, Lernstufe, Status, Einladung und eigenen Rechten
+    "ALTER TABLE team ADD COLUMN rolle TEXT",
+    "ALTER TABLE team ADD COLUMN lernstufe INTEGER",
+    "ALTER TABLE team ADD COLUMN status TEXT NOT NULL DEFAULT 'aktiv'",
+    "ALTER TABLE team ADD COLUMN email TEXT",
+    "ALTER TABLE team ADD COLUMN rechte TEXT",
+    "ALTER TABLE team ADD COLUMN einladung_hash TEXT",
+    "ALTER TABLE team ADD COLUMN einladung_bis TEXT",
+    "ALTER TABLE team ADD COLUMN erstellt_am TEXT",
+    # Meldungen und Push nur für eine Person (NULL = für alle)
+    "ALTER TABLE notices ADD COLUMN fuer TEXT",
+    "ALTER TABLE push_subs ADD COLUMN person TEXT",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.
@@ -161,6 +172,12 @@ DATA_MIGRATIONS = [
        SELECT e.lead_id, e.at, 'in', json_extract(e.meta, '$.from'), e.author, json_extract(e.meta, '$.subject'),
               e.text, CASE WHEN l.unread = 1 THEN 0 ELSE 1 END
        FROM lead_events e JOIN leads l ON l.id = e.lead_id WHERE e.kind = 'reply'""",
+    # Firmen-OS Stufe 1: das Team stand bisher fest im Schema, ab hier wird es in der App gepflegt
+    "INSERT OR IGNORE INTO team (key, name, sort) VALUES ('finn', 'Finn Adams', 1)",
+    "INSERT OR IGNORE INTO team (key, name, sort) VALUES ('hamza', 'Hamza Al-Shebli', 2)",
+    "INSERT OR IGNORE INTO team (key, name, sort) VALUES ('oskar', 'Oskar Jacobsen', 3)",
+    *firma.SEED,
+    aufgaben.UEBERNAHME,
 ]
 
 FOLLOWUP_DAYS = 7  # wird beim Start aus LEADS_FOLLOWUP_DAYS gesetzt, 0 = aus
@@ -188,6 +205,8 @@ def connect(path):
     from . import known, reports
     conn.executescript(known.SCHEMA)
     conn.executescript(reports.SCHEMA)
+    conn.executescript(firma.SCHEMA)
+    conn.executescript(aufgaben.SCHEMA)
     for stmt in MIGRATIONS:
         try:
             conn.execute(stmt)
@@ -218,6 +237,8 @@ def kv_set(conn, key, value):
 def add_event(conn, lead_id, kind, text, author="KI", meta=None):
     conn.execute("INSERT INTO lead_events (lead_id, at, kind, author, text, meta) VALUES (?,?,?,?,?,?)",
                  (lead_id, now(), kind, author, text, json.dumps(meta, ensure_ascii=False) if meta else None))
+    # Zusätzlich ins Firmen-Protokoll (G6): alles, was an einem Lead passiert, steht dort mit
+    firma.log(conn, author, "lead", "lead", lead_id, text, {"kind": kind}, commit=False)
     conn.commit()
 
 
@@ -415,19 +436,22 @@ def stage_averages(conn):
 # ---------------------------------------------------------------- Meldungen in der App (Glocke)
 
 
-def add_notice(conn, title, body, url):
-    conn.execute("INSERT INTO notices (at, title, body, url) VALUES (?,?,?,?)", (now(), title, body, url))
-    conn.execute("DELETE FROM notices WHERE id <= (SELECT MAX(id) - 200 FROM notices)")
+def add_notice(conn, title, body, url, fuer=None):
+    """Meldung in der Glocke, für alle (fuer=None) oder nur für eine Person (Schlüssel aus team)."""
+    conn.execute("INSERT INTO notices (at, title, body, url, fuer) VALUES (?,?,?,?,?)", (now(), title, body, url, fuer))
+    conn.execute("DELETE FROM notices WHERE id <= (SELECT MAX(id) - 500 FROM notices)")
     conn.commit()
 
 
-def notices(conn, user, limit=15):
-    """Neueste Meldungen und wie viele davon die Person noch nicht gesehen hat."""
+def notices(conn, user, limit=15, person=None):
+    """Neueste Meldungen (für alle und für diese Person) und wie viele davon sie noch nicht gesehen hat."""
     seen = kv_get(conn, f"notice_seen:{user}", 0) or 0
-    rows = [dict(r) for r in conn.execute("SELECT * FROM notices ORDER BY id DESC LIMIT ?", (limit,))]
+    mine = "(fuer IS NULL OR fuer = ?)"
+    rows = [dict(r) for r in conn.execute(f"SELECT * FROM notices WHERE {mine} ORDER BY id DESC LIMIT ?",
+                                          (person or "", limit))]
     for r in rows:
         r["new"] = r["id"] > seen
-    unseen = conn.execute("SELECT COUNT(*) FROM notices WHERE id > ?", (seen,)).fetchone()[0]
+    unseen = conn.execute(f"SELECT COUNT(*) FROM notices WHERE id > ? AND {mine}", (seen, person or "")).fetchone()[0]
     return rows, unseen
 
 

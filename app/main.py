@@ -202,7 +202,8 @@ def remembered_member():
                         (_token_hash(token),)).fetchone()
         if not row or time.time() - row["last_used"] > REMEMBER_DAYS * 86400:
             return None
-        member = c.execute("SELECT key, name FROM team WHERE key=?", (row["member"],)).fetchone()
+        member = c.execute("SELECT key, name FROM team WHERE key=? AND IFNULL(status,'aktiv')='aktiv'",
+                           (row["member"],)).fetchone()
         if not member:
             return None
         c.execute("UPDATE remember_tokens SET last_used=? WHERE token_hash=?", (time.time(), _token_hash(token)))
@@ -253,8 +254,75 @@ def login_required(view):
             if request.method == "POST" or request.path.startswith(("/preview", "/send", "/upload")):
                 return jsonify(error="Sitzung abgelaufen. Bitte neu anmelden."), 401
             return redirect(url_for("login", next=request.path))
+        denied = _zugang()
+        if denied is not None:
+            return denied
         return view(*args, **kwargs)
     return wrapper
+
+
+# ---------------------------------------------------------------- Rechte je Modul (Firmen-OS, Einstellungen → Rollen)
+# Seiten ohne eigenes Modul (Mein Tag, Profil, Glocke, Web-App) darf jede angemeldete Person öffnen.
+FREI = {"index", "leads.manifest", "leads.service_worker", "leads.push_key", "leads.push_subscribe",
+        "leads.push_unsubscribe", "leads.push_test", "crm.notices_json", "crm.notices_read", "palette.search",
+        "uploaded", "band_svg", "leads.status_json"}
+# Mit dem Postfach angemeldet, aber noch keine Person gewählt: nur der Mailer und die Auswahl
+OHNE_PERSON = {"compose", "preview", "send", "upload", "history", "history_html", "uploaded", "band_svg",
+               "team.who_am_i", "leads.manifest", "leads.service_worker", "crm.notices_json", "crm.notices_read",
+               "palette.search"}
+MODUL_JE_SEITE = {"compose": "mailer", "preview": "mailer", "send": "mailer", "upload": "mailer",
+                  "history": "mailer", "history_html": "mailer", "leads.costs": "kosten",
+                  "leads.system": "einstellungen", "personen.protokoll": "protokoll"}
+MODUL_JE_BEREICH = {"leads": "leads", "crm": "crm", "settings": "einstellungen", "aufgaben": "aufgaben",
+                    "personen": "personen"}
+
+
+def modul_der_seite(endpoint):
+    endpoint = endpoint or ""
+    if endpoint in FREI:
+        return None
+    if endpoint in MODUL_JE_SEITE:
+        return MODUL_JE_SEITE[endpoint]
+    return MODUL_JE_BEREICH.get(endpoint.split(".", 1)[0]) if "." in endpoint else None
+
+
+def _zugang():
+    """Darf die angemeldete Person diese Seite? Sehen reicht für GET, für POST braucht es Bearbeiten.
+    Gesperrte oder archivierte Personen fliegen raus, auch mitten in einer Sitzung."""
+    from . import firma
+    from .leads_views import db
+    endpoint = request.endpoint or ""
+    key = g.account.get("team")
+    if not key:
+        if endpoint in OHNE_PERSON:
+            return None
+        if request.method == "POST":
+            return jsonify(error="Bitte zuerst wählen, wer du bist."), 403
+        return redirect(url_for("team.who_am_i", next=request.path))
+    person = firma.person(db(), key)
+    if not person or person["status"] != "aktiv":
+        with _sessions_lock:
+            _sessions.pop(session.get("sid"), None)
+        session.clear()
+        flash("Dein Zugang ist gesperrt. Bitte wende dich an eine Person, die Personen und Rechte verwaltet.")
+        return redirect(url_for("login"))
+    g.rechte = firma.rechte(db(), key)
+    modul = modul_der_seite(endpoint)
+    if not modul:
+        return None
+    noetig = firma.SEHEN if request.method in ("GET", "HEAD") else firma.BEARBEITEN
+    if g.rechte.get(modul, 0) >= noetig:
+        return None
+    text = (f"Dafür fehlt dir das Recht „{dict(firma.MODULE)[modul]}: {firma.STUFE_LABEL[noetig]}“. "
+            "Frag eine Person, die Personen und Rechte verwaltet.")
+    if request.method != "GET" or request.accept_mimetypes.best == "application/json":
+        return jsonify(error=text), 403
+    abort(403, text)
+
+
+def darf(modul, stufe=1):
+    """Für Vorlagen: darf die angemeldete Person das? (Rechte stehen nach login_required in g.rechte.)"""
+    return (g.get("rechte") or {}).get(modul, 0) >= stufe
 
 
 def csrf_token():
@@ -264,6 +332,7 @@ def csrf_token():
 
 
 app.jinja_env.globals["csrf_token"] = csrf_token
+app.jinja_env.globals["darf"] = lambda modul, stufe=1: darf(modul, stufe)
 app.jinja_env.globals["demo_enabled"] = SETTINGS["DEMO_MODE"]
 
 
@@ -349,10 +418,17 @@ def _team_login():
     c = leaddb.connect(DB_PATH)
     try:
         member = team.get(c, key)
-        ok = bool(member) and team.check_password(c, key, password)
+        blocked = bool(member) and (member.get("status") or "aktiv") != "aktiv"
+        ok = bool(member) and not blocked and team.check_password(c, key, password)
         no_password = bool(member) and not member["pw_hash"]
+        if ok:
+            from . import firma
+            firma.log(c, key, "anmeldung", "person", key, f"{member['name']} hat sich angemeldet.")
     finally:
         c.close()
+    if blocked:
+        flash("Dieser Zugang ist gesperrt. Bitte wende dich an eine Person, die Personen und Rechte verwaltet.")
+        return _login_page(403, member=key, mode="team")
     if not ok:
         with _sessions_lock:
             for k in keys:
@@ -530,7 +606,7 @@ def defaults():
 @app.route("/")
 @login_required
 def index():
-    return redirect(url_for("leads.home"))
+    return redirect(url_for("aufgaben.mein_tag"))
 
 
 def lead_fields(lead):
@@ -805,7 +881,7 @@ def healthz():
 
 
 # ---------------------------------------------------------------- Akquise und CRM
-from . import agent, crm, finder, leaddb  # noqa: E402
+from . import agent, crm, finder, firma, leaddb  # noqa: E402
 from .crm_views import bp as crm_bp  # noqa: E402
 from .leads_views import bp as leads_bp  # noqa: E402
 from .team_views import bp as team_bp  # noqa: E402
@@ -819,4 +895,21 @@ app.register_blueprint(settings_bp)
 app.register_blueprint(crm_bp)
 app.register_blueprint(palette_bp)
 app.register_blueprint(team_bp)
+from .aufgaben_views import bp as aufgaben_bp  # noqa: E402
+from .personen_views import bp as personen_bp  # noqa: E402
+
+app.register_blueprint(aufgaben_bp)
+app.register_blueprint(personen_bp)
+
+
+@app.errorhandler(403)
+@app.errorhandler(404)
+def _fehlerseite(exc):
+    """Fehlerseite im Design der App (statt der nackten Standardseite)."""
+    if request.method != "GET" or request.path.endswith(".json"):
+        return jsonify(error=exc.description), exc.code
+    g.setdefault("account", current_account())
+    titel = "Kein Zugriff" if exc.code == 403 else "Nicht gefunden"
+    text = exc.description if exc.code == 403 else "Diese Seite gibt es nicht (mehr)."
+    return render_template("fehler.html", account=g.account, titel=titel, text=text), exc.code
 agent.init(SETTINGS, smtp_connect, imap_sent_folder, DB_PATH, SETTINGS["DATA_DIR"])

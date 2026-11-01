@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Rollen und Rechte · Einstellungen{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Einstellungen</span>
+    <h1 class="os-title-l">Rollen und Rechte</h1>
+    <p class="os-sub os-lead">Jede Person hat eine Rolle. Die Rolle legt fest, was sie je Modul darf: sehen, bearbeiten, freigeben oder verwalten.</p>
+  </header>
+  <ul class="os-list anim">
+    {% for r in rollen %}<li style="--i:{{ loop.index0 }}"><a class="os-row" href="{{ url_for('personen.rolle', key=r.key) }}">
+      <span class="os-ico">{{ i('schloss') }}</span>
+      <span class="os-txt"><b>{{ r.name }}</b><span>{{ r.personen }} {{ 'Person' if r.personen == 1 else 'Personen' }}
+        · {{ r.rechte.values()|select('ge', 4)|list|length }} von {{ module|length }} Modulen verwalten</span></span>
+      <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
+  </ul>
+  <p class="os-caption" style="margin-top:32px">Es muss immer mindestens eine aktive Person geben, die Personen und Rechte verwalten darf. Änderungen, die das verletzen, speichert das OS nicht.</p>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('personen.liste') }}" aria-label="Zurück zu den Personen">{{ i('back') }}</a>
+  {% if verwalten %}<a class="os-btn" href="{{ url_for('personen.rolle', key='neu') }}"><span>Neue Rolle</span>{{ i('plus') }}</a>{% endif %}
+</div>
+{% endblock %}

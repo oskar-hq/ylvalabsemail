@@ -1,4 +1,4 @@
-"""Das Team: Finn Adams, Hamza Al-Shebli und Oskar Jacobsen.
+"""Das Team: die Personen aus Einstellungen → Personen (Firmen-OS, app/firma.py).
 
 Jede Person meldet sich mit ihrem Namen und einem eigenen Passwort an (gespeichert nur als scrypt-Hash) und hat
 eigene Einstellungen: Gruß, Unterschrift, Vorlage und Design der Mails. Verschickt wird für alle über das
@@ -28,9 +28,11 @@ class TeamError(ValueError):
     pass
 
 
-def members(c):
+def members(c, alle=False):
+    """Aktive Personen (Anmeldung, Auswahl, Zahlen). Mit alle=True auch gesperrte und archivierte."""
+    where = "1" if alle else "IFNULL(status,'aktiv') = 'aktiv'"
     return [dict(r) | {"has_password": bool(r["pw_hash"])} for r in
-            c.execute("SELECT key, name, pw_hash, pw_set_at FROM team ORDER BY sort, name")]
+            c.execute(f"SELECT key, name, pw_hash, pw_set_at FROM team WHERE {where} ORDER BY sort, name")]
 
 
 def get(c, key):
@@ -39,7 +41,8 @@ def get(c, key):
 
 
 def names(c):
-    return {m["key"]: m["name"] for m in members(c)}
+    """Alle Namen, auch von archivierten Personen (für Akten und Verläufe)."""
+    return {m["key"]: m["name"] for m in members(c, alle=True)}
 
 
 def check_password(c, key, password):

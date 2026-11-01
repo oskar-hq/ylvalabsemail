@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% from "_os.html" import i %}
+{% block title %}{{ titel }} · Ylva Labs{% endblock %}
+{% block content %}
+<main class="os-page">
+  <span class="os-eyebrow">{{ titel }}</span>
+  <h1 class="os-title-m">{{ text }}</h1>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('index') if account else url_for('login') }}" aria-label="Zur Startseite">{{ i('back') }}</a>
+</div>
+{% endblock %}

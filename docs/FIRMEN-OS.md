@@ -1,6 +1,6 @@
 # Ylva Labs Firmen-OS – Bauplan
 
-**Stand:** 01.11.2026 · Planung abgeschlossen, Bau startet mit Stufe 1 · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
+**Stand:** 01.11.2026 · Stufe 1 gebaut, als Nächstes Stufe 2 oder 3 · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
 
 Aus dem Ylva Labs Mailer (Akquise, CRM, Mailer) wird das Betriebssystem der Firma. Diese Datei hält fest, **was**
 gebaut werden soll und **nach welchen Prinzipien**, damit alle, die am Code arbeiten (Menschen und KI), dasselbe
@@ -78,15 +78,15 @@ Diese Begriffe gelten im Code, in der Oberfläche und in Gesprächen gleich.
 
 | Begriff | Bedeutung | Gibt es schon? |
 |---|---|---|
-| **Person** | Mitarbeitende mit Login, Bereich(en), Rolle, Lernstufe, Kalender-Link | teilweise (`team`, ohne Omid, ohne Rollen) |
-| **Bereich** | Produkt & Technik · Markt, Kunden & Betrieb · Unterbereich Akquise & Recherche. Hat eine verantwortliche Person und KPIs. Später teilbar. | nein |
+| **Person** | Mitarbeitende mit Login, Bereich(en), Rolle, Lernstufe, Kalender-Link | ja (`team` mit Rolle, Status, Einladung; Stufe 1) |
+| **Bereich** | Produkt & Technik · Markt, Kunden & Betrieb · Unterbereich Akquise & Recherche. Hat eine verantwortliche Person und KPIs. Später teilbar. | ja (`bereiche`, ohne KPIs; Stufe 1) |
 | **Betrieb / Kunde** | Eine Firma vom ersten Lead bis zum laufenden Kunden. *Eine* Akte über die ganze Customer Journey. | ja als Lead (`leads`) |
 | **Projekt (Build)** | Was für einen Kunden gebaut wird: Anforderung → Bau → Abnahme → Live | nein |
 | **Änderungswunsch** | Wunsch eines Kunden nach dem Start, mit Größe, Zeit, Abrechnung | nein |
-| **Aufgabe** | Etwas, das eine Person bis zu einem Termin erledigen muss. Kann an Kunde, Projekt, Lead hängen oder frei sein. | nur als Wiedervorlage an Leads (`tasks`) |
+| **Aufgabe** | Etwas, das eine Person bis zu einem Termin erledigen muss. Kann an Kunde, Projekt, Lead hängen oder frei sein. | ja (`aufgaben`, inkl. Anfragen und Wiedervorlagen; Stufe 1) |
 | **Termin** | Zeitpunkt mit Teilnehmenden, optional Kunde und Meet-Link | nein |
 | **Freigabe** | Ein Vorschlag des OS, den ein Mensch annehmen, ändern oder ablehnen muss | nur implizit (Entwürfe) |
-| **Ereignis** | Eintrag im Firmen-Protokoll. Rohstoff für alle Zahlen. | nur für Leads (`lead_events`) |
+| **Ereignis** | Eintrag im Firmen-Protokoll. Rohstoff für alle Zahlen. | ja (`ereignisse`, `firma.log`; Stufe 1) |
 | **KPI** | Kennzahl je Bereich/Person, aus Ereignissen berechnet | nein (nur Lauf-Berichte, KI-Kosten) |
 | **Ziel** | Wochenziel einer Person (z. B. Hamza: 40 qualifizierte Leads) | nein |
 | **Entscheidung** | Festgehaltene Entscheidung mit Begründung, wer entschieden hat und auf welcher Grundlage | nein |
@@ -477,11 +477,31 @@ Grundregel: **Jede schreibende Funktion erzeugt ein Ereignis.** Am besten über 
 
 Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, dass das Team sie im Alltag benutzt.
 
-- [ ] **Stufe 1 – Fundament: Personen, Rechte, Aufgaben, Protokoll**
+- [x] **Stufe 1 – Fundament: Personen, Rechte, Aufgaben, Protokoll** (gebaut 01.11.2026, Abweichungen unten)
   Personen in den Einstellungen anlegen und einladen (statt fest im Code; Omid als erster neuer), Rollen und
   Rechte je Modul, Bereiche, Schutz gegen Aussperren, Firmen-Protokoll (`ereignisse`) mit zentraler Log-Funktion,
   Aufgaben mit Bereich/Person/Termin (Wiedervorlagen übernehmen), Anfragen an andere Bereiche, Seite „Mein Tag“,
   Kommentare mit @-Erwähnung. *Ab hier gilt: Was nicht im OS steht, ist keine Aufgabe.*
+  *Umsetzung und Abweichungen:*
+  - Personen bleiben in der Tabelle `team` (statt `personen`), damit Leads, CRM und KI-Budget unverändert
+    weiterlaufen; neue Spalten `rolle`, `lernstufe`, `status`, `email`, `rechte`, `einladung_hash/_bis`.
+    Bereiche je Person in `person_bereiche`. Das Team steht nicht mehr fest im Schema, sondern wird einmalig per
+    `DATA_MIGRATIONS` angelegt. Omid wird in der App angelegt, nicht im Code.
+  - Rechte je Modul: Aufgaben, Leads, CRM, Mailer, KI-Kosten, Protokoll, Einstellungen, Personen. Stufen 0–4
+    (kein Zugriff, sehen, bearbeiten, freigeben, verwalten); GET braucht „sehen“, POST „bearbeiten“. Jede Seite ist
+    einem Modul zugeordnet (`main.modul_der_seite`, Test prüft das). `ADMIN_USERS` gilt nur noch als Rückfall.
+  - Mit dem Postfach angemeldet: nur Mailer, und nur Personen ohne Passwort wählbar.
+  - Einladungslink statt Einladungsmail (Link zum Kopieren, Gültigkeit einstellbar unter Personen).
+  - `ereignisse` mit `firma.log()`; alles aus `lead_events` landet zusätzlich dort. Seite Einstellungen →
+    Protokoll.
+  - Aufgaben in `aufgaben` (art `aufgabe`/`anfrage`), Wiedervorlagen einmalig aus `tasks` übernommen (alte
+    Tabelle bleibt liegen). Bereich für Wiedervorlagen ist eine Regel unter Einstellungen → Bereiche.
+  - Kommentare in `kommentare` an Aufgaben und Leads; Meldungen in der Glocke jetzt auch je Person (`notices.fuer`),
+    Push je Person (`push_subs.person`).
+  - Mein Tag zeigt noch keine Termine, Ziele und Freigaben (kommen mit Stufe 3, 4 und 6). Notfall-Knopf und
+    automatisch angelegte Aufgaben aus Ereignissen folgen mit den Stufen, die diese Ereignisse erzeugen.
+  - Design nach [DESIGN.md](DESIGN.md): neue Seiten mit Sheets, schwebenden Knöpfen, Federn; die älteren Seiten
+    haben die neuen Farben bekommen, ihr Aufbau ist noch der alte.
 - [ ] **Stufe 2 – Branchentest**
   Vier Testbranchen, warm/kalt, Zuordnung Hamza/Omid, Lead-Prüfung als Freigabe (Omid → Hamza → Stichprobe Oskar),
   Auswertung je Branche. *Zeitkritisch, weil der Test als Nächstes läuft.*

@@ -1,0 +1,93 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, aufgabe_zeile, sheet_neu, avatar %}
+{% block title %}Mein Tag · Ylva Labs{% endblock %}
+{% block content %}
+{% set me = account.team %}
+{% set n_spaeter = t.woche|length %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">{{ datum }}</span>
+    <h1 class="os-title-l">{{ gruss }}, {{ vorname }}</h1>
+    {% set offen = t.ueberfaellig|length + t.heute|length %}
+    <p class="os-sub os-lead">{% if t.anfragen %}{{ t.anfragen|length }} {{ 'Anfrage wartet' if t.anfragen|length == 1 else 'Anfragen warten' }} auf dich. {% endif %}
+      {%- if offen %}{{ offen }} {{ 'Aufgabe' if offen == 1 else 'Aufgaben' }} für heute{% if t.ueberfaellig %}, {{ t.ueberfaellig|length }} davon überfällig{% endif %}.
+      {%- elif not t.anfragen %}Heute ist nichts fällig. Plane die Woche oder hilf einem anderen Bereich.{% endif %}</p>
+  </header>
+
+  <div class="os-tiles" aria-label="Überblick">
+    <a class="os-tile {{ 'alert' if t.ueberfaellig else 'zero' }}" href="#ueberfaellig"><span>Überfällig</span><b>{{ t.ueberfaellig|length }}</b></a>
+    <a class="os-tile {{ 'zero' if not t.heute }}" href="#heute"><span>Heute</span><b>{{ t.heute|length }}</b></a>
+    <a class="os-tile {{ 'zero' if not t.anfragen }}" href="#anfragen"><span>Anfragen</span><b>{{ t.anfragen|length }}</b></a>
+    <a class="os-tile {{ 'zero' if not n_spaeter }}" href="#woche"><span>Diese Woche</span><b>{{ n_spaeter }}</b></a>
+    {% if akquise and darf('crm') %}<a class="os-tile {{ 'zero' if not akquise.wiedervorlagen }}" href="{{ url_for('crm.board') }}"><span>Wieder&shy;vorlagen</span><b>{{ akquise.wiedervorlagen }}</b></a>
+    <a class="os-tile {{ 'zero' if not akquise.antworten }}" href="{{ url_for('crm.inbox') }}"><span>Antworten</span><b>{{ akquise.antworten }}</b></a>{% endif %}
+  </div>
+
+  {% if t.anfragen %}
+  <section class="os-section" id="anfragen">
+    <h2 class="os-headline">Wartet auf dich</h2>
+    <p class="os-sub">Anfragen an deinen Bereich. Nimm an und setz den Termin, oder lehn mit Grund ab.</p>
+    <ul class="os-list anim">{% for a in t.anfragen %}
+      <li style="--i:{{ loop.index0 }}"><a class="os-row" href="{{ url_for('aufgaben.detail', aid=a.id) }}">
+        {{ avatar(a.anfrage_von_name) }}
+        <span class="os-txt"><b>{{ a.titel }}</b><span>von {{ a.anfrage_von_name }} · {{ a.bereich_name }} · gewünscht {{ a.tag }}</span></span>
+        <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  <section class="os-section" id="ueberfaellig" {{ 'hidden' if not t.ueberfaellig }}>
+    <h2 class="os-headline">Überfällig</h2>
+    <ul class="os-list anim">{% for a in t.ueberfaellig %}{{ aufgabe_zeile(a, me, loop.index0, next=url_for('aufgaben.mein_tag')) }}{% endfor %}</ul>
+  </section>
+
+  <section class="os-section" id="heute">
+    <h2 class="os-headline">Heute</h2>
+    {% if t.heute %}<ul class="os-list anim">{% for a in t.heute %}{{ aufgabe_zeile(a, me, loop.index0, next=url_for('aufgaben.mein_tag')) }}{% endfor %}</ul>
+    {% else %}<p class="os-empty">Für heute ist nichts mehr offen.</p>{% endif %}
+  </section>
+
+  {% if t.woche %}
+  <section class="os-section" id="woche">
+    <h2 class="os-headline">Diese Woche</h2>
+    <ul class="os-list anim">{% for a in t.woche %}{{ aufgabe_zeile(a, me, loop.index0, next=url_for('aufgaben.mein_tag')) }}{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  {% if t.erwaehnungen %}
+  <section class="os-section" id="erwaehnungen">
+    <h2 class="os-headline">Erwähnungen</h2>
+    <ul class="os-list">{% for k in t.erwaehnungen[:6] %}
+      <li><a class="os-row" href="{{ k.url }}#kommentare">{{ avatar(k.wer_name) }}
+        <span class="os-txt"><b>{% if k.neu %}<span class="os-new">Neu · </span>{% endif %}{{ k.titel }}</b><span>{{ k.wer_name }}: {{ k.text|truncate(90) }}</span></span>
+        <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% if t.meine_anfragen %}
+  <section class="os-section">
+    <h2 class="os-headline">Deine Anfragen</h2>
+    <p class="os-sub">Was du bei anderen Bereichen angefragt hast.</p>
+    <ul class="os-list">{% for a in t.meine_anfragen %}{{ aufgabe_zeile(a, me, loop.index0) }}{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  {% if akquise and darf('leads') and (akquise.wiedervorlagen or akquise.antworten or akquise.pruefen) %}
+  <section class="os-section">
+    <h2 class="os-headline">Akquise</h2>
+    <ul class="os-list">
+      <li><a class="os-row" href="{{ url_for('leads.home') }}"><span class="os-ico">{{ i('lead') }}</span>
+        <span class="os-txt"><b>Akquise heute</b><span>{{ akquise.antworten }} neue Antworten · {{ akquise.wiedervorlagen }} Wiedervorlagen · {{ akquise.pruefen }} Entwürfe</span></span>
+        <span class="os-chev">{{ i('chev') }}</span></a></li>
+    </ul>
+  </section>
+  {% endif %}
+</main>
+<div class="os-float bar">
+  <button type="button" class="os-btn ink" data-sheet="sheet-neu" data-set-art="aufgabe" aria-label="Neue Aufgabe"><span>Aufgabe</span>{{ i('plus') }}</button>
+  <button type="button" class="os-btn ink" data-sheet="sheet-neu" data-set-art="anfrage"><span>Anfrage</span>{{ i('anfrage') }}</button>
+</div>
+{{ sheet_neu(bereiche, personen, meine_bereiche, me, heute, url_for('aufgaben.mein_tag')) }}
+{% endblock %}

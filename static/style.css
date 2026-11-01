@@ -2,6 +2,8 @@
 @font-face{font-family:"Inter Tight";font-style:normal;font-weight:400;font-display:swap;src:url(fonts/inter-tight-latin-400-normal.woff2) format("woff2")}
 @font-face{font-family:"Inter Tight";font-style:normal;font-weight:500;font-display:swap;src:url(fonts/inter-tight-latin-500-normal.woff2) format("woff2")}
 @font-face{font-family:"Inter Tight";font-style:normal;font-weight:600;font-display:swap;src:url(fonts/inter-tight-latin-600-normal.woff2) format("woff2")}
+@font-face{font-family:"Inter Tight";font-style:normal;font-weight:700;font-display:swap;src:url(fonts/inter-tight-latin-700-normal.woff2) format("woff2")}
+@font-face{font-family:"Inter Tight";font-style:normal;font-weight:800;font-display:swap;src:url(fonts/inter-tight-latin-800-normal.woff2) format("woff2")}
 :root{
   --paper:#ffffff; --tint:#f1f4f7; --ink:#1d2126; --body:#5b636c; --muted:#8a929c; --deep:#4a525c;
   --blue:#5aa9e6; --light:#8fd0ff; --ice:#d4ecff; --spore:#f6d36d; --err:#b3261e;

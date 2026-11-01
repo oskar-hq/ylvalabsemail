@@ -1353,15 +1353,19 @@ class SecurityTest(unittest.TestCase):
         client.post("/profil/passwort", data={"current": "finn-passwort-1", "new": "neu-passwort-2",
                                               "again": "neu-passwort-2"}, headers={"X-CSRF-Token": csrf})
         self.assertTrue(team.check_password(c, "finn", "neu-passwort-2"))
-        # erstes Passwort für jemanden ohne Passwort: erlaubt; bestehendes fremdes nur als Admin
+        # Passwort einer anderen Person: nur wer Personen verwalten darf (Finn als Gründer ja, Hamza nicht)
         client.post("/profil/passwort", data={"member": "hamza", "new": "hamza-pass-1", "again": "hamza-pass-1"},
                     headers={"X-CSRF-Token": csrf})
         self.assertTrue(team.check_password(c, "hamza", "hamza-pass-1"))
-        with mock.patch.dict("app.main.SETTINGS", {"ADMIN_USERS": ["oskar"]}):
-            r = client.post("/profil/passwort", data={"member": "hamza", "new": "boese-pass-1", "again": "boese-pass-1"},
-                            headers={"X-CSRF-Token": csrf})
+        other = app.test_client()
+        csrf2 = other.get("/login").get_data(as_text=True).split('name="csrf-token" content="')[1].split('"')[0]
+        self.assertEqual(other.post("/login", data={"member": "hamza", "password": "hamza-pass-1"},
+                                    headers={"X-CSRF-Token": csrf2}).status_code, 302)
+        csrf2 = other.get("/mein-tag").get_data(as_text=True).split('name="csrf-token" content="')[1].split('"')[0]
+        r = other.post("/profil/passwort", data={"member": "finn", "new": "boese-pass-1", "again": "boese-pass-1"},
+                       headers={"X-CSRF-Token": csrf2})
         self.assertEqual(r.status_code, 403)
-        self.assertTrue(team.check_password(c, "hamza", "hamza-pass-1"))
+        self.assertTrue(team.check_password(c, "finn", "neu-passwort-2"))
         for key in ("finn", "hamza"):
             c.execute("UPDATE team SET pw_hash=NULL WHERE key=?", (key,))
         c.commit()

@@ -16,5 +16,5 @@ document.querySelectorAll('[data-theme-set]').forEach((btn) => btn.addEventListe
     b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
   });
   const dark = theme === 'dark' || (theme === 'auto' && matchMedia('(prefers-color-scheme: dark)').matches);
-  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => { m.removeAttribute('media'); m.content = dark ? '#0b0b0c' : '#ffffff'; });
+  document.querySelectorAll('meta[name="theme-color"]').forEach((m) => { m.removeAttribute('media'); m.content = dark ? '#000000' : '#ffffff'; });
 }));

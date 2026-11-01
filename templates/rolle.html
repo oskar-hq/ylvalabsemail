@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, avatar %}
+{% block title %}{{ r.name or 'Neue Rolle' }} · Rollen{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <form method="post" action="{{ url_for('personen.rolle_speichern', key=r.key or 'neu') }}" id="rolleForm" data-os-require=".os-ask">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <span class="os-eyebrow">Rolle</span>
+    <input class="os-ask" name="name" value="{{ r.name }}" maxlength="60" placeholder="Name der Rolle" {{ 'readonly' if not verwalten }} required>
+    <table class="os-matrix"><tbody>
+      {% for k, label in module %}<tr><td>{{ label }}</td><td>
+        <select class="os-input" name="r_{{ k }}" aria-label="{{ label }}" {{ 'disabled' if not verwalten }}>
+          {% for v, l in stufen %}<option value="{{ v }}" {{ 'selected' if r.rechte[k] == v }}>{{ l }}</option>{% endfor %}
+        </select></td></tr>{% endfor %}
+    </tbody></table>
+    <p class="os-caption" style="margin-top:24px">Sehen: lesen. Bearbeiten: anlegen und ändern. Freigeben: Vorschläge anderer freigeben (ab Stufe 6 wichtig). Verwalten: alles, auch Regeln und Einstellungen des Moduls.</p>
+  </form>
+
+  {% if leute %}
+  <section class="os-section">
+    <h2 class="os-headline">Personen mit dieser Rolle</h2>
+    <ul class="os-list">{% for p in leute %}<li><a class="os-row" href="{{ url_for('personen.detail', key=p.key) }}">{{ avatar(p.name) }}
+      <span class="os-txt"><b>{{ p.name }}</b></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}</ul>
+  </section>
+  {% elif r.key and verwalten %}
+  <section class="os-section">
+    <form method="post" action="{{ url_for('personen.rolle_speichern', key=r.key) }}">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="name" value="{{ r.name }}">
+      <button class="os-btn danger" name="loeschen" value="1" data-confirm="Rolle „{{ r.name }}“ löschen?">Rolle löschen</button>
+    </form>
+  </section>
+  {% endif %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('personen.rollen') }}" aria-label="Zurück zu den Rollen">{{ i('back') }}</a>
+  {% if verwalten %}<button type="submit" form="rolleForm" class="os-btn"><span>Speichern</span>{{ i('check') }}</button>{% endif %}
+</div>
+{% endblock %}

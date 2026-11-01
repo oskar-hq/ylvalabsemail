@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, avatar %}
+{% block title %}Personen · Einstellungen{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Einstellungen</span>
+    <h1 class="os-title-l">Personen</h1>
+    <p class="os-sub os-lead">Wer im OS arbeitet, mit Rolle und Bereich. Neue Personen bekommen einen Einladungslink und setzen ihr Passwort selbst.</p>
+  </header>
+  {% if not verwalten %}<p class="os-caption" style="margin:-24px 0 32px">Ändern darf nur, wer „Personen, Rollen und Bereiche: Verwalten“ hat.</p>{% endif %}
+
+  <div class="os-chips">
+    <a href="{{ url_for('personen.liste') }}" class="{{ 'on' if not archiv }}">Aktuell</a>
+    <a href="{{ url_for('personen.liste', archiv='1') }}" class="{{ 'on' if archiv }}">Archiv{% if n_archiv %} · {{ n_archiv }}{% endif %}</a>
+  </div>
+
+  <ul class="os-list anim">
+    {% for p in leute %}<li style="--i:{{ loop.index0 }}"><a class="os-row" href="{{ url_for('personen.detail', key=p.key) }}">
+      {{ avatar(p.name, 'big' ~ (' off' if p.status != 'aktiv' else '')) }}
+      <span class="os-txt"><b>{{ p.name }}{% if p.key == account.team %} <span class="os-sub" style="display:inline">· du</span>{% endif %}</b>
+        <span>{{ p.rolle_name or 'Ohne Rolle' }}{% if p.bereiche %} · {% for b in p.bereiche %}{{ bnamen.get(b, b) }}{{ ', ' if not loop.last }}{% endfor %}{% endif %}</span></span>
+      {% if p.status == 'gesperrt' %}<span class="os-tag red">Gesperrt</span>
+      {% elif p.status == 'archiviert' %}<span class="os-tag muted">Archiviert</span>
+      {% elif p.einladung_offen and not p.has_password %}<span class="os-tag">Eingeladen</span>
+      {% elif not p.has_password %}<span class="os-tag muted">Ohne Passwort</span>{% endif %}
+      <span class="os-chev">{{ i('chev') }}</span></a></li>
+    {% else %}<li class="os-empty">Hier ist niemand.</li>{% endfor %}
+  </ul>
+
+  <section class="os-section">
+    <h2 class="os-headline">Mehr</h2>
+    <ul class="os-list">
+      <li><a class="os-row" href="{{ url_for('personen.rollen') }}"><span class="os-ico">{{ i('schloss') }}</span>
+        <span class="os-txt"><b>Rollen und Rechte</b><span>Was jede Rolle sehen, bearbeiten und verwalten darf</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>
+      <li><a class="os-row" href="{{ url_for('personen.bereiche') }}"><span class="os-ico">{{ i('bereich') }}</span>
+        <span class="os-txt"><b>Bereiche</b><span>Wer wofür verantwortlich ist</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>
+      {% if darf('protokoll') %}<li><a class="os-row" href="{{ url_for('personen.protokoll') }}"><span class="os-ico">{{ i('protokoll') }}</span>
+        <span class="os-txt"><b>Firmen-Protokoll</b><span>Wer hat wann was geändert</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endif %}
+    </ul>
+  </section>
+
+  {% if verwalten %}
+  <section class="os-section">
+    <h2 class="os-headline">Einladungen</h2>
+    <form method="post" action="{{ url_for('personen.personen_regeln') }}" class="os-grid2" style="align-items:end">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <label class="os-field" style="margin:0"><span>Einladungslinks gelten (Tage)</span><input type="number" name="tage" min="1" max="30" value="{{ einladung_tage }}"></label>
+      <button class="os-btn small quiet" style="justify-self:start">Speichern</button>
+    </form>
+  </section>
+  {% endif %}
+</main>
+
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('settings.settings') }}" aria-label="Zurück zu den Einstellungen">{{ i('back') }}</a>
+  {% if verwalten and not archiv %}<button type="button" class="os-btn" data-sheet="sheet-person"><span>Person anlegen</span>{{ i('plus') }}</button>{% endif %}
+</div>
+
+{% if verwalten %}
+<dialog class="os-sheet" id="sheet-person" aria-label="Person anlegen">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('personen.neu') }}" data-os-require=".os-ask">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <span class="os-eyebrow">Neue Person</span>
+      <input class="os-ask" name="name" maxlength="80" placeholder="Vor- und Nachname" autocomplete="off" required>
+      <label class="os-field"><span>Rolle</span><select name="rolle" required>
+        {% for r in rollen %}<option value="{{ r.key }}" {{ 'selected' if r.key == 'recherche' }}>{{ r.name }}</option>{% endfor %}</select></label>
+      <div class="os-field"><span>Bereiche</span>
+        <div class="os-chips">{% for b in bereiche %}<label><input type="checkbox" name="bereiche" value="{{ b.key }}" {{ 'checked' if b.key == 'akquise' }}>{{ b.name }}</label>{% endfor %}</div></div>
+      <div class="os-grid2">
+        <label class="os-field"><span>Lernstufe</span><select name="lernstufe"><option value="">–</option>
+          {% for v, l in lernstufen %}<option value="{{ v }}" {{ 'selected' if v == 1 }}>{{ l }}</option>{% endfor %}</select></label>
+        <label class="os-field"><span>E-Mail (optional)</span><input type="email" name="email" autocomplete="off"></label>
+      </div>
+      <p class="os-caption">Danach bekommst du einen Einladungslink ({{ einladung_tage }} Tage gültig). Schick ihn der Person, sie setzt damit ihr Passwort.</p>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Anlegen</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endif %}
+{% endblock %}
