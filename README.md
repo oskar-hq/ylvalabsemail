@@ -251,6 +251,18 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
 - **Notfall-Knopf** (Konto-Menü → Notfall melden): ruft sofort die Zuständigen per Push, rotes Band für alle, bis
   behoben. Daraus die Kennzahl „Ausfallzeit“.
 
+## Kunden-Bereich (Stufe 7)
+
+- **Zugang**: am Projekt „Zugang per Mail schicken“ (oder „Nur Link erzeugen“ zum Kopieren). Der Kunde meldet sich
+  mit einem Einmal-Link an (7 Tage gültig) und bleibt danach 90 Tage angemeldet. Neuen Link kann er unter
+  `/portal` selbst anfordern. Sperren am Projekt.
+- **Was der Kunde sieht** (`/portal`): Projektstand, Anforderung (selbst bestätigen), Termine mit Meet-Link,
+  Abnahme-Checkliste, eigene Wünsche und ihr Stand, freigegebene Dokumente, Wochenberichte. Keine Zeiten und Kosten.
+- **Dokumente** am Projekt hochladen, je Dokument sichtbar oder nur intern.
+- **Wochenbericht** freitags automatisch vorbereitet, geht auf Stufe B nach 24 Stunden raus, wenn niemand stoppt;
+  vorher am Projekt bearbeitbar. **Termin-Erinnerung** an Kunden 24 Stunden vorher.
+- **Einstellungen → Kunden-Bereich**: Gültigkeit, Mailtexte, Berichtstag, was Kunden sehen.
+
 ## Team: Konten, eigenes CRM, Vorlage, Zahlen
 
 - **Anmelden mit Name und Passwort**. Passwörter liegen nur als scrypt-Hash in der Datenbank, nach Fehlversuchen

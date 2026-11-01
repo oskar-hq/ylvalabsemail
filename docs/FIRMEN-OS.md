@@ -1,6 +1,6 @@
 # Ylva Labs Firmen-OS – Bauplan
 
-**Stand:** 01.11.2026 · Stufe 1 bis 6 gebaut, als Nächstes Stufe 7 (Kunden-Bereich) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
+**Stand:** 01.11.2026 · Stufe 1 bis 7 gebaut, als Nächstes Stufe 8 (Finanzen) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
 
 Aus dem Ylva Labs Mailer (Akquise, CRM, Mailer) wird das Betriebssystem der Firma. Diese Datei hält fest, **was**
 gebaut werden soll und **nach welchen Prinzipien**, damit alle, die am Code arbeiten (Menschen und KI), dasselbe
@@ -19,7 +19,7 @@ hier ab und trägt Abweichungen ein.
   ist eingerichtet und in Produktion (4.3). Apple/iCloud und ICS-Abo erst danach.
 - WhatsApp kommt später über Unipile, nicht jetzt.
 
-**Stand des Baus:** Stufe 1 bis 6 sind gebaut. Weiter geht es mit Stufe 7, Übergabe dazu in
+**Stand des Baus:** Stufe 1 bis 7 sind gebaut. Weiter geht es mit Stufe 8, Übergabe dazu in
 [BAU-UEBERGABE.md](BAU-UEBERGABE.md).
 
 **Womit der Bau anfing: Stufe 1** (Abschnitt 8). Der Kalender ist Stufe 3. Für Stufe 1 und 2 wird nichts von
@@ -625,8 +625,38 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
     (Startwerte wie im Rollen-Dokument), rotes Band oben für alle, bis „Behoben“ mit Notiz. Notfälle der Woche im
     Wochengespräch. Die KPI „Ausfallzeit“ ist jetzt berechnet (Stunden mit gestörtem Kundensystem, Überschneidungen
     einmal gezählt).
-- [ ] **Stufe 7 – Kunden-Bereich**
+- [x] **Stufe 7 – Kunden-Bereich** (gebaut 01.11.2026, Abweichungen unten)
   Portal mit Einmal-Link-Login, Termine, Projektstand, Änderungswünsche, Dokumente.
+  *Umsetzung und Abweichungen:*
+  - `app/portal.py` (Zugang, Ansicht, Dokumente, Wochenbericht, Termin-Erinnerung, Regeln), Kundenseiten in
+    `app/portal_views.py` (`/portal`, eigene Anmeldung, kein Team-Modul), Team-Seiten am Projekt in
+    `app/projekte_views.py`. Neue Tabellen `kunden_zugaenge`, `kunden_sitzungen`, `dokumente`, `wochenberichte`.
+    Rechte: über das bestehende Modul „Kunden, Projekte und Änderungen“; kein neues Modul.
+  - **Zugang:** Die verantwortliche Person (oder wer Kunden verwaltet) klickt am Projekt „Zugang per Mail schicken“;
+    der Klick ist die Freigabe. Alternativ „Nur Link erzeugen“ zum Kopieren (im Demo-Modus immer so). Der Link gilt
+    einmal und 7 Tage, danach bleibt der Kunde 90 Tage auf dem Gerät angemeldet (eigenes Cookie nur für `/portal`,
+    getrennt von den Team-Sitzungen). In der Datenbank liegen nur Hashes. Der Link öffnet erst eine Seite mit
+    „Anmelden“, damit Virenscanner in Mailprogrammen ihn nicht verbrauchen. Einen neuen Link fordert der Kunde mit
+    seiner Adresse selbst an (höchstens alle 10 Minuten, gleiche Antwort für unbekannte Adressen). Sperren beendet
+    alle Sitzungen.
+  - **Portal:** Projektstand in Kundensprache, Anforderung lesen und selbst bestätigen (meldet Verantwortlich und
+    Technik), Termine mit Meet-Link, Abnahme-Checkliste (ab Abnahme), Wünsche stellen (landen als Änderungswunsch mit
+    `quelle='portal'` bei der verantwortlichen Person) und ihren Stand sehen, freigegebene Dokumente, verschickte
+    Wochenberichte. Nie sichtbar: Zeiten, Kosten, interne Notizen und Namen.
+  - **Dokumente:** am Projekt hochladen (PDF, Bild, Word, Excel, Text, ZIP; bis 8 MB wie die App-Grenze), unter
+    zufälligem Namen in `DATA_DIR/dokumente`, je Dokument „Kunde sieht es“ oder „nur intern“.
+  - **Wochenbericht:** am eingestellten Tag (Standard Freitag ab 12 Uhr) für Projekte im Bau, in der Abnahme, live und
+    im Betrieb, aus Stand, umgesetzten und offenen Wünschen und nächsten Terminen. Freigabe-Stufe `wochenbericht`
+    (Standard B, 24 Stunden Einspruch; C möglich). Vor dem Versand am Projekt bearbeitbar, in der Zentrale als neue
+    Art. Empfänger: aktive Zugänge, sonst die Adresse aus der Akte.
+  - **Termin-Erinnerung an Kunden** 24 Stunden vorher an die Gäste eines Kundentermins (Stufe `erinnerung_kunde`,
+    Standard A, C möglich; B ergibt bei 24 Stunden Vorlauf keinen Sinn). Abweichung von Stufe 3 (dort: „eigene
+    Erinnerungsmails an Kunden schickt das OS nicht“).
+  - Mails an Kunden gehen über das Akquise-Postfach im Namen der verantwortlichen Person (`agent.send_new`), stehen
+    in der Akte und gehen nie an gesperrte Betriebe oder Adressen auf der Sperrliste. Kein Erstkontakt: der
+    Mailschalter `OUTREACH_EMAIL` bleibt davon unberührt.
+  - Einstellungen → Kunden-Bereich: Gültigkeit von Link und Sitzung, Texte der Mails, Berichtstag und -uhrzeit,
+    ob Kunden Termine und Abnahme-Checkliste sehen.
 - [ ] **Stufe 8 – Finanzen**
   Rechnungen, laufende Kosten, Kassenstand, Geld-Regel als Ampel, Export für Steuerberater.
 - [ ] **Stufe 9 – Ein Posteingang**

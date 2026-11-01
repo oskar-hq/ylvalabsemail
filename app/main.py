@@ -922,6 +922,9 @@ app.register_blueprint(kunden_bp)
 from .freigaben_views import bp as freigaben_bp  # noqa: E402
 
 app.register_blueprint(freigaben_bp)
+from .portal_views import bp as portal_bp  # noqa: E402  Kunden-Bereich: eigene Anmeldung, kein Team-Modul
+
+app.register_blueprint(portal_bp)
 
 
 @app.errorhandler(403)

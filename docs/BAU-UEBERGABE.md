@@ -1,18 +1,18 @@
-# Übergabe für den Weiterbau (ab Stufe 7)
+# Übergabe für den Weiterbau (ab Stufe 8)
 
-**Stand:** 01.11.2026 · Stufe 1 bis 6 gebaut und gemergt · nächste: **Stufe 7**
+**Stand:** 01.11.2026 · Stufe 1 bis 7 gebaut und gemergt · nächste: **Stufe 8**
 
 Diese Datei ist für die nächste Sitzung (Mensch oder KI), die am Firmen-OS weiterbaut. Sie fasst zusammen, was
-steht, wie hier gearbeitet wird und was in Stufe 7 zu tun ist. Ausführlich steht alles in
+steht, wie hier gearbeitet wird und was in Stufe 8 zu tun ist. Ausführlich steht alles in
 [FIRMEN-OS.md](FIRMEN-OS.md) (Bauplan, je Stufe „Umsetzung und Abweichungen“).
 
-## 1. Arbeitsweise (bewährt in Stufe 1 bis 6)
+## 1. Arbeitsweise (bewährt in Stufe 1 bis 7)
 
 1. `CLAUDE.md`, [FIRMEN-OS.md](FIRMEN-OS.md), [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md) und
    [DESIGN.md](DESIGN.md) lesen, dann den betroffenen Code.
-2. Kurzen Plan für die Stufe mit Oskar abstimmen. Oskar hat für Stufe 2 bis 6 gesagt: Plan kurz abstimmen, dann bauen,
+2. Kurzen Plan für die Stufe mit Oskar abstimmen. Oskar hat für Stufe 2 bis 7 gesagt: Plan kurz abstimmen, dann bauen,
    testen, im Browser ansehen, Doku nachziehen, Pull Request und mergen.
-3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 160 Tests, alle grün). Neue Tests für das OS
+3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 166 Tests, alle grün). Neue Tests für das OS
    kommen in `tests/test_os.py` (die Reihenfolge der Testdateien ist wichtig: `test_leads.py` setzt die
    Umgebung, Dateien davor dürfen `app.main` nicht importieren).
 4. Seiten im Browser ansehen (Playwright ist vorinstalliert): Handy 390 px und Desktop, hell und dunkel.
@@ -35,6 +35,7 @@ Requests gehen dorthin. Nach einem Merge den Arbeits-Branch neu von dort abzweig
 | 4 KPIs | `kpis.py` (Katalog, Ziele, Agenda, Lernstufen) | Cockpit, Wochengespräch |
 | 5 Kunden | `projekte.py` (Journey, Abnahme, Änderungen, Zeit, Kosten) | Kunden, Projekt, Einstellungen → Projekte |
 | 6 Freigaben | `freigaben.py` (Zentrale mit Registry `ARTEN`, Stufen A–D, Entscheidungsrechte, Log), `notfall.py` | Freigaben, Entscheidungs-Log, Notfall, Einstellungen → Freigaben und Entscheidungen |
+| 7 Kunden-Bereich | `portal.py` (Einmal-Link, Ansicht für Kunden, Dokumente, Wochenbericht, Termin-Erinnerung) | `/portal` (Kunden), Projekt → Kunden-Bereich/Dokumente/Wochenberichte, Einstellungen → Kunden-Bereich |
 
 Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module wieder nutzen sollten:
 
@@ -48,7 +49,7 @@ Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module
 - **Regeln als Einstellung:** je Modul ein `REGELN`-Dict, gespeichert in `kv` unter `regel:<modul>`, mit
   `regeln()`/`regeln_speichern()` und einer Einstellungsseite.
 - **Takt:** Hintergrund-Arbeiter `agent.tick()` ruft `kalender.takt`, `kpis.takt`, `projekte.takt`,
-  `freigaben.takt` auf (je mit eigenem try/except).
+  `freigaben.takt`, `portal.takt` auf (je mit eigenem try/except).
 - **Freigaben:** Was ein Mensch freigeben muss, als Zeile in `freigaben` anlegen und die Art in `freigaben.ARTEN`
   eintragen; dann erscheint es in der Zentrale, im Zähler und auf Mein Tag. Stufe der Aktion über
   `freigaben.stufe(c, key)` lesen (Katalog `freigaben.AKTIONEN`). Regeländerungen mit
@@ -56,32 +57,35 @@ Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module
 - **Design:** Bausteine in `static/os.css`, `static/os.js`, `templates/_os.html` (Listenzeilen, Sheets mit
   `data-sheet`, schwebende Knöpfe `os-float`, Formulare mit `data-os-fetch="reload"`, Toasts per `flash`).
 
-## 3. Stufe 7: Kunden-Bereich
+## 3. Stufe 8: Finanzen
 
-Aus dem Bauplan (Abschnitt 4.7): *Portal mit Einmal-Link-Login, Termine, Projektstand, Änderungswünsche,
-Dokumente.* Dazu, was in früheren Stufen ausdrücklich auf Stufe 7 verschoben wurde.
+Aus dem Bauplan (Abschnitt 4.10): *Rechnungen, laufende Kosten, Kassenstand, Geld-Regel als Ampel, Export für
+Steuerberater.* Dazu, was in früheren Stufen ausdrücklich auf Stufe 8 verschoben wurde.
 
 **Ausgangslage:**
 
-- Projekte, Abnahme, Änderungswünsche und Zeiten gibt es (`projekte.py`). Die Bestätigung der Anforderung durch
-  den Kunden wird heute von Hand vermerkt (`projekte.kunde_bestaetigt`), im Portal kann der Kunde das selbst tun.
-- Änderungswünsche legt heute das Team an. Im Portal stellt sie der Kunde (dieselbe Funktion, `quelle` Portal).
-- Termine mit Meet-Link stehen in `kalender.py`; das Portal zeigt die Termine des Kunden (`lead_id`).
-- Freigabe-Stufen (`freigaben.AKTIONEN`) für „Termin-Erinnerung an Kunden“ und „Wochenbericht an Kunden“ sind
-  im Katalog mit `kommt_mit=7` gesperrt. Mit Stufe 7 freischalten (`kommt_mit` entfernen) und die Aktionen über
-  `freigaben.stufe(c, key)` steuern; Stufe B über `freigaben.b_anlegen` und eine neue Art in `freigaben.ARTEN`
-  (Beschreibung, Entscheiden-Funktion, Modul). Muster: `termin_einladung` in `kalender._freigabe_anfragen`.
+- Was abzurechnen ist, steht schon in `projekte.py`: Einmalbetrag (`preis_einmal`), monatliche Pauschale
+  (`pauschale_monat`), kleine Änderungen mit Abrechnung „Pauschale“ (`aenderungen.abrechnung`), Umsatz und Kosten je
+  Kunde (`projekte.kosten`). Beim Auftrag legt das OS heute eine Aufgabe „Rechnung Einmalbetrag“ an.
+- KI-Kosten stehen je Person und Lead in `ai_usage` (Seite „Kosten“), der Serveranteil in den Projekte-Regeln.
+- Freigabe-Stufen „Angebot verschicken“ (C/D) und „Rechnung verschicken“ (B/C) sind in `freigaben.AKTIONEN` mit
+  `kommt_mit=8` gesperrt. Mit Stufe 8 freischalten und über `freigaben.stufe(c, key)` steuern; neue Arten in
+  `freigaben.ARTEN` (Muster: `wochenbericht` in `portal.py`).
+- Dokumente am Projekt und im Kunden-Bereich gibt es (`portal.dokumente`); Rechnungen als PDF können dort erscheinen.
+  Mails an Kunden über `portal.mail_an_kunde` (Akte, Sperrliste, Absender der verantwortlichen Person).
 
 **Vorschlag für den Umfang (mit Oskar abstimmen):**
 
-1. **Zugang für Kunden** per Einmal-Link an die Mailadresse (kein Passwort), getrennt von den Team-Sitzungen,
-   kurze Gültigkeit, im Protokoll. Wer Zugang bekommt, legt die verantwortliche Person am Projekt fest.
-   Achtung: Mailversand an Kunden ist kein Erstkontakt (bestehende Kunden), läuft aber über die Freigabe-Stufe.
-2. **Portal-Seiten:** Projektstand (Schritt der Journey in Kundensprache), Termine, Anforderung bestätigen,
-   Abnahme-Checkliste ansehen, Änderungswunsch stellen und Stand sehen, Dokumente.
-3. **Dokumente** (Angebot, AV-Vertrag) hochladen und im Portal zeigen; Rechnungen kommen mit Stufe 8.
-4. **Wochenbericht und Termin-Erinnerung an Kunden** über die Freigabe-Stufen (siehe oben).
-5. **Einstellungen** dazu: Gültigkeit des Links, Absender, Texte der Mails, was der Kunde sieht.
+1. **Rechnungen** aus Vorlage mit Nummernkreis (einstellbar), Positionen aus dem Projekt (Einmalbetrag, Pauschale
+   je Monat, kleine Änderungen des Monats), Status offen/bezahlt, Fälligkeit; als PDF im Kunden-Bereich.
+   Versand über die Freigabe-Stufe „Rechnung“. Mahnung nur als Vorschlag (C).
+2. **Laufende Kosten** als Liste mit Monatsbetrag (Server, Lizenzen), KI-Kosten automatisch aus `ai_usage`.
+3. **Kassenstand** von Hand gepflegt (mit Datum), Verlauf.
+4. **Kennzahlen und Ampel:** Gewinnschwelle, Fixkosten, Geld-Regel für Einstellungen (3 Monate das 1,5-fache der
+   Personalkosten übrig, 6 Monatskosten auf dem Konto) im Cockpit; KPI-Katalog ergänzen.
+5. **Export für den Steuerberater** (CSV, Rechnungen als PDF gesammelt) je Monat oder Quartal.
+6. **Einstellungen** dazu: Firmendaten für die Rechnung (Anschrift, Steuernummer, Bank, Kleinunternehmer ja/nein),
+   Nummernkreis, Zahlungsziel, Texte. Rechte: neues Modul „Finanzen“ (Gründer verwalten, Recherche ohne Zugriff).
 
 ## 4. Offen und gut zu wissen
 

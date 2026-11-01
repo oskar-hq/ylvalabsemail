@@ -91,8 +91,11 @@ AKTIONEN = [
        hinweis="Zum Beispiel AV-Vertrag nach dem Auftrag, Zwischenstand nach der halben Bauzeit.", bereich="Team"),
     _a("lead_aussortieren", "Lead nach den Bewertungsregeln aussortieren", "A",
        hinweis="Läuft nach den Regeln; aussortierte Leads lassen sich zurückholen.", bereich="Akquise"),
-    _a("erinnerung_kunde", "Termin-Erinnerung an Kunden", "A", ["A", "B", "C"], kommt_mit=7),
-    _a("wochenbericht", "Wochenbericht an Kunden", "B", ["B", "C"], kommt_mit=7),
+    _a("erinnerung_kunde", "Termin-Erinnerung an Kunden (24 h vorher)", "A", ["A", "C"],
+       "Mail an die Gäste eines Kundentermins. Auf C wartet sie in der Zentrale, bis jemand freigibt."),
+    _a("wochenbericht", "Wochenbericht an Kunden", "B", ["B", "C"],
+       "Aus Projektstand, Änderungen und Terminen, am eingestellten Tag (Einstellungen → Kunden-Bereich). Vor dem "
+       "Versand am Projekt bearbeitbar."),
     _a("angebot", "Angebot verschicken", "C", ["C", "D"], kommt_mit=8),
     _a("rechnung", "Rechnung verschicken", "C", ["B", "C"], kommt_mit=8),
 ]
@@ -536,6 +539,44 @@ def _darf_alle(c, wer, f):
     return wer == f["pruefer"] or firma.darf(c, wer, ARTEN[f["art"]]["modul"], firma.VERWALTEN)
 
 
+def _wochenbericht(c, f):
+    from . import portal, projekte
+    b = portal.bericht_get(c, int(f["objekt_id"]))
+    if not b:
+        return None
+    p = projekte.get(c, b["projekt_id"])
+    return {"titel": b["betreff"], "text": f"an {', '.join(portal.empfaenger(c, p)) or 'niemand'} · "
+            + b["text"].split("\n")[4][:120], "eyebrow": "Wochenbericht an Kunden",
+            "url": f"/kunden/{b['projekt_id']}#berichte", "frage": "Warum geht der Bericht nicht raus?",
+            "ja": "Verschicken", "nein": "Nicht schicken"}
+
+
+def _erinnerung_kunde(c, f):
+    from . import kalender
+    t = kalender.get(c, f["objekt_id"])
+    if not t:
+        return None
+    return {"titel": f"Erinnerung: {t['titel']}", "text": f"{t['zeit']} · an {', '.join(t['gaeste'])}",
+            "eyebrow": "Erinnerung an Kunden", "url": f"/kalender/{t['id']}", "frage": "Warum nicht erinnern?",
+            "ja": "Verschicken", "nein": "Nicht schicken"}
+
+
+def _entscheide_bericht(c, wer, f, ok, grund):
+    from . import portal
+    try:
+        portal.bericht_entscheiden(c, wer, int(f["objekt_id"]), ok, grund)
+    except portal.PortalError as exc:
+        raise FreigabeError(str(exc)) from exc
+
+
+def _entscheide_erinnerung(c, wer, f, ok, grund):
+    from . import portal
+    try:
+        portal.erinnerung_entscheiden(c, wer, int(f["objekt_id"]), ok, grund)
+    except portal.PortalError as exc:
+        raise FreigabeError(str(exc)) from exc
+
+
 def _darf_selbst(c, wer, f):
     return wer == f["pruefer"]
 
@@ -550,6 +591,10 @@ ARTEN = {
                   "entscheiden": _entscheide_lernstufe, "darf": _darf_alle},
     "entscheidung": {"label": "Entscheidungen", "modul": "entscheidungen", "beschreiben": _entscheidung_art,
                      "entscheiden": _entscheide_entscheidung, "darf": _darf_selbst},
+    "wochenbericht": {"label": "Wochenberichte an Kunden", "modul": "kunden", "beschreiben": _wochenbericht,
+                      "entscheiden": _entscheide_bericht, "darf": _darf_alle},
+    "erinnerung_kunde": {"label": "Erinnerungen an Kunden", "modul": "kalender", "beschreiben": _erinnerung_kunde,
+                         "entscheiden": _entscheide_erinnerung, "darf": _darf_alle},
 }
 # Aus den Daten abgeleitet (keine Zeile in `freigaben`): nur mit Link zum Ort, wo entschieden wird
 ABGELEITET = {"anforderung": "Anforderungen im Projekt", "erstkontakt": "Erstkontakt-Entwürfe"}

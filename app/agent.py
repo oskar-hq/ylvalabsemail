@@ -1365,6 +1365,11 @@ def tick():
                 freigaben.takt(c)
             except Exception:
                 log.exception("Fehler im Freigaben-Takt")
+            try:  # Kunden-Bereich: Wochenberichte, Termin-Erinnerungen an Kunden (Firmen-OS Stufe 7)
+                from . import portal
+                portal.takt(c)
+            except Exception:
+                log.exception("Fehler im Kunden-Bereich-Takt")
             reports.notify_released(c, notify)
             start_scheduled(c)
             run = c.execute("SELECT id FROM runs WHERE status='wartet' ORDER BY id LIMIT 1").fetchone()
