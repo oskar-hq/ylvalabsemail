@@ -1,6 +1,6 @@
 # Ylva Labs Firmen-OS – Bauplan
 
-**Stand:** 01.11.2026 · Skizze, noch kein Code · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
+**Stand:** 01.11.2026 · Skizze, noch kein Code · Kalender-Entscheidung eingetragen · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
 
 Aus dem Ylva Labs Mailer (Akquise, CRM, Mailer) wird das Betriebssystem der Firma. Diese Datei hält fest, **was**
 gebaut werden soll und **nach welchen Prinzipien**, damit alle, die am Code arbeiten (Menschen und KI), dasselbe
@@ -131,21 +131,52 @@ Ersetzt jede Liste, jedes „kannst du mal kurz“ und jede WhatsApp-Bitte.
 
 ### 4.3 Kalender und Termine
 
-Das OS ist die Quelle für alle Firmentermine. Private Kalender holen sich die Termine ab, nicht umgekehrt.
+Das OS ist die Quelle für alle Firmentermine und plant um die privaten Termine jeder Person herum.
 
-- **Kalender-Abo je Person:** eine geheime ICS-Adresse (`/kalender/<token>.ics`), die man in Google Kalender,
-  Apple Kalender oder Outlook als Abo einträgt. Enthält eigene Termine, Fokus-Blöcke und auf Wunsch Fristen von
-  Aufgaben. Nur lesend; Token in der App erneuerbar, wenn er in falsche Hände gerät.
-- **Firmenkalender:** alle Termine aller Personen, filterbar nach Person/Bereich/Kunde.
-- **Kundentermine automatisch:** Termin im OS anlegen (oder Kunde bucht selbst über einen Buchungslink mit
-  freien Zeiten) → OS erzeugt Google-Meet-Link, schickt die Einladung (Kalenderdatei + Mail) an den Kunden,
-  erinnert 24 h und 1 h vorher, legt für die zuständige Person ein Briefing an.
+**Kalender verbinden (Entscheidung 01.11.2026):** Jede Person verbindet in ihrem Profil einmal ihren eigenen
+Kalender, dort wo sie ihn ohnehin führt.
+
+| Konto | Was das OS darf | Wie |
+|---|---|---|
+| **Google** (Standard, Oskar nutzt Google) | Frei/belegt lesen, Firmentermine direkt eintragen, **Meet-Links erzeugen** | „Mit Google verbinden“ (OAuth), Google Kalender API |
+| **Apple / iCloud** | Frei/belegt lesen, Firmentermine eintragen, kein Meet | iCloud-Kalender über CalDAV mit app-spezifischem Passwort |
+| Ohne Verbindung | nur Firmentermine anzeigen | ICS-Abo (siehe unten) |
+
+- **Privatsphäre:** Aus privaten Kalendern liest das OS nur **frei/belegt**, keine Titel, Orte oder Teilnehmer
+  (Google-Berechtigung nur für Frei/Belegt plus Termine anlegen). Für andere sieht ein privater Termin nur wie
+  „belegt“ aus.
+- **Planen um alle herum:** Das OS kennt so die freien Zeiten aller. Es schlägt Termine vor (Wochengespräch,
+  Kundentermin mit Oskar und Finn), plant Fokus-Blöcke und zeigt Kunden im Buchungslink nur echte freie Zeiten.
+- **Firmentermine landen direkt im eigenen Kalender** der Teilnehmenden (bei Google sofort, nicht erst beim
+  nächsten Abo-Abgleich). Änderungen im OS werden dort nachgezogen.
+- **Kundentermine mit Meet:** Termin im OS anlegen (oder Kunde bucht selbst über den Buchungslink) → das OS legt
+  den Termin **im Google-Kalender der zuständigen Person** an, Google erzeugt den Meet-Link, und Google schickt die
+  Einladung an den Kunden. Der Link steht auch in der Akte, in „Mein Tag“ und im Kunden-Bereich. Erinnerungen
+  24 h und 1 h vorher, Briefing für die zuständige Person.
+- **ICS-Abo als Rückfall:** eine geheime Adresse (`/kalender/<token>.ics`) für alle, die nichts verbinden wollen.
+  Nur lesend; Token in der App erneuerbar.
+- **Firmenkalender:** alle Firmentermine aller Personen, filterbar nach Person/Bereich/Kunde.
 - **Nach dem Termin:** OS fragt die zuständige Person nach Ergebnis (stattgefunden / abgesagt / nicht erschienen)
   und Notiz, schiebt den Betrieb in der Pipeline weiter und legt Folgeaufgaben an. Das ist die Quelle für die KPIs
   „Termine pro Woche“ und „Abschlussquote“.
 - **Wochengespräch zu viert:** Serientermin, Agenda erzeugt das OS (siehe 4.9).
-- **Technik:** Meet-Links gibt es nur über die Google-Kalender-API mit einem Google-Konto der Firma. Fallback ohne
-  Google: Jitsi-Link (kostenlos, ohne Konto). Entscheidung offen, siehe Abschnitt 10.
+
+**Technik und Stolpersteine bei Google:**
+
+- Einmalig ein Projekt in der Google Cloud Console anlegen (kostenlos), Google Kalender API einschalten,
+  OAuth-Zugang vom Typ „Webanwendung“ mit Rücksprung-Adresse `https://mail.ylvalabs.de/kalender/google/zurueck`.
+  Kein Google Workspace nötig, normale Google-Konten reichen, und Meet-Links gehen damit auch.
+- Die Kalender-Berechtigungen gelten bei Google als „sensibel“. Solange die App nicht von Google geprüft ist:
+  - Im Modus **„Testing“** laufen die Anmeldungen **nach 7 Tagen ab**, alle müssten sich jede Woche neu verbinden.
+    Deshalb nicht im Testmodus lassen.
+  - Im Modus **„In production“ ohne Prüfung** zeigt Google beim Verbinden einmal den Hinweis „App nicht
+    überprüft“ (über „Erweitert“ weiter), danach bleibt die Verbindung bestehen. Grenze: 100 Personen. Für das
+    Team reicht das.
+  - Eine Google-Prüfung lohnt sich erst, wenn Kunden selbst ihre Kalender verbinden sollen.
+- Die Zugangsschlüssel (Refresh-Token) werden verschlüsselt in der Datenbank gespeichert (`cryptography` ist schon
+  installiert). In der App gibt es „Verbindung trennen“, und Google zeigt die Verbindung auch unter
+  myaccount.google.com → Sicherheit.
+- Der Hintergrund-Arbeiter gleicht frei/belegt regelmäßig ab (z. B. alle 10 Minuten) und vor jedem Terminvorschlag.
 
 ### 4.4 Akquise und Recherche (gibt es schon, wird erweitert)
 
@@ -319,8 +350,8 @@ Grundregel: **Jede schreibende Funktion erzeugt ein Ereignis.** Am besten über 
 |---|---|---|
 | Strato IMAP/SMTP | Mails senden und lesen | gibt es |
 | ICS-Abo | Termine in private Kalender | selbst gebaut, kostenlos |
-| Google Kalender API | Kundentermine mit Meet-Link, Einladungen | braucht Google-Konto der Firma; Workspace ca. 7 €/Person/Monat oder ein einzelnes Firmenkonto |
-| Jitsi | Video-Link ohne Google | kostenlos, Fallback |
+| Google Kalender API | Kalender jeder Person verbinden: frei/belegt, Firmentermine eintragen, Meet-Links, Einladungen | kostenlos, normale Google-Konten reichen; Google-Cloud-Projekt mit OAuth nötig |
+| iCloud CalDAV | Apple-Kalender verbinden: frei/belegt, Termine eintragen | kostenlos, app-spezifisches Passwort |
 | Anthropic API | Entwürfe, Briefings, Assistent | gibt es, mit Budget |
 | Web-Push | Meldungen aufs Handy | gibt es |
 | Unipile | WhatsApp, LinkedIn-Nachrichten im Posteingang | später, wenn Budget da ist |
@@ -359,8 +390,9 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
   Vier Testbranchen, warm/kalt, Zuordnung Hamza/Omid, Lead-Prüfung als Freigabe (Omid → Hamza → Stichprobe Oskar),
   Auswertung je Branche. *Zeitkritisch, weil der Test als Nächstes läuft.*
 - [ ] **Stufe 3 – Kalender und Termine**
-  Termine im OS, ICS-Abo je Person, Kundentermine mit Meet- oder Jitsi-Link und Einladung (Freigabe C),
-  Erinnerungen, Ergebnis nach dem Termin, Briefing, Serientermin Wochengespräch.
+  Termine im OS, eigenen Google-Kalender verbinden (frei/belegt, Termine eintragen), Kundentermine mit Meet-Link
+  und Einladung über das Google-Konto der zuständigen Person (Freigabe C), Terminvorschläge um alle herum,
+  Erinnerungen, Ergebnis nach dem Termin, Briefing, Serientermin Wochengespräch. Danach iCloud und ICS-Abo.
 - [ ] **Stufe 4 – KPIs und Wochengespräch**
   KPI-Katalog aus Ereignissen, Wochenziele, Cockpit, automatische Agenda fürs Wochengespräch, Lernstufen-Messung.
 - [ ] **Stufe 5 – Kunden, Projekte, Abnahme**
@@ -397,8 +429,9 @@ Die Reihenfolge 2 und 3 kann getauscht werden, je nachdem, was im Alltag zuerst 
 
 Bitte direkt hier beantworten (Antwort: …), dann wird der Plan angepasst.
 
-1. **Google oder nicht?** Für echte Meet-Links und Einladungen über Google braucht es ein Google-Konto der Firma
-   (Workspace oder ein einzelnes Konto als „Terminkonto“). Oder reicht Jitsi für den Anfang?
+1. ~~**Google oder nicht?**~~ Entschieden (01.11.2026): Jede Person verbindet ihren eigenen Kalender (Google,
+   Apple). Meet-Links erzeugt das OS über das Google-Konto der zuständigen Person. Siehe 4.3.
+   Offen: Nutzen Finn, Hamza und Omid Google oder Apple?
    Antwort:
 2. **Status von Hamza und Omid** (Mitgründer oder Mitarbeit) – davon hängen Rechte im OS ab (Finanzen, Entscheidungen).
    Antwort:
