@@ -8,7 +8,7 @@ from datetime import datetime
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from . import agent, ai, aufgaben, branchentest, claude_research, kalender, crm, emailbuild, firma, known, leaddb, mailbox, niches, pixel, reports, schedule, scoring, team, websearch, webpush
+from . import agent, ai, aufgaben, branchentest, claude_research, kalender, kpis, crm, emailbuild, firma, known, leaddb, mailbox, niches, pixel, reports, schedule, scoring, team, websearch, webpush
 from .main import DB_PATH, ROOT, SETTINGS, login_required
 
 bp = Blueprint("leads", __name__)
@@ -593,6 +593,7 @@ def _save_draft(lead):
     if lead["status"] == "passt" and draft["body"]:
         draft["status"] = "entwurf"  # selbst geschrieben
     leaddb.update_lead(db(), lead_id, **draft)
+    kpis.entwurf_merken(db(), lead_id, me(), draft["body"])
     draft.pop("status", None)
     leaddb.add_event(db(), lead_id, "edit", "Entwurf von Hand geändert.", author=who(),
                      meta={"vorher": before, "nachher": draft})
@@ -661,6 +662,7 @@ def send(lead_id):
         return jsonify(error="Diese Nachricht ist schon raus."), 400
     if not (lead["body"] or "").strip():
         return jsonify(error="Es gibt noch keinen Text."), 400
+    kpis.entwurf_freigegeben(db(), lead_id, me(), lead["body"])  # Lernstufen: wie stark wurde geändert?
     if g.account.get("demo"):
         leaddb.update_lead(db(), lead_id, status="versendet", channel="email", sent_at=leaddb.now())
         leaddb.add_event(db(), lead_id, "sent", "Demo: als versendet markiert (nichts verschickt).", author=who())
@@ -693,6 +695,7 @@ def mark_sent(lead_id):
     labels = {"brief": "per Brief", "telefon": "am Telefon", "email": "per Mail (selbst verschickt)"}
     if channel not in labels:
         abort(400)
+    kpis.entwurf_freigegeben(db(), lead_id, me(), lead["body"])
     leaddb.update_lead(db(), lead_id, status="versendet", channel=channel, sent_at=leaddb.now(), unread=0)
     leaddb.add_event(db(), lead_id, "sent", f"Kontakt {labels[channel]} aufgenommen.", author=who())
     crm.advance(db(), lead_id, "kontaktiert")
@@ -845,6 +848,7 @@ def draft_ai(lead_id):
     except ai.AIError as exc:
         return jsonify(error=str(exc)), 502
     spent = leaddb._sum(db(), "lead_id = ? AND stage = 'entwurf'", (lead_id,))["usd"] - before
+    kpis.entwurf_merken(db(), lead_id, me(), leaddb.get_lead(db(), lead_id)["body"])
     return jsonify(ok=True, cost_eur=money(spent))
 
 
@@ -859,6 +863,7 @@ def draft_template(lead_id):
         agent.template_draft(db(), lead_id, _sender_key(lead))
     except ValueError as exc:
         return jsonify(error=str(exc)), 400
+    kpis.entwurf_merken(db(), lead_id, me(), leaddb.get_lead(db(), lead_id)["body"])
     return jsonify(ok=True)
 
 

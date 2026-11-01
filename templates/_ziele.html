@@ -1,0 +1,40 @@
+{# Wochenziele einer Person: Stand live aus der Kennzahl, abhaken als erreicht/verfehlt. #}
+{% from "_os.html" import i %}
+{% macro ziele_liste(ziele, next, darf_bewerten=True) -%}
+<ul class="os-list">{% for z in ziele %}<li class="os-row">
+  <span class="os-ampel {{ 'gruen' if z.status == 'erreicht' or (z.status == 'offen' and z.erreicht_live) else ('rot' if z.status == 'verfehlt' else 'grau') }}"></span>
+  <span class="os-txt"><b>{{ z.text }}</b>
+    <span>{% if z.kpi_key %}{{ z.kpi_label }}: {{ z.ist|kpi }} von {{ z.zielwert|kpi }}{% else %}Ohne Kennzahl{% endif %}{% if z.status != 'offen' %} · {{ z.status }}{% endif %}{% if z.notiz %} · {{ z.notiz }}{% endif %}</span>
+    {% if z.fortschritt is not none %}<span class="os-bar" aria-hidden="true"><i style="width:{{ z.fortschritt }}%"></i></span>{% endif %}</span>
+  {% if darf_bewerten %}<form method="post" action="{{ url_for('cockpit.ziel_stand', zid=z.id) }}" data-os-fetch="reload" class="os-zielknoepfe">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ next }}">
+    {% if z.status != 'erreicht' %}<button class="os-link" name="status" value="erreicht" aria-label="Erreicht: {{ z.text }}">Erreicht</button>{% endif %}
+    {% if z.status == 'offen' %}<button class="os-link danger" name="status" value="verfehlt" aria-label="Verfehlt: {{ z.text }}">Verfehlt</button>
+    {% else %}<button class="os-link" name="status" value="offen">Offen</button>{% endif %}
+  </form>{% endif %}
+</li>{% endfor %}</ul>
+{%- endmacro %}
+
+{% macro ziel_sheet(id, person, woche, katalog, next, person_name='') -%}
+<dialog class="os-sheet" id="{{ id }}" aria-label="Wochenziel">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('cockpit.ziel_neu') }}" data-os-fetch="reload" data-os-require=".os-ask">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="person" value="{{ person }}">
+      <input type="hidden" name="woche" value="{{ woche }}"><input type="hidden" name="next" value="{{ next }}">
+      <span class="os-eyebrow">Wochenziel{% if person_name %} · {{ person_name }}{% endif %}</span>
+      <textarea class="os-ask" name="text" rows="2" maxlength="200" placeholder="Was soll diese Woche geschafft sein?" required></textarea>
+      <div class="os-grid2">
+        <label class="os-field"><span>Mit Kennzahl verknüpfen (optional)</span><select name="kpi"><option value="">Keine, ich hake selbst ab</option>
+          {% for k in katalog %}<option value="{{ k.key }}">{{ k.label }}</option>{% endfor %}</select></label>
+        <label class="os-field"><span>Zielwert</span><input type="number" name="zielwert" min="0" step="any" placeholder="z. B. 40"></label>
+      </div>
+      <p class="os-caption">Höchstens drei Ziele pro Woche. Mit Kennzahl zeigt das OS den Stand live.</p>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Speichern</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{%- endmacro %}

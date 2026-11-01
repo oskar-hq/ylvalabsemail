@@ -1,6 +1,6 @@
 # Ylva Labs Firmen-OS – Bauplan
 
-**Stand:** 01.11.2026 · Stufe 1 bis 3 gebaut, als Nächstes Stufe 4 (KPIs und Wochengespräch) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
+**Stand:** 01.11.2026 · Stufe 1 bis 4 gebaut, als Nächstes Stufe 5 (Kunden, Projekte, Abnahme) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
 
 Aus dem Ylva Labs Mailer (Akquise, CRM, Mailer) wird das Betriebssystem der Firma. Diese Datei hält fest, **was**
 gebaut werden soll und **nach welchen Prinzipien**, damit alle, die am Code arbeiten (Menschen und KI), dasselbe
@@ -87,8 +87,8 @@ Diese Begriffe gelten im Code, in der Oberfläche und in Gesprächen gleich.
 | **Termin** | Zeitpunkt mit Teilnehmenden, optional Kunde und Meet-Link | ja (`termine`; Stufe 3) |
 | **Freigabe** | Ein Vorschlag des OS, den ein Mensch annehmen, ändern oder ablehnen muss | nur implizit (Entwürfe) |
 | **Ereignis** | Eintrag im Firmen-Protokoll. Rohstoff für alle Zahlen. | ja (`ereignisse`, `firma.log`; Stufe 1) |
-| **KPI** | Kennzahl je Bereich/Person, aus Ereignissen berechnet | nein (nur Lauf-Berichte, KI-Kosten) |
-| **Ziel** | Wochenziel einer Person (z. B. Hamza: 40 qualifizierte Leads) | nein |
+| **KPI** | Kennzahl je Bereich/Person, aus Ereignissen berechnet | ja (`app/kpis.py`; Stufe 4) |
+| **Ziel** | Wochenziel einer Person (z. B. Hamza: 40 qualifizierte Leads) | ja (`ziele`; Stufe 4) |
 | **Entscheidung** | Festgehaltene Entscheidung mit Begründung, wer entschieden hat und auf welcher Grundlage | nein |
 | **Dokument** | Angebot, AV-Vertrag, Anforderung, Abnahme-Protokoll, Rechnung, Vorlage | nein |
 | **Geldbewegung** | Rechnung, Zahlung, laufende Kosten, KI-Kosten je Kunde | nur KI-Kosten (`ai_usage`) |
@@ -543,8 +543,25 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
   - ICS-Abo je Person (`/kalender/<token>.ics`, nur der Hash gespeichert, in „Mein Kalender“ erneuerbar).
     iCloud über CalDAV ist noch offen; das Abo deckt Apple-Kalender lesend ab.
   - Buchungslink für Kunden (offene Frage 4) ist nicht gebaut.
-- [ ] **Stufe 4 – KPIs und Wochengespräch**
+- [x] **Stufe 4 – KPIs und Wochengespräch** (gebaut 01.11.2026, Abweichungen unten)
   KPI-Katalog aus Ereignissen, Wochenziele, Cockpit, automatische Agenda fürs Wochengespräch, Lernstufen-Messung.
+  *Umsetzung und Abweichungen:*
+  - KPI-Katalog in `app/kpis.py`, je Woche (ISO-Kalenderwoche) aus Prüfungen, Terminen, Kontakten, Stufen,
+    Aufgaben und KI-Kosten berechnet. KPIs aus späteren Stufen (Stunden pro Build, Abnahmen, Ausfallzeit, Tage
+    bis live, Kunden, die bleiben, Kassenstand) stehen im Katalog mit „kommt mit Stufe 5/8“. Kein Cache
+    (`kpi_werte`): die Zahlen werden beim Anzeigen gerechnet, das reicht bei der Datenmenge.
+  - Zielwerte je KPI fürs Team oder je Person (`kpi_ziele`), Ampel grün ab Ziel, gelb ab 70 %.
+  - Wochenziele (`ziele`), höchstens drei je Person und Woche, optional mit KPI und Zielwert (Stand live).
+    Setzen darf die Person selbst und wer sie führt.
+  - Sichtbarkeit: persönliche Zahlen sehen die Person, wer sie führt (verantwortlich für ihren Bereich oder einen
+    darüber) und wer „Zahlen, Ziele und Wochengespräch: Verwalten“ hat (neues Modul `cockpit`).
+  - Agenda fürs Wochengespräch: Teamzahlen, je Person Zahlen, Ziele, wo es hängt, Ziele für nächste Woche,
+    offene Entscheidungen (Freigaben, Aufstiege). Ergebnisse direkt als Aufgabe oder Ziel. Notfälle und
+    Entscheidungs-Log fehlen noch (Stufe 6).
+  - Lernstufen-Messung: Stufe 1 → 2 über angenommene Leads, Stufe 2 → 3 über Entwürfe ohne große Änderung
+    (Textähnlichkeit zwischen Entwurf der schreibenden Person und freigegebenem Text, neu gemessen in
+    `leads.entwurf_original`), Stufe 3 → 4 über gebuchte Termine und begleitete Gespräche. Schwellen einstellbar.
+    Der Hintergrund-Arbeiter prüft täglich und legt eine Freigabe `lernstufe` für die führende Person an.
 - [ ] **Stufe 5 – Kunden, Projekte, Abnahme**
   Customer Journey nach „Kunde“, Projekte, Anforderung und Abnahme-Checkliste, Zeiterfassung, Änderungswünsche mit
   Abrechnungsregeln, Kosten je Kunde.

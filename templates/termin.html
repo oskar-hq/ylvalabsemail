@@ -15,6 +15,10 @@
   <a class="os-btn ink full" href="{{ t.meet_link }}" target="_blank" rel="noopener" style="margin:0 0 32px"><span>Meet beitreten</span>{{ i('video') }}</a>
   {% endif %}
 
+  {% if t.serie_id and darf('cockpit') and 'ochengespr' in t.titel %}
+  <ul class="os-list" style="margin:0 0 24px"><li><a class="os-row" href="{{ url_for('cockpit.wochengespraech', woche=t.start[:10]|kw) }}"><span class="os-ico">{{ i('protokoll') }}</span>
+    <span class="os-txt"><b>Agenda öffnen</b><span>Zahlen, Ziele, wo es hängt, offene Entscheidungen</span></span><span class="os-chev">{{ i('chev') }}</span></a></li></ul>
+  {% endif %}
   <dl class="os-kv">
     <dt>Verantwortlich</dt><dd>{{ t.verantwortlich_name }}</dd>
     <dt>Dabei</dt><dd>{% for x in t.teilnehmer if x.person %}{{ x.person_name.split(' ')[0] }}{{ ', ' if not loop.last }}{% endfor %}</dd>

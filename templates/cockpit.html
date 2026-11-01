@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, avatar %}
+{% block title %}Cockpit · Ylva Labs{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <span class="os-eyebrow">{{ woche_text }}</span>
+  <nav class="os-tabs" aria-label="Wessen Zahlen">
+    <a href="{{ url_for('cockpit.cockpit', woche=woche) }}" class="{{ 'on' if not person }}">Team</a>
+    {% for p in sichtbar %}<a href="{{ url_for('cockpit.cockpit', woche=woche, person=p.key) }}" class="{{ 'on' if person == p.key }}">{{ p.name.split(' ')[0] }}</a>{% endfor %}
+  </nav>
+  <div class="os-chips">
+    <a href="{{ url_for('cockpit.cockpit', woche=vor, person=person) }}" aria-label="Woche davor">‹ Vorwoche</a>
+    <a href="{{ url_for('cockpit.cockpit', person=person) }}" class="{{ 'on' if aktuell }}">Diese Woche</a>
+    {% if not aktuell %}<a href="{{ url_for('cockpit.cockpit', woche=nach, person=person) }}" aria-label="Woche danach">Nächste ›</a>{% endif %}
+    <a href="{{ url_for('cockpit.wochengespraech', woche=woche) }}">Wochengespräch</a>
+  </div>
+
+  {% for titel, zeilen in bereiche %}
+  <section class="os-section" style="{{ 'margin-top:24px' if loop.first }}">
+    <h2 class="os-headline">{{ titel }}</h2>
+    <ul class="os-list">
+      {% for z in zeilen %}<li class="os-row os-kpi {{ 'aus' if z.kommt_mit }}">
+        <span class="os-ampel {{ z.ampel }}" aria-label="{{ {'gruen': 'im Ziel', 'gelb': 'knapp', 'rot': 'unter Ziel', 'grau': 'ohne Ziel'}[z.ampel] }}"></span>
+        <span class="os-txt"><b>{{ z.label }}</b>
+          <span>{% if z.kommt_mit %}Kommt mit Stufe {{ z.kommt_mit }}{% else %}{{ z.quelle }}{% if z.ziel is not none %} · Ziel {{ z.ziel|kpi(z.einheit) }}{% endif %}{% endif %}</span></span>
+        {% if z.verlauf %}{% set pts = z.verlauf|sparkline %}{% if pts %}<svg class="os-spark" viewBox="0 0 96 28" aria-hidden="true"><polyline points="{{ pts }}"/></svg>{% endif %}{% endif %}
+        <span class="os-end"><span class="os-wert">{{ z.wert|kpi(z.einheit) }}</span>
+          {% if verwalten and not z.kommt_mit %}<button type="button" class="os-link leise" data-sheet="sheet-ziel" data-set-kpi="{{ z.key }}" data-set-wert="{{ z.ziel if z.ziel is not none else '' }}" aria-label="Ziel für {{ z.label }}">Ziel</button>{% endif %}</span>
+      </li>{% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+
+  {% if lernstaende %}
+  <section class="os-section" id="lernstufen">
+    <h2 class="os-headline">Lernstufen</h2>
+    <p class="os-sub">Das OS misst die Aufstiegsbedingung jede Woche und schlägt den Aufstieg vor. Freigeben muss die Person, die führt.</p>
+    <ul class="os-list">{% for l in lernstaende %}<li class="os-row">{{ avatar(l.name) }}
+      <span class="os-txt"><b>{{ l.name }} · Stufe {{ l.stufe }}</b><span>{{ l.text }}</span></span>
+      {% if l.erfuellt %}<span class="os-tag red">Aufstieg fällig</span>{% endif %}
+      {% if l.wochen %}<span class="os-wochen" aria-label="Wochen erfüllt">{% for w in l.wochen %}<i class="{{ 'ok' if w.ok }}" title="{{ w.woche }}: {{ w.anzahl }}{% if w.quote is not none %}, {{ w.quote }} %{% endif %}"></i>{% endfor %}</span>{% endif %}
+    </li>{% endfor %}</ul>
+    {% if verwalten %}
+    <details class="os-field" style="margin-top:24px"><summary class="os-link">Regeln für die Lernstufen</summary>
+      <form method="post" action="{{ url_for('cockpit.lernregeln') }}" data-os-fetch="reload" style="margin-top:16px">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        {% for k, (label, _d) in regel_labels.items() %}<label class="os-field"><span>{{ label }}</span><input type="number" name="{{ k }}" min="0" max="1000" value="{{ regeln[k] }}"></label>{% endfor %}
+        <button class="os-btn small quiet">Regeln speichern</button>
+      </form>
+    </details>
+    {% endif %}
+  </section>
+  {% endif %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('aufgaben.mein_tag') }}" aria-label="Zurück">{{ i('back') }}</a>
+  <a class="os-btn ink" href="{{ url_for('cockpit.wochengespraech', woche=woche) }}"><span>Wochengespräch</span>{{ i('chev') }}</a>
+</div>
+{% if verwalten %}
+<dialog class="os-sheet" id="sheet-ziel" aria-label="Zielwert">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('cockpit.zielwert') }}" data-os-fetch="reload">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="kpi" value="">
+      <input type="hidden" name="person" value="{{ person or '' }}">
+      <span class="os-eyebrow">Zielwert{% if person_name %} für {{ person_name }}{% else %} fürs Team{% endif %}</span>
+      <input class="os-ask" name="wert" inputmode="decimal" placeholder="Ziel je Woche, leer = keins">
+      <p class="os-caption">Die Ampel wird grün, wenn der Wert erreicht ist, gelb ab 70 %. Bei Kosten und Überfälligem umgekehrt.</p>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Speichern</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endif %}
+{% endblock %}
