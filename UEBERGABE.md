@@ -72,6 +72,9 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
 - **Firmen-OS Stufe 4 (01.11.2026):** Cockpit, Wochenziele, Agenda fürs Wochengespräch, Lernstufen-Messung.
   Nach dem Update: im Cockpit die Zielwerte setzen (z. B. qualifizierte Leads je Woche), im ersten
   Wochengespräch die Ziele für die nächste Woche eintragen. Die Lernstufen-Regeln stehen im Cockpit unten.
+- **Firmen-OS Stufe 5 (01.11.2026):** Kunden und Projekte. Nach dem Update: unter Einstellungen → Projekte die
+  Abnahme-Checkliste, die Pauschale für kleine Änderungen und den Stundensatz prüfen. Bestehende Kunden im CRM
+  bekommen ihr Projekt, sobald jemand sie unter „Kunden“ anlegt oder ihre Stufe neu auf „Kunde“ setzt.
 
 - Die automatischen Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.

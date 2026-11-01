@@ -157,6 +157,14 @@
         </form>
       </div>
 
+      {% if darf('kunden') and (projekt or lead.stage == 'kunde') %}
+      <div class="side-block">
+        <span class="label">Projekt</span>
+        {% if projekt %}<p class="small"><a href="{{ url_for('kunden.detail', pid=projekt.id) }}"><b>{{ projekt.status_label }}</b> · {{ projekt.titel }}</a></p>
+        {% else %}<p class="muted small">Noch kein Projekt.</p><a class="btn small" href="{{ url_for('kunden.uebersicht') }}#projekt">Projekt anlegen</a>{% endif %}
+      </div>
+      {% endif %}
+
       {% if darf('kalender') %}
       <div class="side-block">
         <span class="label">Termine</span>

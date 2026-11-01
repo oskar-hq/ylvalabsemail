@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import aufgaben, branchentest, firma, kalender, kpis  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
+from . import aufgaben, branchentest, firma, kalender, kpis, projekte  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
 
 ROOT = Path(__file__).resolve().parent.parent
 BRAIN_SEED = Path(__file__).resolve().parent / "brain_seed.md"
@@ -201,6 +201,11 @@ DATA_MIGRATIONS = [
     """UPDATE rollen SET rechte = json_set(rechte, '$.cockpit', 2) WHERE key = 'recherche'
        AND json_extract(rechte, '$.cockpit') IS NULL""",
     *kpis.SEED,
+    # Stufe 5: neues Modul „Kunden, Projekte und Änderungen“ (Gründer verwalten, Recherche sieht es nicht)
+    """UPDATE rollen SET rechte = json_set(rechte, '$.kunden', 4) WHERE key = 'gruender'
+       AND json_extract(rechte, '$.kunden') IS NULL""",
+    """UPDATE rollen SET rechte = json_set(rechte, '$.kunden', 0) WHERE key = 'recherche'
+       AND json_extract(rechte, '$.kunden') IS NULL""",
 ]
 
 FOLLOWUP_DAYS = 7  # wird beim Start aus LEADS_FOLLOWUP_DAYS gesetzt, 0 = aus
@@ -233,6 +238,7 @@ def connect(path):
     conn.executescript(branchentest.SCHEMA)
     conn.executescript(kalender.SCHEMA)
     conn.executescript(kpis.SCHEMA)
+    conn.executescript(projekte.SCHEMA)
     for stmt in MIGRATIONS:
         try:
             conn.execute(stmt)

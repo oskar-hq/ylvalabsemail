@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Projekte · Einstellungen{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Einstellungen</span>
+    <h1 class="os-title-l">Projekte</h1>
+    <p class="os-sub os-lead">Regeln für Abnahme, Änderungswünsche, Abrechnung und Zeiterfassung. Sie gelten sofort für alle Projekte.</p>
+  </header>
+  <form method="post" action="{{ url_for('kunden.einstellungen_speichern') }}" data-os-fetch="reload">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <section class="os-section" style="margin-top:0">
+      <h2 class="os-headline">Abnahme-Checkliste</h2>
+      <label class="os-field" style="margin-top:12px"><span>Ein Punkt pro Zeile. Neue Abnahmen bekommen diese Liste.</span>
+        <textarea name="checkliste" rows="8" {{ 'readonly' if not verwalten }}>{{ regeln.checkliste|join('\n') }}</textarea></label>
+    </section>
+    <section class="os-section">
+      <h2 class="os-headline">Änderungswünsche und Abrechnung</h2>
+      <div class="os-grid2" style="margin-top:12px">
+        {% for k in ['kostenlose_tage', 'klein_min', 'pauschale_klein', 'annahme_h_monat'] %}<label class="os-field"><span>{{ regel_labels[k][0] }}</span><input type="number" name="{{ k }}" min="0" value="{{ regeln[k] }}" {{ 'disabled' if not verwalten }}></label>{% endfor %}
+        <label class="os-field"><span>{{ regel_labels.umsetzungstag[0] }}</span><select name="umsetzungstag" {{ 'disabled' if not verwalten }}>{% for t in wochentage %}<option value="{{ loop.index0 }}" {{ 'selected' if loop.index0 == regeln.umsetzungstag }}>{{ t }}</option>{% endfor %}</select></label>
+      </div>
+    </section>
+    <section class="os-section">
+      <h2 class="os-headline">Bau, Zeit und Kosten</h2>
+      <div class="os-grid2" style="margin-top:12px">
+        {% for k in ['stunden_pro_tag', 'stundensatz', 'server_monat'] %}<label class="os-field"><span>{{ regel_labels[k][0] }}</span><input type="number" name="{{ k }}" min="0" value="{{ regeln[k] }}" {{ 'disabled' if not verwalten }}></label>{% endfor %}
+        {% for k in ['bereich_kunden', 'bereich_technik'] %}<label class="os-field"><span>{{ regel_labels[k][0] }}</span><select name="{{ k }}" {{ 'disabled' if not verwalten }}>{% for b in bereiche %}<option value="{{ b.key }}" {{ 'selected' if b.key == regeln[k] }}>{{ b.name }}</option>{% endfor %}</select></label>{% endfor %}
+      </div>
+      <label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px"><span style="margin:0">{{ regel_labels.zeit_pflicht[0] }}</span>
+        <span class="os-toggle"><input type="checkbox" name="zeit_pflicht" value="1" {{ 'checked' if regeln.zeit_pflicht }} {{ 'disabled' if not verwalten }}><span></span></span></label>
+    </section>
+    {% if verwalten %}<button class="os-btn small quiet">Regeln speichern</button>{% endif %}
+  </form>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('settings.settings') }}" aria-label="Zurück zu den Einstellungen">{{ i('back') }}</a>
+</div>
+{% endblock %}

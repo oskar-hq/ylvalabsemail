@@ -1,6 +1,6 @@
 # Ylva Labs Firmen-OS – Bauplan
 
-**Stand:** 01.11.2026 · Stufe 1 bis 4 gebaut, als Nächstes Stufe 5 (Kunden, Projekte, Abnahme) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
+**Stand:** 01.11.2026 · Stufe 1 bis 5 gebaut, als Nächstes Stufe 6 (Freigabe-Zentrale und Regeln als Daten) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
 
 Aus dem Ylva Labs Mailer (Akquise, CRM, Mailer) wird das Betriebssystem der Firma. Diese Datei hält fest, **was**
 gebaut werden soll und **nach welchen Prinzipien**, damit alle, die am Code arbeiten (Menschen und KI), dasselbe
@@ -81,8 +81,8 @@ Diese Begriffe gelten im Code, in der Oberfläche und in Gesprächen gleich.
 | **Person** | Mitarbeitende mit Login, Bereich(en), Rolle, Lernstufe, Kalender-Link | ja (`team` mit Rolle, Status, Einladung; Stufe 1) |
 | **Bereich** | Produkt & Technik · Markt, Kunden & Betrieb · Unterbereich Akquise & Recherche. Hat eine verantwortliche Person und KPIs. Später teilbar. | ja (`bereiche`, ohne KPIs; Stufe 1) |
 | **Betrieb / Kunde** | Eine Firma vom ersten Lead bis zum laufenden Kunden. *Eine* Akte über die ganze Customer Journey. | ja als Lead (`leads`) |
-| **Projekt (Build)** | Was für einen Kunden gebaut wird: Anforderung → Bau → Abnahme → Live | nein |
-| **Änderungswunsch** | Wunsch eines Kunden nach dem Start, mit Größe, Zeit, Abrechnung | nein |
+| **Projekt (Build)** | Was für einen Kunden gebaut wird: Anforderung → Bau → Abnahme → Live | ja (`projekte`; Stufe 5) |
+| **Änderungswunsch** | Wunsch eines Kunden nach dem Start, mit Größe, Zeit, Abrechnung | ja (`aenderungen`; Stufe 5) |
 | **Aufgabe** | Etwas, das eine Person bis zu einem Termin erledigen muss. Kann an Kunde, Projekt, Lead hängen oder frei sein. | ja (`aufgaben`, inkl. Anfragen und Wiedervorlagen; Stufe 1) |
 | **Termin** | Zeitpunkt mit Teilnehmenden, optional Kunde und Meet-Link | ja (`termine`; Stufe 3) |
 | **Freigabe** | Ein Vorschlag des OS, den ein Mensch annehmen, ändern oder ablehnen muss | nur implizit (Entwürfe) |
@@ -562,9 +562,30 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
     (Textähnlichkeit zwischen Entwurf der schreibenden Person und freigegebenem Text, neu gemessen in
     `leads.entwurf_original`), Stufe 3 → 4 über gebuchte Termine und begleitete Gespräche. Schwellen einstellbar.
     Der Hintergrund-Arbeiter prüft täglich und legt eine Freigabe `lernstufe` für die führende Person an.
-- [ ] **Stufe 5 – Kunden, Projekte, Abnahme**
+- [x] **Stufe 5 – Kunden, Projekte, Abnahme** (gebaut 01.11.2026, Abweichungen unten)
   Customer Journey nach „Kunde“, Projekte, Anforderung und Abnahme-Checkliste, Zeiterfassung, Änderungswünsche mit
   Abrechnungsregeln, Kosten je Kunde.
+  *Umsetzung und Abweichungen:*
+  - `app/projekte.py`, Tabellen `projekte`, `abnahme_punkte`, `abnahmen`, `aenderungen`, `zeiten`. Steht ein Lead im
+    CRM auf „Kunde“, legt das OS das Projekt an (Status `beauftragt`) mit Aufgaben für AV-Vertrag, Rechnung und
+    Anforderungstermin. Verantwortlich und Technik kommen aus den Bereichen (einstellbar).
+  - Bau erst nach schriftlicher Anforderung, Bestätigung des Kunden (von Hand vermerkt, das Portal kommt mit
+    Stufe 7), Schätzung der Technik und Freigabe beider. Schätzen darf nur die Technik selbst. Der geplante Termin
+    ergibt sich aus der Schätzung, dazu „Zwischenstand zeigen“ zur Hälfte.
+  - Abnahme: Checkliste aus den Einstellungen, letztes Wort nur die verantwortliche Person; nicht alles abgehakt →
+    zurück in den Bau mit Aufgabe für die Technik. Jede Abnahme wird gezählt (KPI „Abnahmen beim ersten Mal“).
+  - Aufgaben eines Schritts schließt das OS beim Weiterschalten selbst (Anforderung, Schätzung, Bau, Abnahme).
+  - Änderungswünsche: Einordnen durch die verantwortliche Person, Schätzen durch die Technik, Abrechnung nach
+    Regel (vor Live klein inklusive/groß Angebot, in den kostenlosen Tagen inklusive, danach Pauschale/Angebot).
+    Kleine Änderungen bekommen den eingestellten Umsetzungstag. Wünsche per Formular oder Mail kommen mit Stufe 7/9.
+  - Zeiterfassung mit Start/Stopp (immer nur eine laufende Zeit je Person) oder Nachtragen; Pflicht für den Bau
+    (abschaltbar). Monatliche Warnung, wenn die Zeit je Kunde zwei Monate am Stück über der Annahme liegt.
+  - Kosten je Kunde: KI-Kosten (je Lead abgerechnet), Zeit × interner Stundensatz, Serveranteil; dazu Umsatz aus
+    Einmalbetrag, Pauschale und abgerechneten kleinen Änderungen. Rechnungen selbst kommen mit Stufe 8.
+  - KPIs jetzt berechnet: Stunden pro Build, Abnahmen beim ersten Mal, Tage bis live, Kunden, die bleiben.
+    Ausfallzeit braucht den Notfall-Knopf (Stufe 6). Neues Rechte-Modul „Kunden, Projekte und Änderungen“
+    (Gründer verwalten, Recherche ohne Zugriff).
+  - Der wöchentliche Check-in ist eine Kalender-Serie, die man am Projekt mit einem Klick anlegt.
 - [ ] **Stufe 6 – Freigabe-Zentrale und Regeln als Daten**
   Alle Vorschläge in einer Freigabe-Warteschlange, Freigabe-Stufen und Entscheidungsrechte einstellbar,
   Entscheidungs-Log.

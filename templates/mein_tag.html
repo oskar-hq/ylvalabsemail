@@ -16,6 +16,10 @@
       {%- elif not t.anfragen %}Heute ist nichts fällig. Plane die Woche oder hilf einem anderen Bereich.{% endif %}</p>
   </header>
 
+  {% set zl = zeit_laeuft() %}
+  {% if zl %}<div class="os-zeit-chip"><span class="os-ico red">{{ i('kalender') }}</span>
+    <span class="os-txt"><b style="font:600 17px/22px var(--sans)">Zeit läuft: {{ zl.titel }}</b><span class="os-caption">seit {{ zl.seit_min }} Minuten</span></span>
+    <form method="post" action="{{ url_for('kunden.zeit_stopp') }}" data-os-fetch="reload"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('aufgaben.mein_tag') }}"><button class="os-btn small ink">Stopp</button></form></div>{% endif %}
   <div class="os-tiles" aria-label="Überblick">
     {% if darf('kalender') %}<a class="os-tile {{ 'zero' if not termine }}" href="#termine"><span>Termine</span><b>{{ termine|length }}</b></a>{% endif %}
     <a class="os-tile {{ 'alert' if t.ueberfaellig else 'zero' }}" href="#ueberfaellig"><span>Überfällig</span><b>{{ t.ueberfaellig|length }}</b></a>

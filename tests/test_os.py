@@ -1038,5 +1038,183 @@ class CockpitWebTest(WebBasis):
         self.assertEqual(kpis.woche_von(date(2026, 11, 1)), "2026-W44")
 
 
+# ---------------------------------------------------------------- Stufe 5: Kunden, Projekte, Abnahme
+
+
+class ProjektTest(unittest.TestCase):
+    def setUp(self):
+        from app import projekte
+        self.pj = projekte
+        self.c = frische_db()
+        self.lid = lead_anlegen(self.c, "Tischlerei Hansen", stage="angebot", owner="oskar")
+
+    def projekt(self):
+        from app import crm
+        crm.set_stage(self.c, self.lid, "kunde", author="Oskar Jacobsen")  # legt das Projekt automatisch an
+        return self.pj.zum_lead(self.c, self.lid)["id"]
+
+    def test_journey_mit_regeln(self):
+        pj, c = self.pj, self.c
+        pid = self.projekt()
+        p = pj.get(c, pid)
+        self.assertEqual((p["status"], p["verantwortlich"], p["technik"]), ("beauftragt", "oskar", "finn"))
+        self.assertIsNone(pj.aus_kunde(c, self.lid, "oskar"))  # nur einmal
+        from app import aufgaben
+        titel = [a["titel"] for a in aufgaben.zum_objekt(c, "projekt", pid)]
+        self.assertIn("AV-Vertrag abschließen: Tischlerei Hansen", titel)
+        with self.assertRaises(pj.ProjektError):
+            pj.weiter(c, "hamza", pid)  # den Schritt setzt die verantwortliche Person
+        pj.weiter(c, "oskar", pid)
+        with self.assertRaises(pj.ProjektError):
+            pj.weiter(c, "oskar", pid)  # ohne Freigaben kein Bau
+        with self.assertRaises(pj.ProjektError):
+            pj.kunde_bestaetigt(c, "oskar", pid)  # erst Anforderung
+        pj.aendern(c, "oskar", pid, anforderung="Anfragen automatisch sortieren und beantworten.")
+        pj.kunde_bestaetigt(c, "oskar", pid)
+        with self.assertRaises(pj.ProjektError):
+            pj.anforderung_freigeben(c, "oskar", pid)  # ohne Schätzung
+        with self.assertRaises(pj.ProjektError):
+            pj.schaetzen(c, "oskar", pid, 8)  # schätzen tut die Technik
+        pj.schaetzen(c, "finn", pid, "12")
+        pj.anforderung_freigeben(c, "oskar", pid)
+        with self.assertRaises(pj.ProjektError):
+            pj.anforderung_freigeben(c, "hamza", pid)
+        pj.anforderung_freigeben(c, "finn", pid)
+        pj.weiter(c, "oskar", pid)
+        p = pj.get(c, pid)
+        self.assertEqual((p["status"], bool(p["bau_ende_plan"])), ("bau", True))
+        offen = [a["titel"] for a in aufgaben.zum_objekt(c, "projekt", pid)]
+        self.assertFalse([t for t in offen if t.startswith(("Anforderung schreiben", "Aufwand schätzen"))])
+        self.assertIn("AV-Vertrag abschließen: Tischlerei Hansen", offen)  # Menschenarbeit bleibt
+        with self.assertRaises(pj.ProjektError):
+            pj.weiter(c, "finn", pid)  # Zeit ist Pflicht
+        pj.nachtragen(c, "finn", "projekt", pid, 300, notiz="Grundgerüst")
+        pj.weiter(c, "finn", pid)
+        p = pj.get(c, pid)
+        self.assertEqual((p["status"], len(p["punkte"])), ("abnahme", len(pj.CHECKLISTE)))
+        with self.assertRaises(pj.ProjektError):
+            pj.abnahme(c, "finn", pid)  # das letzte Wort hat Oskar
+        pj.punkt(c, "oskar", pid, p["punkte"][0]["id"])
+        self.assertFalse(pj.abnahme(c, "oskar", pid))  # nicht alles abgehakt: zurück in den Bau
+        self.assertEqual(pj.get(c, pid)["status"], "bau")
+        pj.weiter(c, "finn", pid)
+        for x in pj.get(c, pid)["punkte"]:
+            pj.punkt(c, "oskar", pid, x["id"])
+        self.assertTrue(pj.abnahme(c, "oskar", pid))
+        p = pj.get(c, pid)
+        self.assertEqual((p["status"], p["kostenlos"]), ("live", True))
+        self.assertEqual(len(p["abnahmen"]), 2)
+        from app import kpis
+        w = kpis.woche_von()
+        self.assertEqual(kpis.wert(c, "freigaben_ohne_aenderung", w), 0)  # erste Abnahme nicht bestanden
+        self.assertEqual(kpis.wert(c, "stunden_pro_build", w), 5)
+        self.assertEqual(kpis.wert(c, "tage_bis_live", w), 0)
+        pj.weiter(c, "oskar", pid)
+        self.assertEqual(pj.get(c, pid)["status"], "betrieb")
+        self.assertTrue(firma.protokoll(c, art="projekt", objekt=("projekt", pid)))
+
+    def test_aenderungswuensche_und_abrechnung(self):
+        pj, c = self.pj, self.c
+        pid = self.projekt()
+        a1 = pj.aenderung_anlegen(c, "hamza", pid, "Logo im Kopf größer")
+        self.assertIn("Änderungswunsch einordnen: Tischlerei Hansen",
+                      [r["title"] for r in leaddb.notices(c, "o", 9, "oskar")[0]])
+        with self.assertRaises(pj.ProjektError):
+            pj.einordnen(c, "hamza", a1, "klein")  # einordnen tut Oskar (oder wer Kunden verwaltet)
+        pj.einordnen(c, "oskar", a1, "klein")
+        self.assertEqual(pj.aenderung_get(c, a1)["abrechnung"], "inklusive")  # vor Live klein: inklusive
+        # nach Live, nach den kostenlosen Tagen
+        c.execute("UPDATE projekte SET status='betrieb', live_am=? WHERE id=?",
+                  ((date.today() - timedelta(days=60)).isoformat() + "T10:00:00", pid))
+        c.commit()
+        a2 = pj.aenderung_anlegen(c, "oskar", pid, "Neuer Export als PDF")
+        pj.einordnen(c, "oskar", a2, "klein")
+        self.assertEqual(pj.aenderung_get(c, a2)["abrechnung"], "pauschale")
+        pj.aenderung_schaetzen(c, "finn", a2, 180)  # doch groß
+        a = pj.aenderung_get(c, a2)
+        self.assertEqual((a["groesse"], a["abrechnung"]), ("gross", "angebot"))
+        from app import aufgaben
+        self.assertTrue(aufgaben.zum_objekt(c, "aenderung", a2))
+        pj.aenderung_abschliessen(c, "finn", a2)
+        self.assertEqual(aufgaben.zum_objekt(c, "aenderung", a2), [])
+        with self.assertRaises(pj.ProjektError):
+            pj.aenderung_abschliessen(c, "oskar", a1, False, "")
+
+    def test_zeiterfassung(self):
+        pj, c = self.pj, self.c
+        pid = self.projekt()
+        aid = pj.aenderung_anlegen(c, "oskar", pid, "Kleinigkeit")
+        pj.start(c, "finn", "projekt", pid)
+        self.assertEqual(pj.laufend(c, "finn")["objekt_typ"], "projekt")
+        pj.start(c, "finn", "aenderung", aid)  # stoppt die erste
+        self.assertEqual(c.execute("SELECT COUNT(*) FROM zeiten WHERE person='finn' AND ende IS NULL").fetchone()[0], 1)
+        self.assertEqual(pj.stopp(c, "finn"), 1)
+        self.assertIsNone(pj.laufend(c, "finn"))
+        with self.assertRaises(pj.ProjektError):
+            pj.nachtragen(c, "finn", "projekt", pid, 0)
+        with self.assertRaises(pj.ProjektError):
+            pj.start(c, "finn", "projekt", 999)
+        self.assertEqual(pj.get(c, pid)["zeit_min"], 2)
+        self.assertEqual(pj.aenderung_get(c, aid)["zeit_min"], 1)
+
+    def test_kosten_und_warnung(self):
+        pj, c = self.pj, self.c
+        pid = self.projekt()
+        pj.aendern(c, "oskar", pid, preis_einmal="4.500", pauschale_monat="99,50")
+        p = pj.get(c, pid)
+        self.assertEqual((p["preis_einmal"], p["pauschale_monat"]), (4500, 99.5))
+        live = date.today().replace(day=1) - timedelta(days=70)
+        c.execute("UPDATE projekte SET status='betrieb', live_am=? WHERE id=?", (live.isoformat() + "T10:00:00", pid))
+        vor1 = date.today().replace(day=1) - timedelta(days=1)
+        vor2 = vor1.replace(day=1) - timedelta(days=1)
+        for d in (vor1, vor2):
+            pj.nachtragen(c, "finn", "projekt", pid, 120, d.replace(day=5).isoformat())
+        k = pj.kosten(c, pid)
+        self.assertEqual(k["zeit_h"], 4)
+        self.assertGreaterEqual(k["monate"], 2)
+        self.assertEqual(k["umsatz"], 4500 + 99.5 * k["monate"])
+        self.assertEqual(pj.takt(c), 1)  # zwei Monate über 1 h: Vorlage an Oskar und Finn
+        self.assertIn("Mehr Zeit als angenommen: Tischlerei Hansen",
+                      [r["title"] for r in leaddb.notices(c, "f", 9, "finn")[0]])
+        self.assertEqual(pj.takt(c), 0)  # einmal im Monat
+
+    def test_regeln(self):
+        pj, c = self.pj, self.c
+        form = {"kostenlose_tage": "14", "klein_min": "45", "pauschale_klein": "40", "umsetzungstag": "1",
+                "stunden_pro_tag": "5", "annahme_h_monat": "2", "stundensatz": "70", "server_monat": "30",
+                "zeit_pflicht": "", "bereich_kunden": "markt", "bereich_technik": "technik",
+                "checkliste": "Punkt A\n\nPunkt B"}
+        pj.regeln_speichern(c, "oskar", form)
+        r = pj.regeln(c)
+        self.assertEqual((r["kostenlose_tage"], r["zeit_pflicht"], r["checkliste"]), (14, False, ["Punkt A", "Punkt B"]))
+        with self.assertRaises(pj.ProjektError):
+            pj.regeln_speichern(c, "oskar", dict(form, checkliste=""))
+
+
+class ProjektWebTest(WebBasis):
+    def test_seiten_und_rechte(self):
+        from app import crm, projekte
+        c = self.c
+        lid = lead_anlegen(c, "Web Kunde", stage="angebot")
+        crm.set_stage(c, lid, "kunde", author="oskar")
+        pid = projekte.zum_lead(c, lid)["id"]
+        self.addCleanup(lambda: (c.execute("DELETE FROM projekte WHERE id=?", (pid,)), c.commit()))
+        for url in ("/kunden", f"/kunden/{pid}", "/einstellungen/projekte", f"/leads/{lid}", "/mein-tag", "/cockpit"):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+        r = self.post(f"/kunden/{pid}/aktion", {"was": "aenderung", "text": "Bitte Farbe ändern"},
+                      headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"])
+        aid = c.execute("SELECT MAX(id) FROM aenderungen").fetchone()[0]
+        r = self.post("/kunden/aenderung/0", {"aid": aid, "was": "einordnen", "groesse": "klein"},
+                      headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"], r.get_data(as_text=True))
+        self.post("/zeit/start", {"typ": "projekt", "id": pid})
+        self.assertIn("Zeit läuft", self.client.get("/mein-tag").get_data(as_text=True))
+        self.post("/zeit/stopp")
+        self.als("hamza")
+        self.assertEqual(self.client.get("/kunden").status_code, 403)  # Recherche sieht keine Kunden
+        self.assertEqual(self.post("/zeit/start", {"typ": "projekt", "id": pid}).status_code, 403)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -15,6 +15,8 @@
       <span class="txt"><b>Personen</b><span>Anlegen, einladen, sperren, archivieren</span></span><span class="chev">›</span></a></li>
     <li><a href="{{ url_for('personen.rollen') }}"><span class="ico">{{ osi('schloss') }}</span>
       <span class="txt"><b>Rollen und Rechte</b><span>Wer was sehen, bearbeiten und verwalten darf</span></span><span class="chev">›</span></a></li>
+    {% if darf('kunden') %}<li><a href="{{ url_for('kunden.einstellungen') }}"><span class="ico">{{ osi('aufgabe') }}</span>
+      <span class="txt"><b>Projekte</b><span>Abnahme-Checkliste, Änderungswünsche, Abrechnung, Zeit</span></span><span class="chev">›</span></a></li>{% endif %}
     {% if darf('kalender') %}<li><a href="{{ url_for('kalender.einstellungen') }}"><span class="ico">{{ osi('kalender') }}</span>
       <span class="txt"><b>Kalender</b><span>Google-Zugang, Regeln, Wochengespräch</span></span><span class="chev">›</span></a></li>{% endif %}
     <li><a href="{{ url_for('personen.bereiche') }}"><span class="ico">{{ osi('bereich') }}</span>

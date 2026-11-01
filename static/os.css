@@ -306,6 +306,15 @@ body.os-sheet-open .os-page,body.os-sheet-open main.page{transform:scale(.94);bo
 @media (max-width:479px){.os-zielknoepfe{flex-direction:column;gap:6px;align-items:flex-end}}
 .os-link.leise{color:var(--text-secondary);font-weight:500;font-size:13px}
 
+/* ---------------------------------------------------------------- Kunden: Customer Journey */
+.os-journey{display:flex;gap:4px;margin:0;padding:0;list-style:none;overflow-x:auto;scrollbar-width:none}
+.os-journey::-webkit-scrollbar{display:none}
+.os-journey li{flex:none;height:32px;padding:0 12px;border-radius:var(--radius-full);font:500 13px/32px var(--sans);color:var(--text-secondary)}
+.os-journey li.done{color:var(--text-primary)}
+.os-journey li.on{background:var(--ink-solid);color:var(--on-ink);font-weight:600}
+.os-zeit-chip{display:flex;align-items:center;gap:12px;margin:0 0 24px;padding:12px 16px;border-radius:var(--radius-md);background:var(--surface-sunken)}
+.os-zeit-chip .os-txt{flex:1}
+
 /* ---------------------------------------------------------------- Weniger Bewegung */
 @media (prefers-reduced-motion:reduce){
   :root{--t-smooth:150ms;--t-snappy:150ms;--t-bouncy:150ms;--spring-smooth:linear;--spring-snappy:linear;--spring-bouncy:linear}

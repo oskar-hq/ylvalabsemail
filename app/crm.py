@@ -38,6 +38,9 @@ def set_stage(conn, lead_id, stage, author="Team", note=""):
     leaddb.update_lead(conn, lead_id, stage=stage, stage_at=leaddb.now())
     text = f"Stufe: {STAGE_LABELS.get(lead['stage'], 'außerhalb der Pipeline')} → {STAGE_LABELS[stage]}."
     leaddb.add_event(conn, lead_id, "stage", f"{text} {note}".strip(), author=author)
+    if stage == "kunde":  # Firmen-OS: ab hier geht es im Projekt weiter (Customer Journey)
+        from . import projekte
+        projekte.aus_kunde(conn, lead_id, author)
     return True
 
 

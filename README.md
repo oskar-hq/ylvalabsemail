@@ -226,6 +226,16 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
 - **Lernstufen**: Das OS misst die Aufstiegsbedingung (angenommene Leads, Entwürfe ohne große Änderung,
   Termine und begleitete Gespräche) und schlägt den Aufstieg vor; freigeben muss die Person, die führt.
 
+## Kunden und Projekte (Stufe 5)
+
+- **Kunden**: alle Projekte entlang der Customer Journey (beauftragt, Anforderung, Bau, Abnahme, live, Betrieb).
+  Ein Projekt entsteht automatisch, sobald ein Lead im CRM auf „Kunde“ steht.
+- **Projekt**: was jetzt dran ist, mit den Regeln aus den Rollen (Bau erst nach Anforderung, Bestätigung,
+  Schätzung von Finn und Freigabe beider; Abnahme-Checkliste, Oskar hat das letzte Wort). Änderungswünsche mit
+  Einordnen, Schätzen und Abrechnung nach Regel, Zeiterfassung (Start/Stopp, nachtragen), Kosten und Umsatz.
+- **Einstellungen → Projekte**: Checkliste, kostenlose Tage, Grenze für kleine Änderungen, Pauschale,
+  Umsetzungstag, Stundensatz, Serverkosten, Annahme an Stunden je Kunde und Monat.
+
 ## Team: Konten, eigenes CRM, Vorlage, Zahlen
 
 - **Anmelden mit Name und Passwort**. Passwörter liegen nur als scrypt-Hash in der Datenbank, nach Fehlversuchen
@@ -384,6 +394,8 @@ app/google_kalender.py Google OAuth, frei/belegt, Termine mit Meet (ohne Zusatzb
 app/kalender_views.py  Seiten Kalender, Termin, Mein Kalender, Einstellungen → Kalender
 app/kpis.py            KPI-Katalog, Zielwerte, Wochenziele, Agenda, Lernstufen-Messung
 app/cockpit_views.py   Seiten Cockpit, Wochengespräch; Wochenziele, Aufstiege
+app/projekte.py        Projekte, Anforderung, Abnahme, Änderungswünsche, Zeiterfassung, Kosten je Kunde
+app/projekte_views.py  Seiten Kunden, Projekt, Zeiterfassung, Einstellungen → Projekte
 app/scoring.py         Bewertung nach Regeln und Einordnen von Antworten, beides ohne KI
 app/regions.py         Kreise: Grenzen, Statistik je Kreis, Wachstumsregionen
 app/agent.py           Hintergrund-Arbeiter: suchen, bewerten, Antworten lesen, Entwürfe auf Wunsch

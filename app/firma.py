@@ -39,6 +39,7 @@ MODULE = [
     ("aufgaben", "Aufgaben und Anfragen"),
     ("kalender", "Kalender und Termine"),
     ("cockpit", "Zahlen, Ziele und Wochengespräch"),
+    ("kunden", "Kunden, Projekte und Änderungen"),
     ("leads", "Leads und Akquise"),
     ("crm", "CRM und Postfach"),
     ("mailer", "Mailer"),
@@ -60,7 +61,7 @@ EINLADUNG_TAGE = 7  # Standard; einstellbar unter Einstellungen → Personen (kv
 
 GRUENDER = {k: VERWALTEN for k in MODUL_KEYS}
 RECHERCHE = {"aufgaben": BEARBEITEN, "kalender": BEARBEITEN, "cockpit": BEARBEITEN, "leads": BEARBEITEN,
-             "crm": BEARBEITEN, "mailer": BEARBEITEN, "kosten": 0, "protokoll": 0, "einstellungen": 0, "personen": 0}
+             "crm": BEARBEITEN, "mailer": BEARBEITEN, "kunden": 0, "kosten": 0, "protokoll": 0, "einstellungen": 0, "personen": 0}
 
 # Startwerte, laufen genau einmal (leaddb.DATA_MIGRATIONS). Danach wird alles in der App gepflegt.
 SEED = [
