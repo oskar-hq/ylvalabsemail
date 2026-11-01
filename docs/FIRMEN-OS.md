@@ -19,7 +19,10 @@ hier ab und trägt Abweichungen ein.
   ist eingerichtet und in Produktion (4.3). Apple/iCloud und ICS-Abo erst danach.
 - WhatsApp kommt später über Unipile, nicht jetzt.
 
-**Womit der Bau anfängt: Stufe 1** (Abschnitt 8). Der Kalender ist Stufe 3. Für Stufe 1 und 2 wird nichts von
+**Stand des Baus:** Stufe 1 bis 5 sind gebaut. Weiter geht es mit Stufe 6, Übergabe dazu in
+[BAU-UEBERGABE.md](BAU-UEBERGABE.md).
+
+**Womit der Bau anfing: Stufe 1** (Abschnitt 8). Der Kalender ist Stufe 3. Für Stufe 1 und 2 wird nichts von
 Google gebraucht.
 
 **Arbeitsweise für jede Baustufe:**
