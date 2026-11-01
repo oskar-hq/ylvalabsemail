@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Assistent · Einstellungen{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Einstellungen</span>
+    <h1 class="os-title-l">Assistent</h1>
+    <p class="os-sub os-lead">Fragen an die Firmendaten, „Was zuerst?“ auf Mein Tag, Entwürfe für Antworten, Briefings, Case Studys und Angebote. Was an Kunden geht, bleibt ein Entwurf oder läuft über die Freigabe.</p>
+  </header>
+  <dl class="os-kv">
+    <dt>KI-Schlüssel</dt><dd class="{{ 'late' if not schluessel }}">{{ 'Eingetragen' if schluessel else 'Fehlt' }}</dd>
+    <dt>Kosten diesen Monat</dt><dd>{{ eur(monat)|kpi('euro') }}</dd>
+    <dt>Budget</dt><dd><a href="{{ url_for('settings.group', gid='ki') }}">KI und Budget</a></dd>
+  </dl>
+  <p class="os-caption" style="margin-top:12px">Es gelten das Monatsbudget des Teams und das eigene Budget jeder Person (Mein Profil). Ist eines aufgebraucht, fragt der Assistent nicht mehr.</p>
+
+  <form method="post" action="{{ url_for('assistent.einstellungen_speichern') }}" data-os-fetch="reload" style="margin-top:40px">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    {% for k in ['an', 'prioritaeten_ki'] %}
+    <label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px"><span style="margin:0">{{ labels[k][0] }}</span>
+      <span class="os-toggle"><input type="checkbox" name="{{ k }}" value="1" {{ 'checked' if regeln[k] }} {{ 'disabled' if not verwalten }}><span></span></span></label>{% endfor %}
+    <div class="os-grid2">
+      <label class="os-field"><span>{{ labels.modell[0] }}</span><select name="modell" {{ 'disabled' if not verwalten }}>{% for m in modelle %}<option value="{{ m }}" {{ 'selected' if m == regeln.modell }}>{{ m }}</option>{% endfor %}</select></label>
+      <label class="os-field"><span>{{ labels.aufwand[0] }}</span><select name="aufwand" {{ 'disabled' if not verwalten }}>{% for k, l in [('low', 'Niedrig'), ('medium', 'Mittel'), ('high', 'Hoch'), ('xhigh', 'Sehr hoch')] %}<option value="{{ k }}" {{ 'selected' if k == regeln.aufwand }}>{{ l }}</option>{% endfor %}</select></label>
+      <label class="os-field"><span>{{ labels.schritte[0] }}</span><input type="number" name="schritte" min="1" max="20" value="{{ regeln.schritte }}" {{ 'disabled' if not verwalten }}></label>
+      <label class="os-field"><span>{{ labels.angebot_tage[0] }}</span><input type="number" name="angebot_tage" min="1" max="365" value="{{ regeln.angebot_tage }}" {{ 'disabled' if not verwalten }}></label>
+    </div>
+    <label class="os-field"><span>{{ labels.angebot_nummer[0] }} (Platzhalter {jahr} und {nr:03d})</span><input type="text" name="angebot_nummer" value="{{ regeln.angebot_nummer }}" maxlength="40" {{ 'disabled' if not verwalten }}></label>
+    <p class="os-caption">Opus 5.5 ist am genauesten, Sonnet 5.5 halb so teuer, Haiku 5.5 sehr günstig, aber knapper. Mehr Denk-Aufwand heißt genauer und teurer.</p>
+    {% if verwalten %}<button class="os-btn small quiet" style="margin-top:16px">Speichern</button>{% endif %}
+  </form>
+  <ul class="os-list" style="margin-top:40px">
+    <li><a class="os-row" href="{{ url_for('freigaben.einstellungen') }}"><span class="os-ico">{{ i('schloss') }}</span>
+      <span class="os-txt"><b>Freigabe-Stufe für Angebote</b><span>C: verantwortliche Person gibt frei · D: nur persönlich übergeben</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>
+  </ul>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('settings.settings') }}" aria-label="Zurück zu den Einstellungen">{{ i('back') }}</a>
+</div>
+{% endblock %}

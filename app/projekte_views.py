@@ -2,7 +2,7 @@
 Änderungswünsche, Zeiten, Kosten), Zeiterfassung und Einstellungen → Projekte."""
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, session, url_for
 
-from . import firma, projekte
+from . import assistent, firma, projekte
 from .leads_views import db, me
 from .main import SETTINGS, darf, login_required, safe_next
 
@@ -75,6 +75,7 @@ def detail(pid):
                            aenderungen=projekte.aenderungen(c, pid), zeiten=projekte.zeiten(c, pid, 20),
                            kosten=projekte.kosten(c, pid), regeln=projekte.regeln(c),
                            projekt_aufgaben=aufgaben.zum_objekt(c, "projekt", pid),
+                           p_angebote=assistent.angebote(c, projekt_id=pid),
                            laeuft=projekte.laufend(c, me()), abrechnung=projekte.ABRECHNUNG,
                            komm=aufgaben.kommentare(c, "lead", p["lead_id"]), os_personen=firma.aktive_personen(c),
                            verlauf=firma.protokoll(c, objekt=("projekt", pid), limit=25),

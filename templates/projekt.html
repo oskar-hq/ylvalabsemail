@@ -94,6 +94,7 @@
         {% if a.status == 'neu' and (ich_v or verw) %}<button type="button" class="os-link" data-sheet="sheet-einordnen" data-set-aid="{{ a.id }}">Einordnen</button>{% endif %}
         {% if a.status in ('eingeordnet', 'geschaetzt') and (ich_t or verw) %}{% if ich_t %}<button type="button" class="os-link" data-sheet="sheet-aschaetzen" data-set-aid="{{ a.id }}">Schätzen</button>{% endif %}
           <form method="post" action="{{ url_for('kunden.aenderung_aktion', aid=a.id) }}" data-os-fetch="reload" style="display:inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="os-link" name="was" value="erledigt">Erledigt</button></form>{% endif %}
+        {% if a.groesse == 'gross' and a.status in ('eingeordnet', 'geschaetzt') and (ich_v or verw) %}<form method="post" action="{{ url_for('angebote.neu') }}" data-os-fetch="ziel" data-os-warten="Schreibt das Angebot …" style="display:inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="lead_id" value="{{ p.lead_id }}"><input type="hidden" name="aenderung_id" value="{{ a.id }}"><input type="hidden" name="ki" value="{{ '1' if assistent_an() and darf('assistent', 2) else '0' }}"><input type="hidden" name="next" value="{{ hier }}"><button class="os-link">Angebot</button></form>{% endif %}
         {% if a.status not in ('erledigt', 'abgelehnt') %}<form method="post" action="{{ url_for('kunden.zeit_start') }}" data-os-fetch="reload" style="display:inline"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="typ" value="aenderung"><input type="hidden" name="id" value="{{ a.id }}"><input type="hidden" name="next" value="{{ hier }}"><button class="os-link leise">Zeit starten</button></form>{% endif %}
       </span></li>
     {% else %}<li class="os-empty">Keine Wünsche.</li>{% endfor %}</ul>
@@ -201,6 +202,31 @@
   <section class="os-section">
     <h2 class="os-headline">Offene Aufgaben</h2>
     <ul class="os-list">{% for a in projekt_aufgaben %}{{ aufgabe_zeile(a, me, loop.index0, True, hier) }}{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  {% if p_angebote %}
+  <section class="os-section" id="angebote">
+    <h2 class="os-headline">Angebote</h2>
+    <ul class="os-list">{% for x in p_angebote %}<li><a class="os-row" href="{{ url_for('angebote.detail', aid=x.id) }}"><span class="os-ico">{{ i('aufgabe') }}</span>
+      <span class="os-txt"><b>{{ x.nummer or 'Entwurf' }} · {{ x.titel }}</b><span>{{ x.status_label }}{% if x.summe %} · {{ x.summe|kpi('euro') }}{% endif %}</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  {% if p.status in ('live', 'betrieb', 'beendet') or p.case_study %}
+  <section class="os-section" id="case-study">
+    <h2 class="os-headline">Case Study</h2>
+    <p class="os-sub">Nur intern, bis der Kunde zugestimmt hat. Zahlen vorher/nachher beim Kunden erheben.</p>
+    <form method="post" action="{{ url_for('assistent.case_study_speichern', pid=p.id) }}" data-os-fetch="reload" style="margin-top:16px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <label class="os-field"><span class="sr-only">Case Study</span><textarea name="case_study" rows="10" maxlength="20000" placeholder="Titel, Ausgangslage, Lösung, Ergebnis">{{ p.case_study or '' }}</textarea></label>
+      <button class="os-btn small quiet">Speichern</button>
+    </form>
+    {% if darf('assistent', 2) and assistent_an() %}
+    <form method="post" action="{{ url_for('assistent.entwurf_case_study', pid=p.id) }}" data-os-fetch="reload" data-os-warten="Schreibt die Case Study …" style="margin-top:12px"
+      {% if p.case_study %}data-confirm="Der Entwurf ersetzt den Text oben. Weiter?"{% endif %}>
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="os-link">Entwurf vom Assistenten</button></form>
+    {% endif %}
   </section>
   {% endif %}
 

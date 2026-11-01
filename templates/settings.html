@@ -25,6 +25,8 @@
       <span class="txt"><b>Finanzen</b><span>Firmendaten für Rechnungen, Umsatzsteuer, Nummernkreis, Mailtext, Geld-Regel</span></span><span class="chev">›</span></a></li>{% endif %}
     {% if darf('kalender') %}<li><a href="{{ url_for('kalender.einstellungen') }}"><span class="ico">{{ osi('kalender') }}</span>
       <span class="txt"><b>Kalender</b><span>Google-Zugang, Regeln, Wochengespräch</span></span><span class="chev">›</span></a></li>{% endif %}
+    {% if darf('assistent') %}<li><a href="{{ url_for('assistent.einstellungen') }}"><span class="ico">{{ osi('check') }}</span>
+      <span class="txt"><b>Assistent</b><span>KI-Fragen, „Was zuerst?“, Entwürfe, Modell, Angebote</span></span><span class="chev">›</span></a></li>{% endif %}
     {% if darf('entscheidungen') %}<li><a href="{{ url_for('freigaben.einstellungen') }}"><span class="ico">{{ osi('check') }}</span>
       <span class="txt"><b>Freigaben und Entscheidungen</b><span>Freigabe-Stufen A–D, Entscheidungsrechte, Notfall-Zuständigkeit</span></span><span class="chev">›</span></a></li>{% endif %}
     <li><a href="{{ url_for('personen.bereiche') }}"><span class="ico">{{ osi('bereich') }}</span>

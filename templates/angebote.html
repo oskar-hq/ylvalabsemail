@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Angebote · Ylva Labs{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Kunden</span>
+    <h1 class="os-title-l">Angebote</h1>
+    <p class="os-sub os-lead">Entwürfe entstehen an der Akte oder am Projekt. Raus geht ein Angebot nur über die Freigabe.</p>
+  </header>
+  <div class="os-chips" aria-label="Status">
+    <a href="{{ url_for('angebote.liste') }}" class="{{ 'on' if not status }}">Alle</a>
+    {% for k, l in labels.items() %}<a href="{{ url_for('angebote.liste', status=k) }}" class="{{ 'on' if status == k }}">{{ l }}</a>{% endfor %}
+  </div>
+  {% if angebote %}
+  <ul class="os-list anim">{% for a in angebote %}
+    <li style="--i:{{ loop.index0 }}"><a class="os-row" href="{{ url_for('angebote.detail', aid=a.id) }}">
+      <span class="os-ico">{{ i('protokoll') }}</span>
+      <span class="os-txt"><b>{{ a.kunde }} · {{ a.titel }}</b><span>{{ a.nummer or 'ohne Nummer' }} · {{ a.status_label }} · {{ a.erstellt_am|kurzdatum }}</span></span>
+      <span class="os-end" style="flex-direction:column;align-items:flex-end;gap:2px">{{ a.summe|kpi('euro') }}{% if a.monatlich %}<span class="os-caption">+ {{ a.monatlich|kpi('euro') }} / Monat</span>{% endif %}</span>
+      <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
+  </ul>
+  {% else %}<p class="os-empty">Keine Angebote{% if status %} mit diesem Status{% endif %}.</p>{% endif %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('kunden.uebersicht') }}" aria-label="Zu Kunden">{{ i('back') }}</a>
+</div>
+{% endblock %}

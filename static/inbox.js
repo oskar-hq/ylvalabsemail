@@ -25,6 +25,19 @@
       try { await post(`/crm/postfach/${id}/antwort`, { text: form.text.value, subject: form.subject.value, von: form.von?.value || '', postfach: form.postfach?.value || '' }); location.reload(); }
       catch (err) { alert(err.message); btn.disabled = false; btn.textContent = 'Antworten'; }
     });
+    const entwurf = document.getElementById('entwurfAssistent');
+    entwurf?.addEventListener('click', async () => {
+      const text = entwurf.textContent;
+      entwurf.disabled = true; entwurf.textContent = 'Schreibt …';
+      try {
+        const r = await post(entwurf.dataset.url);
+        if (r.betreff) form.subject.value = r.betreff;
+        form.text.value = r.text;
+        form.text.focus();
+        if (window.osToast) window.osToast(r.message);
+      } catch (err) { if (window.osToast) window.osToast(err.message, true); else alert(err.message); }
+      finally { entwurf.disabled = false; entwurf.textContent = text; }
+    });
     root.querySelectorAll('[data-wunsch]').forEach((b) => b.addEventListener('click', async () => {
       b.disabled = true;
       try { await post(`/crm/postfach/nachricht/${b.dataset.wunsch}/wunsch`, { ja: b.dataset.ja }); location.reload(); }

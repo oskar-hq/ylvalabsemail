@@ -26,13 +26,16 @@ MODELS = {
 MODELS["websuche"] = _env("AI_MODEL_SUCHE", "claude-opus-5-5")  # findet Betriebe im Web, auf Instagram, LinkedIn
 MODELS["chat"] = MODELS["entwurf"]
 MODELS["erinnerung"] = MODELS["lernen"]
+MODELS["assistent"] = "claude-opus-5-5"  # Firmen-OS Stufe 10; änderbar unter Einstellungen → Assistent
 # Frühere Stufen, nur noch für die Anzeige alter Kosten
 STAGE_LABELS = {"entwurf": "Entwurf schreiben", "chat": "Chat / Überarbeiten", "lernen": "Lernen (Stil)",
                 "erinnerung": "Erinnerung schreiben", "websuche": "Betriebe im Web suchen", "vorpruefung": "Vorprüfung (früher)",
-                "analyse": "Analyse (früher)", "antwort": "Antworten einordnen (früher)"}
+                "analyse": "Analyse (früher)", "antwort": "Antworten einordnen (früher)",
+                "assistent": "Assistent (Fragen, Prioritäten, Entwürfe)"}
 EFFORT = {"entwurf": _env("AI_EFFORT", "high"), "lernen": _env("AI_EFFORT_ANALYSE", "medium")}
 EFFORT.update(chat=EFFORT["entwurf"], erinnerung=EFFORT["lernen"], websuche=_env("AI_EFFORT_SUCHE", "medium"))
-MAX_TOKENS = {"entwurf": 16000, "chat": 16000, "lernen": 12000, "erinnerung": 8000}
+MAX_TOKENS = {"entwurf": 16000, "chat": 16000, "lernen": 12000, "erinnerung": 8000, "assistent": 16000}
+EFFORT["assistent"] = "medium"  # Standard auf Opus 5.5; änderbar unter Einstellungen → Assistent
 
 # US-Dollar pro 1 Mio. Tokens (Eingabe, Ausgabe), Stand der Anthropic-Preisliste. Bei Preisänderungen hier anpassen.
 PRICES = {
@@ -150,6 +153,51 @@ def _call(stage, brain, prompt, schema, lead_id=None):
         return json.loads(text)
     except json.JSONDecodeError as exc:
         raise AIError("Die KI hat kein gültiges Ergebnis geliefert.") from exc
+
+
+def anfrage(stage, model, effort, system, messages, tools=None, schema=None, max_tokens=None, lead_id=None):
+    """Eine Anfrage an die KI mit eigenem Systemtext (für den Assistenten): adaptives Denken, Aufwand, auf Opus und
+    Fable mit serverseitigem Ersatzmodell bei Ablehnung. Meldet die Kosten an `on_usage` und gibt die Antwort zurück.
+    Ablehnung und abgeschnittene Antworten werden zu AIError, `tool_use` und `pause_turn` gibt sie zurück."""
+    params = dict(model=model, max_tokens=max_tokens or MAX_TOKENS.get(stage, 16000), messages=messages,
+                  system=[{"type": "text", "text": system, "cache_control": {"type": "ephemeral"}}])
+    if tools:
+        params["tools"] = tools
+    if not model.startswith("claude-haiku-4"):
+        params["thinking"] = {"type": "adaptive"}
+        params["output_config"] = {"effort": effort}
+    if schema:
+        params.setdefault("output_config", {})["format"] = {"type": "json_schema", "schema": schema}
+    try:
+        if model.startswith(("claude-opus", "claude-fable")):
+            response = client().beta.messages.create(betas=[FALLBACK_BETA], fallbacks="default", **params)
+        else:
+            response = client().messages.create(**params)
+    except anthropic.AuthenticationError as exc:
+        raise AIError("Der API-Schlüssel (ANTHROPIC_API_KEY) wird abgelehnt.") from exc
+    except anthropic.PermissionDeniedError as exc:
+        raise AIError(f"Keine Berechtigung für das Modell {model}: {exc.message}") from exc
+    except anthropic.RateLimitError as exc:
+        raise AIError("Zu viele Anfragen an die KI. Bitte in ein paar Minuten erneut fragen.") from exc
+    except anthropic.BadRequestError as exc:
+        raise AIError(f"Die KI hat die Anfrage abgelehnt: {exc.message}") from exc
+    except anthropic.APIStatusError as exc:
+        raise AIError(f"Fehler bei der KI ({exc.status_code}). Bitte später erneut versuchen.") from exc
+    except anthropic.APIConnectionError as exc:
+        raise AIError("Die KI ist gerade nicht erreichbar (Netzwerk).") from exc
+    tokens, _ = _usage(response)
+    served = getattr(response, "model", None) or model
+    if on_usage:
+        on_usage(stage, served, tokens, cost_usd(served, tokens), lead_id)
+    if response.stop_reason == "refusal":
+        raise AIError("Die KI hat diese Anfrage abgelehnt.")
+    if response.stop_reason == "max_tokens":
+        raise AIError("Die Antwort der KI war zu lang und wurde abgeschnitten.")
+    return response
+
+
+def text_von(response):
+    return "\n\n".join(b.text for b in response.content if getattr(b, "type", "") == "text" and b.text).strip()
 
 
 def _obj(props, required=None):

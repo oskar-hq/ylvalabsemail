@@ -8,7 +8,7 @@ from datetime import datetime
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from . import agent, ai, aufgaben, branchentest, claude_research, kalender, kpis, projekte, crm, emailbuild, firma, known, leaddb, mailbox, niches, pixel, reports, schedule, scoring, team, websearch, webpush
+from . import agent, ai, assistent, aufgaben, branchentest, claude_research, kalender, kpis, projekte, crm, emailbuild, firma, known, leaddb, mailbox, niches, pixel, reports, schedule, scoring, team, websearch, webpush
 from .main import DB_PATH, ROOT, SETTINGS, login_required
 
 bp = Blueprint("leads", __name__)
@@ -478,6 +478,7 @@ def detail(lead_id):
                            testbranchen=branchentest.branchen(db()), kanaele=branchentest.KANAELE,
                            pruefung=branchentest.offene_pruefung(db(), lead_id),
                            lead_termine=kalender.zum_lead(db(), lead_id), projekt=projekte.zum_lead(db(), lead_id),
+                           lead_angebote=assistent.angebote(db(), lead_id=lead_id),
                            demo=SETTINGS["DEMO_MODE"])
 
 

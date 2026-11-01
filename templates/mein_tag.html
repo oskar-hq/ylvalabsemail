@@ -43,6 +43,24 @@
   </section>
   {% endif %}
 
+  {% if was_zuerst or was_zuerst_ki %}
+  <section class="os-section" id="was-zuerst">
+    <h2 class="os-headline">Was zuerst?</h2>
+    {% if was_zuerst_ki and was_zuerst_ki.reihenfolge %}
+    <p class="os-sub">Vom Assistenten geordnet{% if was_zuerst_ki.hinweis %}. {{ was_zuerst_ki.hinweis }}{% endif %}</p>
+    <ol class="os-list os-prio">{% for x in was_zuerst_ki.reihenfolge %}<li><a class="os-row" href="{{ x.url }}"><span class="os-nr">{{ loop.index }}</span>
+      <span class="os-txt"><b>{{ x.titel }}</b><span>{{ x.warum_ki }}</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}</ol>
+    {% else %}
+    <p class="os-sub">Nach festen Regeln: Notfälle, Freigaben, Termine, Anfragen, dann Fälliges.</p>
+    <ol class="os-list os-prio">{% for x in was_zuerst %}<li><a class="os-row" href="{{ x.url }}"><span class="os-nr">{{ loop.index }}</span>
+      <span class="os-txt"><b>{{ x.titel }}</b><span>{{ x.warum }}</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}</ol>
+    {% endif %}
+    {% if was_zuerst_knopf %}<form method="post" action="{{ url_for('assistent.was_zuerst') }}" data-os-fetch="reload" data-os-warten="Ordnet deinen Tag …" class="os-btns" style="margin-top:12px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('aufgaben.mein_tag') }}#was-zuerst">
+      <button class="os-btn small quiet">{{ 'Neu ordnen lassen' if was_zuerst_ki else 'Vom Assistenten ordnen lassen' }}</button></form>{% endif %}
+  </section>
+  {% endif %}
+
   {% if ergebnisse %}
   <section class="os-section">
     <h2 class="os-headline">Aus dem Kalender</h2>

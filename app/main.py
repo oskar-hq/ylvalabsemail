@@ -283,7 +283,7 @@ MODUL_JE_SEITE = {"compose": "mailer", "preview": "mailer", "send": "mailer", "u
 MODUL_JE_BEREICH = {"leads": "leads", "crm": "crm", "settings": "einstellungen", "aufgaben": "aufgaben",
                     "personen": "personen", "branchentest": "leads", "kalender": "kalender", "cockpit": "cockpit",
                     "kunden": "kunden", "freigaben": "aufgaben", "finanzen": "finanzen",
-                    "posteingang": "einstellungen"}
+                    "posteingang": "einstellungen", "assistent": "assistent", "angebote": "kunden"}
 
 
 def modul_der_seite(endpoint):
@@ -932,6 +932,10 @@ app.register_blueprint(posteingang_bp)
 from .portal_views import bp as portal_bp  # noqa: E402  Kunden-Bereich: eigene Anmeldung, kein Team-Modul
 
 app.register_blueprint(portal_bp)
+from .assistent_views import bp as assistent_bp, bp_angebote  # noqa: E402
+
+app.register_blueprint(assistent_bp)
+app.register_blueprint(bp_angebote)
 
 
 @app.errorhandler(403)

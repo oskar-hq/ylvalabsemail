@@ -1,6 +1,6 @@
 # Ylva Labs Firmen-OS – Bauplan
 
-**Stand:** 01.11.2026 · Stufe 1 bis 9 gebaut, als Nächstes Stufe 10 (Assistent) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
+**Stand:** 01.11.2026 · alle zehn Baustufen gebaut · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
 
 Aus dem Ylva Labs Mailer (Akquise, CRM, Mailer) wird das Betriebssystem der Firma. Diese Datei hält fest, **was**
 gebaut werden soll und **nach welchen Prinzipien**, damit alle, die am Code arbeiten (Menschen und KI), dasselbe
@@ -19,7 +19,7 @@ hier ab und trägt Abweichungen ein.
   ist eingerichtet und in Produktion (4.3). Apple/iCloud und ICS-Abo erst danach.
 - WhatsApp kommt später über Unipile, nicht jetzt.
 
-**Stand des Baus:** Stufe 1 bis 9 sind gebaut. Weiter geht es mit Stufe 10, Übergabe dazu in
+**Stand des Baus:** Stufe 1 bis 10 sind gebaut. Was danach kommt (Ausbau, offene Punkte), steht in
 [BAU-UEBERGABE.md](BAU-UEBERGABE.md).
 
 **Womit der Bau anfing: Stufe 1** (Abschnitt 8). Der Kalender ist Stufe 3. Für Stufe 1 und 2 wird nichts von
@@ -715,8 +715,37 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
     KPIs „Antwortzeit auf Kunden“ (Stunden bis zu unserer nächsten Nachricht, alle Kanäle) und „Wartet auf unsere
     Antwort“ im Katalog.
   - Das Postfach im CRM behält seine bisherige Gestaltung (noch nicht auf `os.css` umgestellt).
-- [ ] **Stufe 10 – Assistent**
+- [x] **Stufe 10 – Assistent** (gebaut 01.11.2026, Abweichungen unten)
   KI-Fragen an die Firmendaten, Vorschläge für Prioritäten, Entwürfe für Angebote, Briefings und Case Studys.
+  *Umsetzung und Abweichungen* (Umfang mit Oskar abgestimmt: alles, Werkzeuge, Prioritäten auf Knopfdruck, Angebote
+  mit PDF und Freigabe):
+  - `app/assistent.py`, Seiten in `app/assistent_views.py`; neues Rechte-Modul „Assistent (KI)“ (Gründer Verwalten,
+    Recherche Bearbeiten). Tabellen `assistent_fragen` (Verlauf mit Quellen, Kosten, Fehler) und `angebote`; Spalte
+    `projekte.case_study`. KI-Aufruf `ai.anfrage` (Stufe „assistent“): Claude Opus 5.5, adaptives Denken, Aufwand
+    einstellbar, serverseitiges Ersatzmodell bei Ablehnung, Kosten je Person in `ai_usage`.
+  - **Fragen an die Firmendaten** (`/assistent`): Werkzeug-Schleife (Tool Use, strikte Schemas) mit `suche`, `akte`,
+    `projekt`, `aufgaben`, `termine`, `kennzahlen`, `rechnungen`, `offene_punkte`. Jedes Werkzeug prüft `firma.darf`
+    der fragenden Person; fehlt das Recht, bekommt das Modell „Keine Berechtigung“ als Fehler-Ergebnis. Antworten mit
+    Links nur auf Seiten der App, Quellen als Chips, Verlauf je Person (Verwalten: alle im Team), jede Frage im
+    Firmen-Protokoll. Der Assistent verschickt und ändert nichts.
+  - **Was zuerst?** auf Mein Tag: immer eine Reihenfolge nach festen Regeln ohne KI (Notfälle, Freigaben, Termine
+    heute, Anfragen, Überfälliges, Heutiges, Woche). Auf Knopfdruck ordnet die KI die Liste neu und begründet je
+    Punkt (nur Punkte aus der Liste); das Ergebnis bleibt für den Tag stehen.
+  - **Entwürfe:** Antwort im Gespräch (Knopf „Entwurf vom Assistenten“ füllt Betreff und Text, gesendet wird von
+    Hand), Briefing am Termin (landet in den Briefing-Notizen), Case Study am Projekt (Abschnitt „Case Study“,
+    bearbeitbar; Zahlen nur aus den Daten, Fehlendes unter „Noch zu klären“).
+  - **Angebote** (`/angebote`, Rechte-Modul „Kunden“): anlegen an der Akte, am Projekt oder an einer großen Änderung,
+    mit oder ohne KI-Text. Preise nie von der KI: Positionen aus Einmalbetrag/Pauschale des Projekts oder Schätzung ×
+    Stundensatz, sonst 0 € zum Ausfüllen. Ohne Aufwandsschätzung der Technik keine Freigabe (nur die Technik trägt
+    sie ein). Freigabe-Stufe „angebot“ jetzt einstellbar: C (verantwortliche Person gibt frei → Nummer
+    `A-{jahr}-{nr:03d}`, PDF, Dokument im Kunden-Bereich, Mail mit PDF aus dem Akquise-Postfach, Akte auf „Angebot“)
+    oder D (nur PDF und Aufgabe „persönlich übergeben“). Danach „Angenommen“ (→ Kunde, Preise ins Projekt) oder
+    „Abgelehnt“ mit Grund. Klappt der Mailversand nicht, gilt das Angebot als freigegeben und wird persönlich
+    übergeben (Meldung an die Person).
+  - **Einstellungen → Assistent:** ein/aus, „Was zuerst?“ ein/aus, Modell (Opus/Sonnet/Haiku 5.5), Denk-Aufwand,
+    höchstens Werkzeug-Schritte, Gültigkeit und Nummernformat der Angebote. Budget wie bisher unter KI und Budget
+    (Team) und im Profil (je Person); ist eines aufgebraucht, fragt der Assistent nicht.
+  - Abweichung: Prioritäten nicht automatisch jeden Morgen (nur auf Knopfdruck, Kosten nur beim Klick).
 
 Die Reihenfolge 2 und 3 kann getauscht werden, je nachdem, was im Alltag zuerst fehlt.
 

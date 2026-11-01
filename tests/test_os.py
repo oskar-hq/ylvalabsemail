@@ -1300,7 +1300,7 @@ class FreigabeZentraleTest(unittest.TestCase):
         s = f.stufen(c)
         self.assertEqual((s["termin_einladung"], s["frist_h"]), ("B", 24))
         self.assertEqual(s["erstkontakt"], "C")  # fest: nie ohne Freigabe (§ 7 UWG, hart im Code)
-        self.assertEqual(s["angebot"], "C")  # kommt erst mit Stufe 8
+        self.assertEqual(s["angebot"], "D")  # seit Stufe 10 einstellbar (C oder D)
         self.assertTrue(any(e["quelle"] == "regel" and "Freigabe-Stufen" in e["titel"]
                             for e in f.entscheidungen(c)))  # Regeländerung steht im Entscheidungs-Log
         # Stufe B: angekündigt, nicht verschickt; nach der Frist geht es ohne Einspruch raus
@@ -2080,3 +2080,252 @@ class PosteingangWebTest(WebBasis):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+# ---------------------------------------------------------------- Stufe 10: Assistent und Angebote
+
+class FakeClaude:
+    """Spielt die Claude-API nach: gibt vorbereitete Antworten der Reihe nach zurück und merkt sich die Anfragen."""
+
+    def __init__(self, antworten):
+        from types import SimpleNamespace as NS
+        self.NS = NS
+        self.antworten = list(antworten)
+        self.anfragen = []
+        self.messages = NS(create=self._create)
+        self.beta = NS(messages=NS(create=self._create))
+
+    def _create(self, **params):
+        import copy
+        self.anfragen.append(copy.deepcopy({k: v for k, v in params.items() if k != "messages"})
+                             | {"messages": list(params["messages"])})
+        return self.antworten.pop(0)
+
+    def antwort(self, *bloecke, stop="end_turn"):
+        NS = self.NS
+        content = []
+        for b in bloecke:
+            if isinstance(b, str):
+                content.append(NS(type="text", text=b))
+            else:
+                content.append(NS(type="tool_use", id=b[0], name=b[1], input=b[2]))
+        return NS(content=content, stop_reason=stop, model="claude-opus-5-5",
+                  usage=NS(input_tokens=1000, output_tokens=200, cache_creation_input_tokens=0, cache_read_input_tokens=0))
+
+
+class AssistentTest(unittest.TestCase):
+    def setUp(self):
+        from unittest import mock
+        from app import ai, assistent
+        self.ai, self.a = ai, assistent
+        self.c = frische_db()
+        self.lid = lead_anlegen(self.c, "Tischlerei Hansen", stage="gespraech", owner="oskar",
+                                email="info@hansen.example", city="Kiel")
+        env = mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": "test"})
+        env.start()
+        self.addCleanup(env.stop)
+
+    def fake(self, *antworten):
+        from unittest import mock
+        f = FakeClaude([])
+        f.antworten = [a(f) if callable(a) else a for a in antworten]
+        p = mock.patch.object(self.ai, "client", return_value=f)
+        p.start()
+        self.addCleanup(p.stop)
+        return f
+
+    def test_bereit_ohne_schluessel_und_ausgeschaltet(self):
+        a = self.a
+        self.assertEqual(a.bereit(self.c, "oskar"), (True, None))
+        from unittest import mock
+        with mock.patch.dict(os.environ, {"ANTHROPIC_API_KEY": ""}):
+            ok, warum = a.bereit(self.c, "oskar")
+            self.assertFalse(ok)
+            self.assertIn("KI-Schlüssel", warum)
+        a.regeln_speichern(self.c, "oskar", {"modell": "claude-sonnet-5-5", "aufwand": "low", "schritte": "4",
+                                             "angebot_tage": "21", "angebot_nummer": "A-{jahr}-{nr:03d}"})
+        r = a.regeln(self.c)
+        self.assertEqual((r["an"], r["modell"], r["aufwand"], r["schritte"], r["angebot_tage"]),
+                         (False, "claude-sonnet-5-5", "low", 4, 21))
+        with self.assertRaises(a.AssistentError):
+            a.fragen(self.c, "oskar", "Was ist offen?")
+        with self.assertRaises(a.AssistentError):
+            a.regeln_speichern(self.c, "oskar", {"an": "1", "modell": "gpt-9", "aufwand": "low", "schritte": "4",
+                                                 "angebot_tage": "21", "angebot_nummer": "A-{nr}"})
+
+    def test_frage_mit_werkzeugen_und_quellen(self):
+        a = self.a
+        f = self.fake(lambda f: f.antwort("Ich suche.", ("t1", "suche", {"stichwort": "Hansen"}), stop="tool_use"),
+                      lambda f: f.antwort(("t2", "akte", {"lead_id": self.lid}), stop="tool_use"),
+                      lambda f: f.antwort(f"Die [Tischlerei Hansen](/leads/{self.lid}) ist im Gespräch."))
+        fid = a.fragen(self.c, "oskar", "Wie steht es um Hansen?")
+        eintrag = a.verlauf(self.c, "oskar")[0]
+        self.assertEqual(eintrag["id"], fid)
+        self.assertIn("im Gespräch", eintrag["antwort"])
+        self.assertEqual(eintrag["quellen"], [{"titel": "Tischlerei Hansen", "url": f"/leads/{self.lid}"}])
+        self.assertEqual(len(f.anfragen), 3)
+        erste = f.anfragen[0]
+        self.assertEqual(erste["model"], "claude-opus-5-5")
+        self.assertEqual(erste["thinking"], {"type": "adaptive"})
+        self.assertEqual(erste["fallbacks"], "default")
+        self.assertTrue(all(t["strict"] for t in erste["tools"]))
+        # Werkzeug-Ergebnis geht mit der passenden ID zurück, die Assistenten-Antwort vollständig davor
+        letzte = f.anfragen[2]["messages"]
+        self.assertEqual(letzte[-2]["role"], "assistant")
+        self.assertEqual(letzte[-1]["content"][0]["tool_use_id"], "t2")
+        self.assertIn("Tischlerei Hansen", letzte[-1]["content"][0]["content"])
+        prot = firma.protokoll(self.c, limit=5)
+        self.assertTrue(any(p["art"] == "assistent" for p in prot))
+
+    def test_werkzeuge_halten_die_rechte_ein(self):
+        a = self.a
+        text, quellen, fehler = a.werkzeug(self.c, "hamza", "rechnungen", {"status": ""})
+        self.assertTrue(fehler)
+        self.assertIn("Keine Berechtigung", text)
+        _t, _q, fehler = a.werkzeug(self.c, "oskar", "rechnungen", {"status": ""})
+        self.assertFalse(fehler)
+        _t, _q, fehler = a.werkzeug(self.c, "oskar", "gibtsnicht", {})
+        self.assertTrue(fehler)
+        # Im Gespräch: der Fehler geht als is_error ans Modell, die Antwort kommt trotzdem
+        f = self.fake(lambda f: f.antwort(("t1", "rechnungen", {"status": ""}), stop="tool_use"),
+                      lambda f: f.antwort("Das darfst du nicht sehen."))
+        a.fragen(self.c, "hamza", "Welche Rechnungen sind offen?")
+        ergebnis = f.anfragen[1]["messages"][-1]["content"][0]
+        self.assertTrue(ergebnis["is_error"])
+
+    def test_fehler_der_ki_wird_gespeichert(self):
+        a = self.a
+        self.fake(lambda f: f.antwort("", stop="refusal"))
+        with self.assertRaises(a.AssistentError):
+            a.fragen(self.c, "oskar", "Irgendwas?")
+        self.assertEqual(a.verlauf(self.c, "oskar")[0]["status"], "fehler")
+
+    def test_reihenfolge_und_ki_prioritaeten(self):
+        a = self.a
+        aufgaben.anlegen(self.c, "oskar", "Steuer vorbereiten", "markt", GESTERN, person="oskar")
+        aufgaben.anlegen(self.c, "oskar", "Webseite lesen", "markt", HEUTE, person="oskar")
+        liste = a.reihenfolge(self.c, "oskar")
+        titel = [x["titel"] for x in liste]
+        self.assertLess(titel.index("Steuer vorbereiten"), titel.index("Webseite lesen"))
+        nr = {x["titel"]: x["nr"] for x in liste}
+        import json as _j
+        self.fake(lambda f: f.antwort(_j.dumps({"reihenfolge": [{"nr": nr["Webseite lesen"], "warum": "Schnell erledigt."},
+                                                               {"nr": 99, "warum": "erfunden"}], "hinweis": "Nichts."})))
+        ergebnis, hinweis = a.prioritaeten_ki(self.c, "oskar")
+        self.assertEqual([x["titel"] for x in ergebnis], ["Webseite lesen"])  # erfundene Nummer fällt raus
+        self.assertEqual(a.letzte_prioritaeten(self.c, "oskar")["reihenfolge"][0]["warum_ki"], "Schnell erledigt.")
+
+    def test_entwurf_antwort_braucht_nachricht(self):
+        a = self.a
+        with self.assertRaises(a.AssistentError):
+            a.entwurf_antwort(self.c, "oskar", self.lid)
+        lead = leaddb.get_lead(self.c, self.lid)
+        crm.add_event(self.c, self.lid, "reply", "Tischlerei Hansen", "Was kostet das?") if hasattr(crm, "add_event") \
+            else None
+        from app import agent
+        agent.record_reply(self.c, lead, "Was kostet das ungefähr?", "Tischlerei Hansen", "Ihre Mail",
+                           "info@hansen.example", "<m1@x>", what="Antwort", direction="in") \
+            if "direction" in agent.record_reply.__code__.co_varnames else self.c.execute(
+                "INSERT INTO messages (lead_id, direction, at, subject, text, from_addr) VALUES (?,?,?,?,?,?)",
+                (self.lid, "in", HEUTE + "T09:00", "Ihre Mail", "Was kostet das ungefähr?", "info@hansen.example"))
+        import json as _j
+        self.fake(lambda f: f.antwort(_j.dumps({"betreff": "Re: Ihre Mail", "text": "Gern im Gespräch."})))
+        e = a.entwurf_antwort(self.c, "oskar", self.lid)
+        self.assertEqual(e["betreff"], "Re: Ihre Mail")
+
+    def test_angebot_ablauf_c_und_d(self):
+        a, c = self.a, self.c
+        with self.assertRaises(a.AssistentError):
+            a.angebot_anlegen(c, "hamza", self.lid, mit_ki=False)  # kein Kunden-Recht
+        aid = a.angebot_anlegen(c, "oskar", self.lid, mit_ki=False)
+        x = a.angebot_get(c, aid)
+        self.assertEqual((x["status"], x["email"], x["ki"]), ("entwurf", "info@hansen.example", 0))
+        with self.assertRaises(a.AssistentError):
+            a.zur_freigabe(c, "oskar", aid)  # ohne Schätzung
+        with self.assertRaises(a.AssistentError):
+            a.schaetzung_setzen(c, "oskar", aid, "10")  # nur die Technik schätzt
+        a.schaetzung_setzen(c, "finn", aid, "12,5")
+        with self.assertRaises(a.AssistentError):
+            a.zur_freigabe(c, "oskar", aid)  # Beträge 0 und kein Text
+        a.angebot_bearbeiten(c, "oskar", aid, "Anfragen sortieren", "Ausgangslage\nViele Mails.",
+                             [{"text": "Einrichtung", "betrag": "4.500"}, {"text": "Betrieb", "betrag": "149,50",
+                                                                           "monatlich": True}, {"text": "", "betrag": ""}])
+        x = a.angebot_get(c, aid)
+        self.assertEqual((x["summe"], x["monatlich"], len(x["positionen"])), (4500.0, 149.5, 2))
+        a.zur_freigabe(c, "oskar", aid)
+        f = c.execute("SELECT * FROM freigaben WHERE art='angebot'").fetchone()
+        self.assertEqual((f["stufe"], f["pruefer"], f["status"]), ("C", "oskar", "offen"))
+        from app import freigaben
+        self.assertTrue(any(o["art"] == "angebot" for o in freigaben.offen(c, "oskar")))
+        # Ohne Postfach: freigegeben, aber nicht verschickt → von Hand übergeben
+        tmp = tempfile.mkdtemp()
+        x = a.entscheiden(c, "oskar", aid, True, data_dir=tmp)
+        jahr = date.today().year
+        self.assertEqual(x["nummer"], f"A-{jahr}-001")
+        self.assertIn(x["status"], ("versendet", "uebergeben"))
+        self.assertTrue(a.pdf_bytes(c, aid).startswith(b"%PDF"))
+        self.assertTrue(a.pfad(c, aid, tmp).exists())
+        self.assertEqual(leaddb.get_lead(c, self.lid)["stage"], "angebot")
+        a.ergebnis(c, "oskar", aid, True)
+        self.assertEqual(leaddb.get_lead(c, self.lid)["stage"], "kunde")
+        from app import projekte
+        p = projekte.zum_lead(c, self.lid)
+        self.assertEqual((p["preis_einmal"], p["pauschale_monat"]), (4500.0, 149.5))
+        # Stufe D: nur persönlich übergeben, mit Aufgabe
+        freigaben.stufen_speichern(c, "oskar", {"angebot": "D"})
+        aid2 = a.angebot_anlegen(c, "oskar", self.lid, mit_ki=False)
+        a.schaetzung_setzen(c, "finn", aid2, "3")
+        a.angebot_bearbeiten(c, "oskar", aid2, "Zusatz", "Text", [{"text": "Zusatz", "betrag": "900"}])
+        a.zur_freigabe(c, "oskar", aid2)
+        fid = c.execute("SELECT id FROM freigaben WHERE art='angebot' AND status='offen'").fetchone()["id"]
+        with self.assertRaises(freigaben.FreigabeError):
+            freigaben.entscheiden(c, "oskar", "angebot", fid, False, "")  # Ablehnen braucht Grund
+        freigaben.entscheiden(c, "oskar", "angebot", fid, True)
+        x = a.angebot_get(c, aid2)
+        self.assertEqual((x["status"], x["nummer"]), ("uebergeben", f"A-{jahr}-002"))
+        self.assertTrue(any("persönlich übergeben" in t["titel"] for t in aufgaben.zum_objekt(c, "lead", self.lid)))
+
+    def test_angebot_mit_ki_ohne_preise_der_ki(self):
+        a = self.a
+        import json as _j
+        self.fake(lambda f: f.antwort(_j.dumps({"titel": "Angebot: Anfragen sortieren", "text": "Ausgangslage\nX"})))
+        aid = a.angebot_anlegen(self.c, "oskar", self.lid, mit_ki=True)
+        x = a.angebot_get(self.c, aid)
+        self.assertEqual((x["titel"], x["ki"]), ("Angebot: Anfragen sortieren", 1))
+        self.assertTrue(all(p["betrag"] == 0 for p in x["positionen"]))  # Preise nie von der KI
+
+
+class AssistentWebTest(WebBasis):
+    def test_seiten_und_rechte(self):
+        aid0 = aufgaben.anlegen(self.c, "oskar", "Angebot vorbereiten", "markt", HEUTE, person="oskar")
+        self.addCleanup(lambda: (self.c.execute("DELETE FROM aufgaben WHERE id=?", (aid0,)), self.c.commit()))
+        for url in ("/assistent", "/einstellungen/assistent", "/angebote", "/mein-tag"):
+            r = self.client.get(url)
+            self.assertEqual(r.status_code, 200, url)
+        self.assertIn("Was zuerst?", self.client.get("/mein-tag").get_data(as_text=True))
+        lid = lead_anlegen(self.c, "Malerei Web", stage="gespraech", owner="oskar")
+        r = self.post("/angebote/neu", {"lead_id": lid, "ki": "0"}, headers={"X-Requested-With": "fetch"})
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        aid = int(r.get_json()["url"].rsplit("/", 1)[1])
+        self.addCleanup(lambda: (self.c.execute("DELETE FROM angebote WHERE id=?", (aid,)), self.c.commit()))
+        html = self.client.get(f"/angebote/{aid}").get_data(as_text=True)
+        self.assertIn("Malerei Web", html)
+        r = self.post(f"/angebote/{aid}", {"was": "speichern", "titel": "Neu", "text": "T", "pos_text": ["A", "B"],
+                                          "pos_betrag": ["100", "20"], "pos_monatlich": ["1"]},
+                      headers={"X-Requested-With": "fetch"})
+        self.assertEqual(r.status_code, 200)
+        x = __import__("app.assistent", fromlist=["x"]).angebot_get(self.c, aid)
+        self.assertEqual((x["summe"], x["monatlich"]), (100.0, 20.0))
+        self.assertEqual(self.client.get(f"/angebote/{aid}/pdf").data[:4], b"%PDF")
+        self.als("hamza")
+        self.assertEqual(self.client.get("/angebote").status_code, 403)
+        self.assertEqual(self.post("/einstellungen/assistent", {"an": "1"}).status_code, 403)
+        self.assertEqual(self.client.get("/assistent").status_code, 200)
+
+    def test_antwort_text_ist_sicher(self):
+        from app.assistent_views import _text
+        html = str(_text("**fett** <script>x</script>\n- [Akte](/leads/1)\n- [böse](https://evil.example)"))
+        self.assertIn("<b>fett</b>", html)
+        self.assertNotIn("<script>", html)
+        self.assertIn('<a href="/leads/1">Akte</a>', html)
+        self.assertNotIn('href="https://evil', html)

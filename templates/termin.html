@@ -78,6 +78,11 @@
       <label class="os-field"><span>Eigene Notizen zum Gespräch</span><textarea name="briefing_notiz" rows="4" maxlength="4000" placeholder="Fragen, Beispiel für die eingesparte Arbeit, Preisrahmen …">{{ t.briefing_notiz or '' }}</textarea></label>
       <button class="os-btn small quiet">Briefing speichern</button>
     </form>
+    {% if darf('assistent', 2) and assistent_an() %}
+    <form method="post" action="{{ url_for('assistent.entwurf_briefing', tid=t.id) }}" data-os-fetch="reload" data-os-warten="Schreibt das Briefing …" style="margin-top:12px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="os-link">Briefing-Entwurf vom Assistenten in die Notizen</button></form>
+    {% endif %}
   </section>
   {% endif %}
 

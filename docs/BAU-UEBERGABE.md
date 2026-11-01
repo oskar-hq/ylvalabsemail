@@ -1,19 +1,19 @@
-# Übergabe für den Weiterbau (ab Stufe 10)
+# Übergabe für den Weiterbau (nach Stufe 10)
 
-**Stand:** 01.11.2026 · Stufe 1 bis 9 gebaut und gemergt · nächste: **Stufe 10**
+**Stand:** 01.11.2026 · alle zehn Baustufen gebaut und gemergt · weiter mit Ausbau und Praxistest
 
 Diese Datei ist für die nächste Sitzung (Mensch oder KI), die am Firmen-OS weiterbaut. **Wer neu einsteigt:**
 erst `CLAUDE.md`, dann diese Datei ganz, dann Abschnitt 3 mit Oskar abstimmen. Sie fasst zusammen, was
-steht, wie hier gearbeitet wird und was in Stufe 10 zu tun ist. Ausführlich steht alles in
+steht, wie hier gearbeitet wird und was als Nächstes sinnvoll ist. Ausführlich steht alles in
 [FIRMEN-OS.md](FIRMEN-OS.md) (Bauplan, je Stufe „Umsetzung und Abweichungen“).
 
-## 1. Arbeitsweise (bewährt in Stufe 1 bis 9)
+## 1. Arbeitsweise (bewährt in Stufe 1 bis 10)
 
 1. `CLAUDE.md`, [FIRMEN-OS.md](FIRMEN-OS.md), [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md) und
    [DESIGN.md](DESIGN.md) lesen, dann den betroffenen Code.
-2. Kurzen Plan für die Stufe mit Oskar abstimmen. Oskar hat für Stufe 2 bis 9 gesagt: Plan kurz abstimmen, dann bauen,
+2. Kurzen Plan für die Stufe mit Oskar abstimmen. Oskar hat für Stufe 2 bis 10 gesagt: Plan kurz abstimmen, dann bauen,
    testen, im Browser ansehen, Doku nachziehen, Pull Request und mergen.
-3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 174 Tests, alle grün). Neue Tests für das OS
+3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 184 Tests, alle grün). Neue Tests für das OS
    kommen in `tests/test_os.py` (die Reihenfolge der Testdateien ist wichtig: `test_leads.py` setzt die
    Umgebung, Dateien davor dürfen `app.main` nicht importieren).
 4. Seiten im Browser ansehen (Playwright ist vorinstalliert): Handy 390 px und Desktop, hell und dunkel.
@@ -39,6 +39,7 @@ Requests gehen dorthin. Nach einem Merge den Arbeits-Branch neu von dort abzweig
 | 7 Kunden-Bereich | `portal.py` (Einmal-Link, Ansicht für Kunden, Dokumente, Wochenbericht, Termin-Erinnerung) | `/portal` (Kunden), Projekt → Kunden-Bereich/Dokumente/Wochenberichte, Einstellungen → Kunden-Bereich |
 | 8 Finanzen | `finanzen.py` (Rechnungen mit Nummernkreis und Storno, Kosten, Kasse, Kennzahlen, Geld-Regel, Export), `pdf.py` | Finanzen, Rechnung, Laufende Kosten, Einstellungen → Finanzen, Projekt → Rechnungen |
 | 9 Posteingang | `posteingang.py` (weitere Postfächer, Kanäle, von Hand festhalten, Wünsche aus Nachrichten, Antwortzeit), `mailbox.py` | CRM → Postfach und Gespräch, Einstellungen → Postfächer, Einstellungen → Unipile |
+| 10 Assistent | `assistent.py` (Fragen mit Werkzeugen und Rechteprüfung, „Was zuerst?“, Entwürfe, Angebote mit PDF und Freigabe), `ai.anfrage` | Assistent, Mein Tag → Was zuerst?, Angebote, Einstellungen → Assistent, Entwurf-Knöpfe in Gespräch/Termin/Projekt |
 
 Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module wieder nutzen sollten:
 
@@ -60,49 +61,28 @@ Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module
 - **Design:** Bausteine in `static/os.css`, `static/os.js`, `templates/_os.html` (Listenzeilen, Sheets mit
   `data-sheet`, schwebende Knöpfe `os-float`, Formulare mit `data-os-fetch="reload"`, Toasts per `flash`).
 
-## 3. Stufe 10: Assistent
+## 3. Nach Stufe 10: was als Nächstes sinnvoll ist
 
-Aus dem Bauplan (Abschnitt 4.12): *KI-Fragen an die Firmendaten, Vorschläge für Prioritäten, Entwürfe für Angebote,
-Briefings und Case Studys.*
+Alle Baustufen aus FIRMEN-OS.md Abschnitt 8 sind gebaut. Vorschläge für die nächsten Schritte (mit Oskar abstimmen,
+jeweils die erste Option ist die Empfehlung):
 
-**Ausgangslage:**
+1. **Praxistest vor Ausbau:** Zwei Wochen echter Alltag mit dem OS, Fehler und Wünsche als Aufgaben im Bereich
+   Technik sammeln, dann gezielt nachbessern. Besonders noch nie echt getestet: Google-Kalender, Mailversand der
+   Angebote und Rechnungen, weitere Postfächer, Assistent mit echtem Schlüssel (in den Tests nachgebaut).
+2. **Assistent ausbauen:** weitere Werkzeuge (z. B. Entscheidungs-Log durchsuchen, Kosten je Projekt), „Was zuerst?“
+   optional jeden Morgen automatisch, Fragen per Push-Meldung beantworten lassen.
+3. **Unipile** für WhatsApp und LinkedIn verbinden (vorbereitet in Stufe 9), sobald Budget da ist.
+4. **Postfach im CRM** auf `os.css` umstellen (behält bisher die alte Gestaltung).
 
-- KI-Anbindung gibt es (`ai.py`, Anthropic-Schlüssel in den Einstellungen, Monatsbudget, Kosten je Person in
-  `ai_usage`). Sie wird bisher für Lead-Entwürfe und das Einordnen genutzt.
-- Daten liegen strukturiert vor: Akten und Nachrichten (`messages` mit Kanal), Projekte, Änderungen, Termine,
-  Aufgaben, Ziele und KPIs, Entscheidungs-Log, Notfälle, Rechnungen und Kosten.
-- Freigabe-Stufen: Alles, was der Assistent an Kunden schreibt, läuft über `freigaben.AKTIONEN` (C oder D);
-  „Angebot verschicken“ steht dort noch als „kommt später“.
+**Bausteine des Assistenten** (für Erweiterungen):
 
-**Vorschlag für den Umfang.** Diese vier Fragen waren schon formuliert, aber noch nicht beantwortet. Vor dem Bau
-mit Oskar klären; jeweils die erste Antwort ist die Empfehlung:
-
-1. **Umfang:** alle Teile (Fragen an die Firmendaten, Prioritäten, Entwürfe für Antwort/Briefing/Angebot/Case Study,
-   Einstellungen mit Budget, Protokoll mit Quellen) · oder ohne Angebote · oder nur Fragen und Entwürfe.
-2. **Wie der Assistent Daten liest:** gezielt mit Werkzeugen (Tool Use: z. B. `akte(lead)`, `offene_rechnungen()`,
-   `kpis(woche)`, jedes Werkzeug prüft `firma.darf` der fragenden Person) · oder eine Zusammenfassung aller sichtbaren
-   Daten mit jeder Frage (einfacher, teurer, ungenauer).
-3. **Prioritäten auf „Mein Tag“:** auf Knopfdruck („Was zuerst?“, kostet nur beim Klick), dazu immer eine
-   Reihenfolge nach Regeln ohne KI · oder jeden Morgen automatisch je Person.
-4. **Angebote:** KI-Entwurf aus Anforderung und Schätzung, bearbeitbar, PDF wie bei Rechnungen (`pdf.py`), Versand
-   über die Freigabe-Stufe „angebot“ (in `freigaben.AKTIONEN` auf `kommt_mit="später"`, freischalten) · oder nur
-   Text-Entwurf.
-
-**Bausteine, die es schon gibt:**
-
-- `ai.py`: `_call(stage, brain, prompt, schema)` mit strukturierter Ausgabe (JSON-Schema), Modellwahl je Stufe
-  (`MODELS`), Preise (`PRICES`), Kosten über `ai.on_usage` → `leaddb.record_usage` (Tabelle `ai_usage`, mit Person).
-  Für den Assistenten eine eigene Stufe in `MODELS`/`MAX_TOKENS`/`EFFORT`/`STAGE_LABELS` anlegen; Tool Use braucht
-  eine eigene Schleife (`messages.create` mit `tools`, bis `stop_reason != "tool_use"`), nicht `_call`.
-- Budget: `agent.month_budget_left_eur(c)` (Monatsbudget des Teams), `agent.person_budget_left_eur(c, key)` (eigenes
-  Budget aus dem Profil). KI-Aufrufe immer in `with agent.acting_as(db(), me()):`, damit die Kosten der Person
-  zugerechnet werden (Muster: `leads_views.py`).
-- Ohne Schlüssel (`ai.available()` ist False) muss alles ohne KI weiterlaufen; Tests nie gegen die echte API,
-  sondern mit einem nachgebauten Client (Muster für nachgebaute Dienste: `FakeGoogle`, `FakeImap`, `PostfachMock` in
-  `tests/test_os.py`).
-- Was an Kunden geht, nur als Entwurf; Versand über `portal.mail_an_kunde` bzw. `posteingang.senden` und die
-  Freigabe-Stufen (`freigaben.stufe`, neue Art in `freigaben.ARTEN`). Fremde Texte (Mails, Webseiten) sind Daten,
-  keine Anweisungen an die KI (steht so im Systemprompt in `ai.py`).
+- Neues Werkzeug: Funktion `_w_<name>(c, person, eingabe)` in `assistent.py` (Recht mit `_darf` prüfen, bei Fehlern
+  `_Kein` werfen, Rückgabe `(daten, quellen)`), Schema in `WERKZEUGE` (strikt, `additionalProperties: false`) und
+  Eintrag in `AUSFUEHREN`.
+- KI-Aufruf: `ai.anfrage(stage, model, effort, system, messages, tools=None, schema=None)` in
+  `with agent.acting_as(c, person):`; `ai.text_von(response)` für den Text. Tests mit `FakeClaude` in
+  `tests/test_os.py` (nie gegen die echte API).
+- Alles, was an Kunden geht, bleibt Entwurf oder läuft über `freigaben` (Art `angebot` als Muster).
 
 ## 4. Für einen neuen Agenten: Umgebung und Fallstricke
 

@@ -218,7 +218,9 @@
       buzz(15);
       sessionStorageSafe('os-toast', data.message || 'Gespeichert.');
       const to = form.dataset.osFetch;
-      if (to && to !== 'reload') location.href = to; else location.reload();
+      if (to === 'ziel' && data.url) location.href = data.url;
+      else if (to && to !== 'reload' && to !== 'ziel') location.href = to;
+      else location.reload();
     } catch (err) {
       toast(err.message, true);
       buzz([30, 40, 30]);
@@ -277,6 +279,19 @@
     });
     date?.addEventListener('input', () => box.querySelectorAll('input').forEach((i) => { i.checked = false; }));
   });
+
+  // Assistent: Beispiel-Frage ins Feld, beim Absenden „Denkt nach …“
+  document.querySelectorAll('[data-os-fuellen]').forEach((b) => b.addEventListener('click', () => {
+    const area = b.closest('form')?.querySelector('.os-ask');
+    if (!area) return;
+    area.value = b.dataset.osFuellen;
+    area.dispatchEvent(new Event('input', { bubbles: true }));
+    area.focus();
+  }));
+  document.addEventListener('submit', (ev) => {
+    const t = ev.target.dataset?.osWarten;
+    if (t && !ev.defaultPrevented) setTimeout(() => toast(t), 0);
+  }, true);
 
   // Einladungslink kopieren
   document.querySelectorAll('[data-os-copy]').forEach((btn) => btn.addEventListener('click', async () => {

@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}{{ a.nummer or 'Angebot' }} · {{ a.kunde }}{% endblock %}
+{% block content %}
+{% set entwurf = a.status == 'entwurf' %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Angebot{% if a.nummer %} {{ a.nummer }}{% endif %} · {{ a.status_label }}{% if a.ki %} · Entwurf des Assistenten{% endif %}</span>
+    <h1 class="os-title-m"><a href="{{ url_for('leads.detail', lead_id=a.lead_id) }}" style="color:inherit;text-decoration:none">{{ a.kunde }}</a></h1>
+    <p class="os-sub os-lead">{{ a.titel }}</p>
+  </header>
+  {% if a.grund and entwurf %}<p class="os-hinweis err">Zurück aus der Freigabe: {{ a.grund }}</p>{% endif %}
+
+  <dl class="os-kv">
+    <dt>Einmalig</dt><dd>{{ a.summe|kpi('euro') }}</dd>
+    {% if a.monatlich %}<dt>Je Monat</dt><dd>{{ a.monatlich|kpi('euro') }}</dd>{% endif %}
+    <dt>Aufwand geschätzt</dt><dd class="{{ 'late' if not a.schaetzung_h }}">{{ (a.schaetzung_h|kpi ~ ' h') if a.schaetzung_h else 'Fehlt (Technik)' }}</dd>
+    <dt>Gültig bis</dt><dd>{{ tag(a.gueltig_bis) if a.gueltig_bis else '–' }}</dd>
+    <dt>An</dt><dd>{{ a.email or 'keine Mailadresse' }}</dd>
+    {% if a.projekt_id %}<dt>Projekt</dt><dd><a href="{{ url_for('kunden.detail', pid=a.projekt_id) }}">{{ a.projekt_titel }}</a></dd>{% endif %}
+  </dl>
+  <div class="os-btns"><a class="os-btn small quiet" href="{{ url_for('angebote.pdf', aid=a.id) }}" target="_blank" rel="noopener">PDF ansehen</a></div>
+
+  {% if entwurf %}
+  {% if technik %}
+  <section class="os-section">
+    <h2 class="os-headline">Aufwand schätzen</h2>
+    <p class="os-sub">Kein Versprechen mit Technikzeit ohne deine Schätzung.</p>
+    <form method="post" action="{{ url_for('angebote.aktion', aid=a.id) }}" data-os-fetch="reload" class="os-grid2" style="align-items:end;margin-top:12px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="schaetzung">
+      <label class="os-field" style="margin:0"><span>Stunden</span><input type="text" name="stunden" inputmode="decimal" value="{{ a.schaetzung_h|kpi if a.schaetzung_h else '' }}"></label>
+      <button class="os-btn small quiet" style="justify-self:start">Speichern</button>
+    </form>
+  </section>
+  {% endif %}
+  <section class="os-section">
+    <h2 class="os-headline">Bearbeiten</h2>
+    <p class="os-sub">Preise kommen aus Projekt oder Schätzung, nie von der KI. Leere Positionen werden entfernt.</p>
+    <form method="post" action="{{ url_for('angebote.aktion', aid=a.id) }}" data-os-fetch="reload" id="angebotForm" style="margin-top:16px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="speichern">
+      <label class="os-field"><span>Titel</span><input type="text" name="titel" value="{{ a.titel }}" maxlength="200" required></label>
+      <label class="os-field"><span>Text (Zwischenüberschriften als eigene Zeile: Ausgangslage, Was Sie bekommen, Ablauf, Nicht enthalten)</span>
+        <textarea name="text" rows="14" maxlength="20000">{{ a.text or '' }}</textarea></label>
+      <div class="os-field"><span>Positionen</span>
+        {% for p in a.positionen + [{'text': '', 'betrag': '', 'monatlich': False}] %}
+        <div class="os-position">
+          <input class="os-input" type="text" name="pos_text" value="{{ p.text }}" placeholder="Leistung" aria-label="Leistung">
+          <input class="os-input" type="text" name="pos_betrag" value="{{ p.betrag|kpi if p.betrag not in ('', None) else '' }}" inputmode="decimal" placeholder="€" aria-label="Betrag">
+          <span class="os-chips" style="margin:0"><label><input type="checkbox" name="pos_monatlich" value="{{ loop.index0 }}" {{ 'checked' if p.monatlich }}>je Monat</label></span>
+        </div>{% endfor %}
+      </div>
+      <div class="os-grid2">
+        <label class="os-field"><span>Mailadresse</span><input type="email" name="email" value="{{ a.email or '' }}"></label>
+        <label class="os-field"><span>Gültig bis</span><input type="date" name="gueltig_bis" value="{{ a.gueltig_bis or '' }}"></label>
+      </div>
+      <button class="os-btn small quiet">Speichern</button>
+    </form>
+  </section>
+  {% else %}
+  <section class="os-section">
+    <h2 class="os-headline">Text</h2>
+    <div class="os-assistent-text">{{ a.text|assistent_text }}</div>
+    <ul class="os-list" style="margin-top:16px">{% for p in a.positionen %}<li class="os-row" style="min-height:0;padding:8px 0">
+      <span class="os-txt"><b style="font-weight:500">{{ p.text }}</b></span><span class="os-end">{{ p.betrag|kpi('euro') }}{{ ' / Monat' if p.monatlich }}</span></li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  {% if a.status in ('versendet', 'uebergeben') %}
+  <section class="os-section">
+    <h2 class="os-headline">Wie hat der Kunde entschieden?</h2>
+    <p class="os-sub">Angenommen: Der Betrieb wird Kunde, das Projekt entsteht mit diesen Preisen.</p>
+    <div class="os-btns">
+      <form method="post" action="{{ url_for('angebote.aktion', aid=a.id) }}" data-os-fetch="reload"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="angenommen"><button class="os-btn small">Angenommen</button></form>
+      <button type="button" class="os-btn small quiet" data-sheet="sheet-abgelehnt">Abgelehnt</button>
+    </div>
+  </section>
+  {% endif %}
+
+  {% if verlauf %}
+  <section class="os-section">
+    <h2 class="os-headline">Verlauf</h2>
+    <ul class="os-list">{% for e in verlauf %}<li class="os-row" style="min-height:0;padding:8px 0">
+      <span class="os-txt"><span>{{ e.at|kurzdatum }} · {{ namen.get(e.wer, e.wer) }}</span><b style="font-weight:500;font-size:17px">{{ e.text }}</b></span></li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+  {% if entwurf %}
+  <form method="post" action="{{ url_for('angebote.aktion', aid=a.id) }}" data-os-fetch="reload" style="margin-top:32px">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="verwerfen">
+    <button class="os-link danger" data-confirm="Angebot verwerfen?">Verwerfen</button></form>
+  {% endif %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('leads.detail', lead_id=a.lead_id) }}" aria-label="Zur Akte">{{ i('back') }}</a>
+  {% if entwurf %}
+  <form method="post" action="{{ url_for('angebote.aktion', aid=a.id) }}" data-os-fetch="reload" style="display:contents">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="freigabe">
+    <button type="submit" class="os-btn" {{ 'disabled' if not a.schaetzung_h }}><span>Zur Freigabe</span>{{ i('check') }}</button>
+  </form>
+  {% elif a.status == 'wartet' %}<a class="os-btn ink" href="{{ url_for('freigaben.zentrale') }}"><span>Freigaben</span>{{ i('chev') }}</a>{% endif %}
+</div>
+<dialog class="os-sheet" id="sheet-abgelehnt" aria-label="Angebot abgelehnt">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('angebote.aktion', aid=a.id) }}" data-os-fetch="reload" data-os-require="textarea">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="abgelehnt">
+      <span class="os-eyebrow">Abgelehnt</span>
+      <textarea class="os-ask" name="grund" rows="3" maxlength="500" placeholder="Warum? Preis, Zeitpunkt, Bedarf …" required></textarea>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Speichern</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endblock %}

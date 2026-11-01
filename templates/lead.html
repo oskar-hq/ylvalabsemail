@@ -165,6 +165,17 @@
       </div>
       {% endif %}
 
+      {% if darf('kunden') and (lead.stage in ('gespraech', 'angebot', 'kunde') or lead_angebote) %}
+      <div class="side-block">
+        <span class="label">Angebote</span>
+        {% if lead_angebote %}<ul class="tasks small">{% for x in lead_angebote %}<li><span><a href="{{ url_for('angebote.detail', aid=x.id) }}"><b>{{ x.nummer or 'Entwurf' }}</b> · {{ x.status_label }}</a></span></li>{% endfor %}</ul>{% endif %}
+        {% if darf('kunden', 2) %}<form method="post" action="{{ url_for('angebote.neu') }}" data-os-fetch="ziel" data-os-warten="Schreibt das Angebot …" class="btn-row">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="lead_id" value="{{ lead.id }}"><input type="hidden" name="next" value="{{ request.path }}">
+          {% if darf('assistent', 2) and assistent_an() %}<button class="btn small" name="ki" value="1">Angebot vom Assistenten</button>{% endif %}
+          <button class="btn small" name="ki" value="0">Leeres Angebot</button></form>{% endif %}
+      </div>
+      {% endif %}
+
       {% if darf('kalender') %}
       <div class="side-block">
         <span class="label">Termine</span>
