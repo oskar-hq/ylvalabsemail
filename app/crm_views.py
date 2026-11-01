@@ -6,7 +6,7 @@ from flask import Blueprint, Response, abort, g, jsonify, render_template, reque
 
 from . import agent, branchentest, crm, leaddb, mailbox, regions, team
 from .leads_views import db, lead_or_404, me, status_payload, who
-from .main import SETTINGS, login_required
+from .main import SETTINGS, darf, login_required
 
 bp = Blueprint("crm", __name__)
 
@@ -208,7 +208,9 @@ def load_borders():
 @login_required
 def inbox():
     wer = "alle" if request.args.get("wer") == "alle" or not me() else "meine"
+    from . import posteingang
     return render_template("inbox.html", account=g.account, groups=mailbox.grouped(db(), me() if wer == "meine" else None),
+                           weitere=posteingang.postfaecher(db(), nur_aktive=True),
                            moods=mailbox.MOODS, wer=wer, people=team.names(db()),
                            inbox_status=leaddb.kv_get(db(), "inbox_status"), ready=_mail_ready(),
                            st=status_payload(), demo=SETTINGS["DEMO_MODE"])
@@ -258,13 +260,20 @@ def inbox_fetch():
     """„Jetzt abrufen“: Postfach sofort lesen statt auf die nächsten Minuten zu warten."""
     if g.account.get("demo"):
         return jsonify(ok=True, neu=0, message="Demo: Es wird kein echtes Postfach gelesen.")
+    from . import posteingang
+    weitere = posteingang.postfaecher(db(), nur_aktive=True)
     missing = _mail_ready()
-    if missing:
+    if missing and not weitere:
         return jsonify(error=missing), 400
-    n, error = agent.fetch_inbox(db())
-    if error:
+    n, error = agent.fetch_inbox(db()) if not missing else (0, None)
+    for p in weitere:
+        try:
+            n += posteingang.abrufen(db(), p["id"])
+        except posteingang.PosteingangError as exc:
+            error = error or f"Postfach „{p['name']}“: {exc}"
+    if error and not n:
         return jsonify(error=error), 502
-    return jsonify(ok=True, neu=n, message=f"{n} neue Mails." if n != 1 else "1 neue Mail.")
+    return jsonify(ok=True, neu=n, message=(f"{n} neue Mails." if n != 1 else "1 neue Mail.") + (f" {error}" if error else ""))
 
 
 @bp.route("/crm/postfach/schreiben", methods=["GET", "POST"])
@@ -306,6 +315,17 @@ def compose_mail():
     if lead["status"] == "gesperrt":
         return jsonify(error="Diese Adresse möchte keine Nachrichten mehr bekommen."), 400
     sender = _sender_from_form()
+    postfach_id = int(request.form.get("postfach") or 0) or None
+    if postfach_id and not g.account.get("demo"):
+        from . import posteingang
+        last = mailbox.last_incoming(db(), lead_id)
+        try:
+            posteingang.senden(db(), me() or sender, postfach_id, lead, (last or {}).get("from_addr") or lead["email"] or "",
+                               subject or mailbox.reply_subject((last or {}).get("subject") or lead["name"]),
+                               text + mailbox.quote(last), (last or {}).get("message_id"))
+        except posteingang.PosteingangError as exc:
+            return jsonify(error=str(exc)), 400
+        return jsonify(ok=True)
     if g.account.get("demo"):
         agent.record_reply(c, lead, text, team.names(c).get(sender) or who(), subject, to, note=" Demo: nicht verschickt.",
                            what="Neue Mail aus dem Postfach")
@@ -328,8 +348,18 @@ def conversation(lead_id):
         leaddb.update_lead(db(), lead_id, unread=0)
     last_in = mailbox.last_incoming(db(), lead_id)
     mood, why = mailbox.mood(lead, last_in)
-    can_send = agent.outreach_configured() or g.account.get("demo")
+    from . import posteingang
+    eigene = posteingang.fuer_person(db(), me()) if me() else []
+    can_send = agent.outreach_configured() or g.account.get("demo") or bool(eigene)
+    zuletzt = next((i.get("postfach_id") for i in reversed(items) if i["direction"] == "in" and i.get("kanal") == "mail"),
+                   None)
+    projekt = db().execute("SELECT id, verantwortlich FROM projekte WHERE lead_id=? AND status != 'beendet' ORDER BY id "
+                           "DESC LIMIT 1", (lead_id,)).fetchone()
     return render_template("conversation.html", account=g.account, lead=lead, items=items, mood=mood, mood_why=why,
+                           postfaecher=eigene, postfach_vorschlag=zuletzt if zuletzt in [p["id"] for p in eigene] else "",
+                           akquise=agent.outreach_configured() or g.account.get("demo"), kanaele=posteingang.KANAELE,
+                           von_hand=posteingang.VON_HAND, wartet=posteingang.wartet_seit(db(), lead_id),
+                           wunsch_darf=bool(projekt) and (projekt["verantwortlich"] == me() or darf("kunden", 4)),
                            senders=team.members(db()), sender=_default_sender(lead), people=team.names(db()),
                            moods=mailbox.MOODS, last_in=last_in, can_send=can_send,
                            subject=mailbox.reply_subject((last_in or {}).get("subject") or lead["subject"] or lead["name"]),
@@ -371,6 +401,33 @@ def reply(lead_id):
     except Exception as exc:
         return jsonify(error=str(exc)), 502
     return jsonify(ok=True)
+
+
+@bp.post("/crm/postfach/<int:lead_id>/festhalten")
+@login_required
+def festhalten(lead_id):
+    """Telefonat, Brief, WhatsApp- oder LinkedIn-Nachricht von Hand an der Akte festhalten."""
+    from . import posteingang
+    lead_or_404(lead_id)
+    f = request.form
+    try:
+        posteingang.festhalten(db(), me() or who(), lead_id, f.get("kanal", ""), f.get("richtung", "in"), f.get("text", ""),
+                               f.get("am", ""))
+    except posteingang.PosteingangError as exc:
+        return jsonify(error=str(exc)), 400
+    return jsonify(ok=True, message="Festgehalten.")
+
+
+@bp.post("/crm/postfach/nachricht/<int:mid>/wunsch")
+@login_required
+def wunsch(mid):
+    """Möglichen Änderungswunsch übernehmen (ja=1) oder verwerfen."""
+    from . import posteingang
+    try:
+        aid = posteingang.wunsch_entscheiden(db(), me(), mid, request.form.get("ja") == "1")
+    except posteingang.PosteingangError as exc:
+        return jsonify(error=str(exc)), 400
+    return jsonify(ok=True, message="Als Änderungswunsch übernommen." if aid else "Kein Änderungswunsch.")
 
 
 @bp.post("/crm/postfach/<int:lead_id>/stimmung")

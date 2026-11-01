@@ -1,18 +1,18 @@
-# Übergabe für den Weiterbau (ab Stufe 9)
+# Übergabe für den Weiterbau (ab Stufe 10)
 
-**Stand:** 01.11.2026 · Stufe 1 bis 8 gebaut und gemergt · nächste: **Stufe 9**
+**Stand:** 01.11.2026 · Stufe 1 bis 9 gebaut und gemergt · nächste: **Stufe 10**
 
 Diese Datei ist für die nächste Sitzung (Mensch oder KI), die am Firmen-OS weiterbaut. Sie fasst zusammen, was
-steht, wie hier gearbeitet wird und was in Stufe 9 zu tun ist. Ausführlich steht alles in
+steht, wie hier gearbeitet wird und was in Stufe 10 zu tun ist. Ausführlich steht alles in
 [FIRMEN-OS.md](FIRMEN-OS.md) (Bauplan, je Stufe „Umsetzung und Abweichungen“).
 
-## 1. Arbeitsweise (bewährt in Stufe 1 bis 8)
+## 1. Arbeitsweise (bewährt in Stufe 1 bis 9)
 
 1. `CLAUDE.md`, [FIRMEN-OS.md](FIRMEN-OS.md), [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md) und
    [DESIGN.md](DESIGN.md) lesen, dann den betroffenen Code.
-2. Kurzen Plan für die Stufe mit Oskar abstimmen. Oskar hat für Stufe 2 bis 8 gesagt: Plan kurz abstimmen, dann bauen,
+2. Kurzen Plan für die Stufe mit Oskar abstimmen. Oskar hat für Stufe 2 bis 9 gesagt: Plan kurz abstimmen, dann bauen,
    testen, im Browser ansehen, Doku nachziehen, Pull Request und mergen.
-3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 170 Tests, alle grün). Neue Tests für das OS
+3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 174 Tests, alle grün). Neue Tests für das OS
    kommen in `tests/test_os.py` (die Reihenfolge der Testdateien ist wichtig: `test_leads.py` setzt die
    Umgebung, Dateien davor dürfen `app.main` nicht importieren).
 4. Seiten im Browser ansehen (Playwright ist vorinstalliert): Handy 390 px und Desktop, hell und dunkel.
@@ -37,6 +37,7 @@ Requests gehen dorthin. Nach einem Merge den Arbeits-Branch neu von dort abzweig
 | 6 Freigaben | `freigaben.py` (Zentrale mit Registry `ARTEN`, Stufen A–D, Entscheidungsrechte, Log), `notfall.py` | Freigaben, Entscheidungs-Log, Notfall, Einstellungen → Freigaben und Entscheidungen |
 | 7 Kunden-Bereich | `portal.py` (Einmal-Link, Ansicht für Kunden, Dokumente, Wochenbericht, Termin-Erinnerung) | `/portal` (Kunden), Projekt → Kunden-Bereich/Dokumente/Wochenberichte, Einstellungen → Kunden-Bereich |
 | 8 Finanzen | `finanzen.py` (Rechnungen mit Nummernkreis und Storno, Kosten, Kasse, Kennzahlen, Geld-Regel, Export), `pdf.py` | Finanzen, Rechnung, Laufende Kosten, Einstellungen → Finanzen, Projekt → Rechnungen |
+| 9 Posteingang | `posteingang.py` (weitere Postfächer, Kanäle, von Hand festhalten, Wünsche aus Nachrichten, Antwortzeit), `mailbox.py` | CRM → Postfach und Gespräch, Einstellungen → Postfächer, Einstellungen → Unipile |
 
 Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module wieder nutzen sollten:
 
@@ -50,7 +51,7 @@ Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module
 - **Regeln als Einstellung:** je Modul ein `REGELN`-Dict, gespeichert in `kv` unter `regel:<modul>`, mit
   `regeln()`/`regeln_speichern()` und einer Einstellungsseite.
 - **Takt:** Hintergrund-Arbeiter `agent.tick()` ruft `kalender.takt`, `kpis.takt`, `projekte.takt`,
-  `freigaben.takt`, `portal.takt`, `finanzen.takt` auf (je mit eigenem try/except).
+  `freigaben.takt`, `portal.takt`, `finanzen.takt`, `posteingang.takt` auf (je mit eigenem try/except).
 - **Freigaben:** Was ein Mensch freigeben muss, als Zeile in `freigaben` anlegen und die Art in `freigaben.ARTEN`
   eintragen; dann erscheint es in der Zentrale, im Zähler und auf Mein Tag. Stufe der Aktion über
   `freigaben.stufe(c, key)` lesen (Katalog `freigaben.AKTIONEN`). Regeländerungen mit
@@ -58,29 +59,28 @@ Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module
 - **Design:** Bausteine in `static/os.css`, `static/os.js`, `templates/_os.html` (Listenzeilen, Sheets mit
   `data-sheet`, schwebende Knöpfe `os-float`, Formulare mit `data-os-fetch="reload"`, Toasts per `flash`).
 
-## 3. Stufe 9: Ein Posteingang
+## 3. Stufe 10: Assistent
 
-Aus dem Bauplan (Abschnitt 4.8): *Alle Kanäle an einer Stelle; Unipile für WhatsApp/LinkedIn, sobald Budget da
-ist.* Dazu, was in früheren Stufen verschoben wurde.
+Aus dem Bauplan (Abschnitt 4.12): *KI-Fragen an die Firmendaten, Vorschläge für Prioritäten, Entwürfe für Angebote,
+Briefings und Case Studys.*
 
 **Ausgangslage:**
 
-- Mails über das Akquise-Postfach (IMAP/SMTP) mit Zuordnung zu Leads: `mailbox.py` (Tabelle `messages`),
-  Postfach-Seite im CRM, Glocke für neue Mails. Mails an Kunden aus dem OS (Kunden-Bereich, Wochenbericht,
-  Rechnungen) landen über `agent.record_reply` schon in der Akte.
-- Wünsche aus dem Kunden-Bereich kommen als Änderungswunsch an (`quelle='portal'`), Wünsche per Mail noch nicht
-  (Stufe 5 hat das auf 7/9 verschoben).
-- Kommentare mit @-Erwähnung an Aufgaben, Kunden und Projekten gibt es (`aufgaben.kommentare`).
+- KI-Anbindung gibt es (`ai.py`, Anthropic-Schlüssel in den Einstellungen, Monatsbudget, Kosten je Person in
+  `ai_usage`). Sie wird bisher für Lead-Entwürfe und das Einordnen genutzt.
+- Daten liegen strukturiert vor: Akten und Nachrichten (`messages` mit Kanal), Projekte, Änderungen, Termine,
+  Aufgaben, Ziele und KPIs, Entscheidungs-Log, Notfälle, Rechnungen und Kosten.
+- Freigabe-Stufen: Alles, was der Assistent an Kunden schreibt, läuft über `freigaben.AKTIONEN` (C oder D);
+  „Angebot verschicken“ steht dort noch als „kommt später“.
 
 **Vorschlag für den Umfang (mit Oskar abstimmen):**
 
-1. **Ein Posteingang für alle Kanäle** mit Spalte `kanal` (mail, brief, telefon, linkedin, whatsapp, portal):
-   jede Nachricht an einer Akte, zuständige Person, „wartet auf Antwort seit“, Filter je Person.
-2. **Mehrere Postfächer** (z. B. persönliche Adressen) in den Einstellungen anlegen, nicht nur das Akquise-Postfach.
-3. **Wünsche per Mail** an eine feste Adresse oder mit Stichwort → Änderungswunsch am Projekt.
-4. **Telefon und Brief** von Hand als Nachricht festhalten (eine Zeile, mit Akte).
-5. **Unipile** (WhatsApp, LinkedIn) nur vorbereiten oder anbinden, je nach Budget; Zugang in den Einstellungen.
-6. KPI „Antwortzeit“ und „wartet auf Antwort“ im Cockpit.
+1. **Fragen an die Firmendaten** (Chat), nur mit den Daten, die die fragende Person nach ihren Rechten sieht.
+2. **Prioritäten für „Mein Tag“** als Vorschlag (überfällig, wartet auf Antwort, Fristen), nie automatisch.
+3. **Entwürfe:** Antwort im Postfach, Briefing vor einem Termin, Angebot aus Anforderung und Schätzung, Case Study aus
+   einem Projekt im Betrieb. Alles als Entwurf, Versand über die Freigabe-Stufen.
+4. **Kosten und Grenzen** in den Einstellungen: welches Modell, Budget je Monat, was der Assistent lesen darf.
+5. Protokoll: Jede Antwort des Assistenten mit Quelle (welche Daten), damit nachvollziehbar bleibt, woher sie kommt.
 
 ## 4. Offen und gut zu wissen
 

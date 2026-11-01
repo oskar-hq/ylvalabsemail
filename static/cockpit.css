@@ -759,3 +759,10 @@ dd.social-links{margin-left:0}
 #branchentest .row select{flex:1;min-width:0}
 #branchentest .row .btn{flex:none}
 #branchentest input[type=text],#branchentest select{width:100%}
+
+/* Firmen-OS Stufe 9: möglicher Änderungswunsch in einer Nachricht, Nachricht von Hand festhalten */
+.wunsch-box{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:10px;padding-top:10px;border-top:1px solid var(--line, rgba(0,0,0,.08))}
+.festhalten{margin:18px 0}
+.festhalten>summary{list-style:none;cursor:pointer;display:inline-flex}
+.festhalten>summary::-webkit-details-marker{display:none}
+.festhalten .from-pick input[type=datetime-local]{width:auto;min-height:34px;padding:4px 10px}

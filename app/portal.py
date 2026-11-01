@@ -163,8 +163,8 @@ def mail_an_kunde(c, p, to, betreff, text, wer):
     lead = leaddb.get_lead(c, p["lead_id"])
     if not lead:
         raise PortalError("Zu diesem Projekt gibt es keinen Kunden in der Akte.")
-    domain = (to or "").rsplit("@", 1)[-1].lower()
-    if lead["status"] == "gesperrt" or domain in set(leaddb.kv_get(c, "blocklist", [])):
+    from . import posteingang
+    if lead["status"] == "gesperrt" or posteingang.sperrliste(c, to):
         raise PortalError("Dieser Kunde möchte keine Nachrichten mehr bekommen.")
     if not agent.outreach_configured():
         raise PortalError("Das Akquise-Postfach ist nicht eingerichtet (Einstellungen → Postfach und Versand).")
@@ -378,10 +378,17 @@ def wunsch(c, z, text):
     if len(text) < 5:
         raise PortalError("Bitte beschreiben Sie kurz, was Sie sich wünschen.")
     try:
-        return projekte.aenderung_anlegen(c, "Kunde", z["projekt_id"], f"{text}\n\n(aus dem Kunden-Bereich, {z['email']})",
-                                          quelle="portal")
+        aid = projekte.aenderung_anlegen(c, "Kunde", z["projekt_id"], f"{text}\n\n(aus dem Kunden-Bereich, {z['email']})",
+                                         quelle="portal")
     except projekte.ProjektError as exc:
         raise PortalError(str(exc)) from exc
+    from . import mailbox  # auch im Posteingang, damit alle Kanäle an einer Stelle sind (Stufe 9)
+    p = projekte.get(c, z["projekt_id"])
+    mid = mailbox.add(c, p["lead_id"], "in", text, subject="Wunsch aus dem Kunden-Bereich", from_addr=z["email"],
+                      from_name=z["name"] or "", read=False, kanal="portal")
+    c.execute("UPDATE messages SET wunsch='uebernommen', aenderung_id=? WHERE id=?", (aid, mid))
+    c.commit()
+    return aid
 
 # ---------------------------------------------------------------- Dokumente
 

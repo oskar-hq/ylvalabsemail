@@ -19,6 +19,8 @@
       <span class="txt"><b>Projekte</b><span>Abnahme-Checkliste, Änderungswünsche, Abrechnung, Zeit</span></span><span class="chev">›</span></a></li>{% endif %}
     {% if darf('kunden') %}<li><a href="{{ url_for('kunden.portal_einstellungen') }}"><span class="ico">{{ osi('person') }}</span>
       <span class="txt"><b>Kunden-Bereich</b><span>Einmal-Link, was Kunden sehen, Wochenbericht, Erinnerung</span></span><span class="chev">›</span></a></li>{% endif %}
+    <li><a href="{{ url_for('posteingang.einstellungen') }}"><span class="ico">{{ osi('at') }}</span>
+      <span class="txt"><b>Postfächer</b><span>Weitere Adressen wie kontakt@ oder persönliche, wem sie gehören</span></span><span class="chev">›</span></a></li>
     {% if darf('finanzen') %}<li><a href="{{ url_for('finanzen.einstellungen') }}"><span class="ico">{{ osi('protokoll') }}</span>
       <span class="txt"><b>Finanzen</b><span>Firmendaten für Rechnungen, Umsatzsteuer, Nummernkreis, Mailtext, Geld-Regel</span></span><span class="chev">›</span></a></li>{% endif %}
     {% if darf('kalender') %}<li><a href="{{ url_for('kalender.einstellungen') }}"><span class="ico">{{ osi('kalender') }}</span>

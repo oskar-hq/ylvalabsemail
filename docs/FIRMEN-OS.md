@@ -1,6 +1,6 @@
 # Ylva Labs Firmen-OS – Bauplan
 
-**Stand:** 01.11.2026 · Stufe 1 bis 8 gebaut, als Nächstes Stufe 9 (Ein Posteingang) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
+**Stand:** 01.11.2026 · Stufe 1 bis 9 gebaut, als Nächstes Stufe 10 (Assistent) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
 
 Aus dem Ylva Labs Mailer (Akquise, CRM, Mailer) wird das Betriebssystem der Firma. Diese Datei hält fest, **was**
 gebaut werden soll und **nach welchen Prinzipien**, damit alle, die am Code arbeiten (Menschen und KI), dasselbe
@@ -19,7 +19,7 @@ hier ab und trägt Abweichungen ein.
   ist eingerichtet und in Produktion (4.3). Apple/iCloud und ICS-Abo erst danach.
 - WhatsApp kommt später über Unipile, nicht jetzt.
 
-**Stand des Baus:** Stufe 1 bis 8 sind gebaut. Weiter geht es mit Stufe 9, Übergabe dazu in
+**Stand des Baus:** Stufe 1 bis 9 sind gebaut. Weiter geht es mit Stufe 10, Übergabe dazu in
 [BAU-UEBERGABE.md](BAU-UEBERGABE.md).
 
 **Womit der Bau anfing: Stufe 1** (Abschnitt 8). Der Kalender ist Stufe 3. Für Stufe 1 und 2 wird nichts von
@@ -688,8 +688,33 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
   - **Export** (`/finanzen/export`): ZIP mit `rechnungen.csv`, `kosten.csv`, `kasse.csv` (Semikolon, UTF-8 mit
     BOM für Excel) und den PDFs der Rechnungen im Zeitraum.
   - Angebote verschicken bleibt im Katalog als „kommt später“ (nicht Teil dieser Stufe).
-- [ ] **Stufe 9 – Ein Posteingang**
+- [x] **Stufe 9 – Ein Posteingang** (gebaut 01.11.2026, Abweichungen unten)
   Alle Kanäle an einer Stelle; Unipile für WhatsApp/LinkedIn, sobald Budget da ist.
+  *Umsetzung und Abweichungen:*
+  - `app/posteingang.py`, Einstellungen in `app/posteingang_views.py`; das bestehende Postfach im CRM
+    (`mailbox.py`, `crm_views.py`) ist der gemeinsame Posteingang. `messages` hat jetzt `kanal` (mail, telefon, brief,
+    whatsapp, linkedin, portal), `postfach_id`, `wunsch`, `aenderung_id`, `erfasst_von`. Neue Tabellen `postfaecher`,
+    `postfach_gesehen`. Kein neues Rechte-Modul: Postfach über „CRM“, Einstellungen → Postfächer über
+    „Einstellungen: Verwalten“.
+  - **Weitere Postfächer:** beliebig viele mit IMAP/SMTP, Passwort verschlüsselt (gleicher Schlüssel wie die übrigen
+    Einstellungen), „gehört“ einer Person oder dem Team. Der Takt ruft alle zehn Minuten ab (beim ersten Mal die letzten
+    drei Tage), „Jetzt abrufen“ im Postfach und je Postfach. Zuordnung wie beim Akquise-Postfach (Antwort auf unsere
+    Mail, Absender, Domain, sonst neuer Kontakt), Newsletter bleiben draußen; Fehler stehen am Postfach. Antworten im
+    Gespräch mit Wahl des Postfachs (vorbelegt: das, über das die letzte Mail kam); ein persönliches Postfach nutzt nur
+    die Person, der es gehört. Sperrliste (Adresse oder Domain) und Erstkontakt-Sperre (§ 7 UWG) gelten für jedes
+    Postfach. Die Meldung zu einer neuen Mail geht an die Person, der das Postfach gehört, sonst an die zuständige
+    Person des Kontakts.
+  - **Von Hand festhalten** im Gespräch: Telefonat, Brief, WhatsApp, LinkedIn, vom Kunden oder von uns, mit Zeitpunkt.
+    **Unipile** nur vorbereitet: Einstellungen → WhatsApp und LinkedIn (Unipile) mit Adresse und Schlüssel, noch ohne
+    Verbindung.
+  - **Wünsche:** Eingehende Nachricht (Mail, Telefonat, Brief …) eines Kontakts mit laufendem Projekt wird als
+    „möglicher Änderungswunsch“ markiert und der verantwortlichen Person gemeldet; sie übernimmt ihn mit einem Klick als
+    Änderungswunsch (Quelle mail/telefon/…) oder verwirft ihn. Wünsche aus dem Kunden-Bereich stehen jetzt auch im
+    Posteingang (Kanal portal, schon übernommen).
+  - **Wartet auf Antwort seit** im Postfach (älteste zuerst) und im Gespräch, zuständige Person in der Liste.
+    KPIs „Antwortzeit auf Kunden“ (Stunden bis zu unserer nächsten Nachricht, alle Kanäle) und „Wartet auf unsere
+    Antwort“ im Katalog.
+  - Das Postfach im CRM behält seine bisherige Gestaltung (noch nicht auf `os.css` umgestellt).
 - [ ] **Stufe 10 – Assistent**
   KI-Fragen an die Firmendaten, Vorschläge für Prioritäten, Entwürfe für Angebote, Briefings und Case Studys.
 

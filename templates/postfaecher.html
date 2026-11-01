@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Postfächer · Einstellungen{% endblock %}
+{% block content %}
+{% set dis = 'disabled' if not verwalten %}
+{% macro form(p) -%}
+<form method="post" action="{{ url_for('posteingang.speichern') }}" data-os-fetch="reload">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="id" value="{{ p.id or '' }}">
+  <div class="os-grid2">
+    <label class="os-field"><span>Name</span><input name="name" maxlength="80" value="{{ p.name or '' }}" required placeholder="z. B. Kontakt oder Oskar" {{ dis }}></label>
+    <label class="os-field"><span>Mailadresse</span><input name="adresse" type="email" value="{{ p.adresse or '' }}" required {{ dis }}></label>
+    <label class="os-field"><span>Benutzername (leer = Mailadresse)</span><input name="benutzer" value="{{ p.benutzer or '' }}" {{ dis }}></label>
+    <label class="os-field"><span>Passwort{% if p.hat_passwort %} (leer = bleibt){% endif %}</span><input name="passwort" type="password" autocomplete="new-password" {{ dis }}></label>
+    <label class="os-field"><span>Posteingang (IMAP)</span><input name="imap_host" value="{{ p.imap_host or '' }}" placeholder="z. B. imap.strato.de" required {{ dis }}></label>
+    <label class="os-field"><span>IMAP-Port</span><input name="imap_port" type="number" value="{{ p.imap_port or 993 }}" {{ dis }}></label>
+    <label class="os-field"><span>Postausgang (SMTP)</span><input name="smtp_host" value="{{ p.smtp_host or '' }}" placeholder="z. B. smtp.strato.de" required {{ dis }}></label>
+    <label class="os-field"><span>SMTP-Port und Verschlüsselung</span><span style="display:flex;gap:8px;margin:0"><input name="smtp_port" type="number" value="{{ p.smtp_port or 587 }}" style="width:110px" {{ dis }}>
+      <select name="smtp_sicherheit" {{ dis }}><option value="starttls" {{ 'selected' if p.smtp_sicherheit != 'ssl' }}>STARTTLS (587)</option><option value="ssl" {{ 'selected' if p.smtp_sicherheit == 'ssl' }}>SSL (465)</option></select></span></label>
+    <label class="os-field"><span>Gehört</span><select name="besitzer" {{ dis }}><option value="">dem ganzen Team</option>{% for x in personen %}<option value="{{ x.key }}" {{ 'selected' if p.besitzer == x.key }}>{{ x.name }}</option>{% endfor %}</select></label>
+    <label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:28px"><span style="margin:0">Aktiv (abrufen und senden)</span>
+      <span class="os-toggle"><input type="checkbox" name="aktiv" value="1" {{ 'checked' if p.aktiv is not defined or p.aktiv }} {{ dis }}><span></span></span></label>
+  </div>
+  {% if verwalten %}<button class="os-btn small quiet">Speichern</button>{% endif %}
+</form>
+{%- endmacro %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Einstellungen</span>
+    <h1 class="os-title-l">Postfächer</h1>
+    <p class="os-sub os-lead">Neben dem Akquise-Postfach weitere Adressen, z. B. kontakt@ oder persönliche. Neue Mails landen im gemeinsamen Postfach an der richtigen Akte, Antworten gehen aus demselben Postfach raus. Ein persönliches Postfach nutzt nur die Person, der es gehört.</p>
+  </header>
+  {% if not verwalten %}<p class="os-caption">Ändern darf, wer „Einstellungen: Verwalten“ hat.</p>{% endif %}
+  <ul class="os-list">{% for p in liste %}<li id="p{{ p.id }}"><details>
+    <summary class="os-row" style="cursor:pointer;list-style:none"><span class="os-ampel {{ 'rot' if p.fehler else ('gruen' if p.aktiv and p.abgerufen_am else 'grau') }}"></span>
+      <span class="os-txt"><b>{{ p.name }}</b><span>{{ p.adresse }} · {{ p.besitzer_name or 'Team' }}{% if not p.aktiv %} · aus{% elif p.fehler %} · {{ p.fehler }}{% elif p.abgerufen_am %} · abgerufen {{ tag(p.abgerufen_am) }} {{ p.abgerufen_am[11:16] }}{% else %} · noch nicht abgerufen{% endif %}</span></span>
+      <span class="os-chev">{{ i('chev') }}</span></summary>
+    <div style="padding:8px 0 16px">{{ form(p) }}
+      {% if verwalten %}<div class="os-btns" style="margin-top:12px">
+        <form method="post" action="{{ url_for('posteingang.abrufen', pid=p.id) }}" data-os-fetch="reload"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="os-btn small quiet">Jetzt abrufen</button></form>
+        <form method="post" action="{{ url_for('posteingang.loeschen', pid=p.id) }}" data-os-fetch="reload"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="os-link danger" data-confirm="Postfach „{{ p.name }}“ entfernen? Die Nachrichten bleiben in den Akten.">Entfernen</button></form>
+      </div>{% endif %}</div>
+  </details></li>{% else %}<li class="os-empty">Noch keine weiteren Postfächer. Das Akquise-Postfach steht unter Einstellungen → Postfach und Versand.</li>{% endfor %}</ul>
+  {% if verwalten %}<section class="os-section"><h2 class="os-headline">Neues Postfach</h2><div style="margin-top:12px">{{ form({}) }}</div></section>{% endif %}
+  <p class="os-caption" style="margin-top:32px">Die Passwörter liegen verschlüsselt in der Datenbank. Der Erstkontakt per Mail bleibt in jedem Postfach gesperrt, solange § 7 UWG nicht geklärt ist; die Sperrliste gilt für alle.</p>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('settings.settings') }}" aria-label="Zurück zu den Einstellungen">{{ i('back') }}</a>
+</div>
+{% endblock %}

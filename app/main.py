@@ -282,7 +282,8 @@ MODUL_JE_SEITE = {"compose": "mailer", "preview": "mailer", "send": "mailer", "u
                   "freigaben.recht_speichern": "entscheidungen", "freigaben.notfall_speichern": "entscheidungen"}
 MODUL_JE_BEREICH = {"leads": "leads", "crm": "crm", "settings": "einstellungen", "aufgaben": "aufgaben",
                     "personen": "personen", "branchentest": "leads", "kalender": "kalender", "cockpit": "cockpit",
-                    "kunden": "kunden", "freigaben": "aufgaben", "finanzen": "finanzen"}
+                    "kunden": "kunden", "freigaben": "aufgaben", "finanzen": "finanzen",
+                    "posteingang": "einstellungen"}
 
 
 def modul_der_seite(endpoint):
@@ -925,6 +926,9 @@ app.register_blueprint(freigaben_bp)
 from .finanzen_views import bp as finanzen_bp  # noqa: E402
 
 app.register_blueprint(finanzen_bp)
+from .posteingang_views import bp as posteingang_bp  # noqa: E402
+
+app.register_blueprint(posteingang_bp)
 from .portal_views import bp as portal_bp  # noqa: E402  Kunden-Bereich: eigene Anmeldung, kein Team-Modul
 
 app.register_blueprint(portal_bp)
