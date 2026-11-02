@@ -42,7 +42,7 @@
       </div>{% endif %}</div>
   </details></li>{% else %}<li class="os-empty">Noch keine weiteren Postfächer. Das Akquise-Postfach steht unter Einstellungen → Postfach und Versand.</li>{% endfor %}</ul>
   {% if verwalten %}<section class="os-section"><h2 class="os-headline">Neues Postfach</h2><div style="margin-top:12px">{{ form({}) }}</div></section>{% endif %}
-  <p class="os-caption" style="margin-top:32px">Die Passwörter liegen verschlüsselt in der Datenbank. Der Erstkontakt per Mail bleibt in jedem Postfach gesperrt, solange § 7 UWG nicht geklärt ist; die Sperrliste gilt für alle.</p>
+  <p class="os-caption" style="margin-top:32px">Die Passwörter liegen verschlüsselt in der Datenbank. Der Schalter für den Erstkontakt per Mail (Postfach und Versand) und die Sperrliste gelten für jedes Postfach.</p>
 </main>
 <div class="os-float">
   <a class="os-back" href="{{ url_for('settings.settings') }}" aria-label="Zurück zu den Einstellungen">{{ i('back') }}</a>

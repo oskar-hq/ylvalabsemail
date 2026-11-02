@@ -48,7 +48,8 @@ Der **Ylva Labs Mailer** ist eine kleine Web-App (Python/Flask), die gestaltete 
 
 - Entwurf, Chat zum Überarbeiten und Erinnerung schreibt die KI, wenn ihr es anfordert, mit sichtbaren Kosten und
   Monatsbudget. Ohne KI-Schlüssel gibt es eine feste Vorlage (im „Gehirn“ anpassbar).
-- **Nichts geht ohne Freigabe raus.** Der Erstkontakt per Mail ist gesperrt, bis § 7 UWG geklärt ist (siehe unten).
+- **Nichts geht ohne Freigabe raus.** Der Erstkontakt per Mail ist erlaubt (§ 7 UWG geklärt, 02.11.2026), aber
+  jede Nachricht braucht eine Freigabe.
 
 Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App Store) und per Mail.
 
@@ -100,11 +101,14 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   „Assistent“ eine Frage stellen und prüfen, ob die Quellen stimmen. Für Angebote unter Einstellungen → Finanzen die
   Firmendaten eintragen (stehen auch im Angebots-PDF); die Freigabe-Stufe für Angebote steht auf C (Freigabe, dann
   Mail mit PDF), auf D wird nur das PDF vorbereitet und persönlich übergeben.
-- **Startklar (02.11.2026):** Einstellungen → Startklar zeigt, was für den echten Betrieb noch fehlt: Demo-Modus aus,
-  alle Personen mit Zugang, jeder Bereich mit verantwortlicher Person, Postfach, Adresse der App, Firmendaten und
+- **Startklar (02.11.2026):** Einstellungen → Startklar zeigt, was für den echten Betrieb noch fehlt: alle Personen mit Zugang, jeder Bereich mit verantwortlicher Person, Postfach, Erstkontakt per Mail an, Adresse der App, Firmendaten und
   IBAN für Rechnungen, eine Sicherung; empfohlen KI-Schlüssel, Google-Kalender und Meldungen aufs Handy (jetzt unter
   „Mein Profil“). Nach dem Update: die Liste von oben nach unten abarbeiten, danach einmal den Systemcheck. Wer
   Einstellungen verwaltet, sieht auf Mein Tag, wie viele Punkte noch offen sind.
+- **Mail frei, Demo weg (02.11.2026):** § 7 UWG ist geklärt, der Erstkontakt per Mail ist Standard an. Nach dem
+  Update: Steht in der `.env` noch `OUTREACH_EMAIL=false`, unter Einstellungen → Postfach und Versand → Versand
+  „Erstkontakt per Mail erlauben“ einschalten (Startklar zeigt den Punkt rot). Der Demo-Modus ist entfernt; eine
+  alte Zeile `DEMO_MODE=...` in der `.env` kann raus, sie wird ignoriert.
 
 - Die automatischen Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.
@@ -151,10 +155,9 @@ Bitte kurz beantworten, dann lässt sich die Installation passend vorbereiten.
 
 ## Offene Entscheidungen fürs Team (Oskar)
 
-- [ ] **Rechtliches:** Werbe-Mails ohne vorherige Einwilligung sind nach § 7 UWG auch an Firmen
-      unzulässig. Der Mailversand für den Erstkontakt ist deshalb aus (`OUTREACH_EMAIL=false`).
-      Bis das geklärt ist (Anwalt oder IHK), laufen Erstkontakte per Brief oder Telefon. Nach einer Antwort
-      des Betriebs sind gestaltete Mails möglich.
+- [x] **Rechtliches:** § 7 UWG ist geklärt (02.11.2026). Erstkontakt per Mail ist an (`OUTREACH_EMAIL=true`,
+      umschaltbar unter Einstellungen → Postfach und Versand). Steht in der `.env` des Servers noch
+      `OUTREACH_EMAIL=false`, dort in der App einschalten (Startklar zeigt es an).
 - [ ] **Akquise-Postfach** bei Strato anlegen, z. B. `kontakt@ylvalabs.de`. Darüber gehen
       Nachrichten raus, und dort liest die App die Antworten.
 - [ ] **KI ja oder nein:** Ohne Schlüssel läuft alles außer KI-Entwürfen. Wer die KI nutzen will:
@@ -228,7 +231,8 @@ und der `.env` von Hand, siehe README.
 
 - Die `.env` enthält Passwörter und den KI-Schlüssel. Sie gehört nie ins Repository
   (steht in `.gitignore`) und bekommt die Rechte `chmod 600`.
-- `DEMO_MODE=false` im Betrieb, `ALLOWED_DOMAINS=ylvalabs.de` gesetzt lassen.
+- `ALLOWED_DOMAINS=ylvalabs.de` gesetzt lassen. Einen Demo-Modus gibt es nicht mehr (eine alte Zeile
+  `DEMO_MODE=...` in der `.env` wird ignoriert).
 - Die App braucht genau einen Gunicorn-Worker (ist so eingestellt), weil Anmeldungen und der
   Hintergrund-Arbeiter im Arbeitsspeicher dieses Prozesses laufen.
 - Webseiten werden nur unter öffentlichen Adressen gelesen. Adressen im eigenen Netz sind gesperrt, damit niemand

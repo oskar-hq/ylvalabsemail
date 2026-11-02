@@ -6,8 +6,7 @@
 <main class="page narrow">
   <h1 class="title">Einstellungen</h1>
   {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if ':' in m and 'Gespeichert' not in m else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
-  {% if account.demo %}<p class="note warn small">Demo-Modus: Hier wird nichts gespeichert.</p>
-  {% elif not admin %}<p class="note warn small">Ändern darf nur, wer „Einstellungen: Verwalten“ hat (Personen → Rollen und Rechte).</p>{% endif %}
+  {% if not admin %}<p class="note warn small">Ändern darf nur, wer „Einstellungen: Verwalten“ hat (Personen → Rollen und Rechte).</p>{% endif %}
 
   <ul class="menu">
     <li><a href="{{ url_for('settings.startklar_seite') }}"><span class="ico">{{ osi('check') }}</span>

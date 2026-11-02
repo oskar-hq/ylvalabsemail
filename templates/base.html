@@ -28,7 +28,6 @@
 <header class="top">
   <a class="brand" href="{{ url_for('index') }}" aria-label="Ylva Labs, Mein Tag">
     <span class="brand-tile"><span class="mark" aria-hidden="true"><i class="d"></i><i class="d"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i class="d"></i><i class="d"></i></span></span>
-    {% if account.demo %}<span class="demo-chip">Demo · kein Versand</span>{% endif %}
   </a>
   <nav aria-label="Hauptnavigation">
     <span class="nav-main">
@@ -62,7 +61,7 @@
     <details class="account">
       <summary class="avatar" aria-label="Konto und Einstellungen">{{ who_name[:1]|upper }}</summary>
       <div class="account-menu">
-        <span class="who-full">{{ who_name ~ (' · Demo, es wird nichts verschickt' if account.demo else '') }}</span>
+        <span class="who-full">{{ who_name }}</span>
         <div class="theme-pick" role="group" aria-label="Darstellung">
           <span>Darstellung</span>
           <span class="segmented small">{% for key, label in [('light', 'Hell'), ('dark', 'Dunkel'), ('auto', 'Auto')] %}<button type="button" data-theme-set="{{ key }}" class="{{ 'on' if ui_theme == key }}" aria-pressed="{{ 'true' if ui_theme == key else 'false' }}">{{ label }}</button>{% endfor %}</span>

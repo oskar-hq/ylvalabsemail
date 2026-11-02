@@ -4,7 +4,7 @@ from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template
 
 from . import firma, freigaben, kpis
 from .leads_views import db, me
-from .main import SETTINGS, darf, login_required, safe_next
+from .main import darf, login_required, safe_next
 
 bp = Blueprint("cockpit", __name__)
 
@@ -87,7 +87,7 @@ def cockpit():
                            aktuell=woche == kpis.woche_von(), bereiche=bereiche, sichtbar=sichtbar, person=person,
                            person_name=firma.name_von(c, person) if person else None, lernstaende=lernstaende,
                            verwalten=darf("cockpit", firma.VERWALTEN), regeln=kpis.lernregeln(c),
-                           regel_labels=kpis.REGELN, demo=SETTINGS["DEMO_MODE"])
+                           regel_labels=kpis.REGELN)
 
 
 @bp.post("/cockpit/ziel")
@@ -161,7 +161,7 @@ def wochengespraech():
                            nach=kpis.woche_plus(woche, 1), naechste=kpis.woche_plus(woche, 1),
                            katalog=[k for k in kpis.KATALOG if k["fn"] and k["je_person"]],
                            bereiche=firma.bereiche(c), personen=firma.aktive_personen(c), prios=aufgaben.PRIOS,
-                           heute=aufgaben.heute(), demo=SETTINGS["DEMO_MODE"], rechte=freigaben.rechte(c))
+                           heute=aufgaben.heute(), rechte=freigaben.rechte(c))
 
 
 @bp.post("/lernstufe/<int:fid>")

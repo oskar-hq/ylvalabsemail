@@ -28,16 +28,10 @@ def _liste(namen):
     return ", ".join(namen[:-1]) + " und " + namen[-1]
 
 
-def punkte(c, url_for, demo=False, host_backups=False):
+def punkte(c, url_for, host_backups=False):
     """Alle Punkte in der Reihenfolge, in der man sie am besten abarbeitet."""
     from . import ai, finanzen, firma, kalender
     out = []
-
-    if demo:
-        out.append(_punkt("demo", "Demo-Modus ausschalten", False,
-                          "Im Demo-Modus wird nichts verschickt und nichts gespeichert. Für den echten Betrieb in der "
-                          "Server-Einrichtung DEMO_MODE=false setzen (einmalig, beim Aufsetzen).",
-                          url_for("settings.access"), "Ansehen"))
 
     # Personen: jede aktive Person kann sich anmelden (Passwort oder offene Einladung)
     personen = firma.aktive_personen(c)
@@ -68,6 +62,12 @@ def punkte(c, url_for, demo=False, host_backups=False):
                       f"Es fehlt noch: {_liste(fehlt)}. Ohne Postfach gehen keine Antworten, Angebote und Rechnungen "
                       "raus." if fehlt else f"{_env('OUTREACH_USER')}. Verbindung testen: Systemcheck.",
                       url_for("settings.group", gid="postfach")))
+
+    an = _env("OUTREACH_EMAIL").lower() in ("1", "true", "yes", "on")
+    out.append(_punkt("erstkontakt", "Erstkontakt per Mail eingeschaltet", an,
+                      "Freigegebene Erstkontakte gehen per Mail raus (jede Nachricht nur nach Freigabe)." if an
+                      else "Ist aus: freigegebene Erstkontakte gehen nur als Brief oder werden von Hand markiert.",
+                      url_for("settings.page", gid="postfach", pid="versand")))
 
     out.append(_punkt("adresse", "Adresse der App eingetragen", bool(_env("BASE_URL")),
                       "Steht in Einladungen, Meldungen und Links für Kunden, z. B. https://os.ylvalabs.de."

@@ -200,8 +200,8 @@ def _neuer_link(c, zid):
 
 
 def zugang_schicken(c, wer, pid, email="", name="", senden=True, basis=""):
-    """Zugang anlegen (oder erneuern) und den Einmal-Link schicken. Gibt den Link zurück (zum Kopieren, z. B. im
-    Demo-Modus oder wenn die Mail nicht ankommt)."""
+    """Zugang anlegen (oder erneuern) und den Einmal-Link schicken. Gibt den Link zurück (zum Kopieren, z. B. wenn die
+    Mail nicht ankommt)."""
     from . import firma, leaddb, projekte
     p = projekte.get(c, pid)
     if not p:

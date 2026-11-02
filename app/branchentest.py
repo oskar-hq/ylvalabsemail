@@ -331,9 +331,10 @@ def kontakt_frei(lead):
 # ---------------------------------------------------------------- Kontakte und Preisgespräche
 
 
-def kontakt(c, wer, lead_id, kanal, notiz=""):
+def kontakt(c, wer, lead_id, kanal, notiz="", mail_erlaubt=False):
     """Einen Kontakt mit einem Klick protokollieren (Telefon, Brief, LinkedIn, vor Ort …). Schiebt auf
-    „Kontaktiert“. Mail als Erstkontakt bleibt gesperrt (§ 7 UWG): „Mail“ gilt nur als Antwort auf ihre Mail."""
+    „Kontaktiert“. Mail als Erstkontakt nur, wenn er eingeschaltet ist (Einstellungen → Postfach → Versand);
+    sonst gilt „Mail“ nur als Antwort auf eine Mail des Betriebs."""
     from . import crm, firma, leaddb
     if kanal not in KANAL_LABEL:
         raise BranchentestError("Bitte einen Kontaktweg wählen.")
@@ -343,9 +344,9 @@ def kontakt(c, wer, lead_id, kanal, notiz=""):
     if not kontakt_frei(lead):
         raise BranchentestError("Erst die Lead-Prüfung abwarten." if lead.get("pruef_status") == "wartet" else
                                 "Dieser Lead wurde bei der Prüfung abgelehnt.")
-    if kanal == "email" and not lead.get("replied_at") and lead.get("stage") in (None, "neu", "kontaktiert"):
-        raise BranchentestError("Erstkontakt per Mail ist gesperrt, bis § 7 UWG geklärt ist. Mail nur als Antwort "
-                                "auf eine Mail des Betriebs.")
+    if kanal == "email" and not mail_erlaubt and not lead.get("replied_at") and lead.get("stage") in (None, "neu", "kontaktiert"):
+        raise BranchentestError("Erstkontakt per Mail ist ausgeschaltet (Einstellungen → Postfach → Versand). "
+                                "Mail nur als Antwort auf eine Mail des Betriebs.")
     notiz = (notiz or "").strip()[:500]
     felder = {"unread": 0, "channel": lead.get("channel") or kanal}
     if not lead.get("sent_at"):

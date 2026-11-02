@@ -1,9 +1,9 @@
-"""Beispieldaten für den Demo-Modus: so sehen Akquise und CRM aus, bevor echte Betriebe gefunden sind.
+"""Beispieldaten für Tests und die lokale Vorschau: so sehen Akquise und CRM mit Betrieben aus.
 Alle Betriebe sind erfunden."""
 import json
 from datetime import date, datetime, timedelta
 
-from . import crm, leaddb, mailbox
+from app import crm, leaddb, mailbox
 
 # Ungefähre Ortsmitten (Breite, Länge) für die Karte
 ORTE = {"Kappeln": (54.661, 9.931), "Arnis": (54.630, 9.932), "Süderbrarup": (54.636, 9.773),
@@ -195,7 +195,7 @@ def seed(conn):
     for city, key in ORT_KREIS.items():
         conn.execute("UPDATE leads SET kreis=? WHERE city=? AND source_id LIKE 'demo:%'", (key, city))
     if not leaddb.kv_get(conn, "regionen"):
-        from .regions import EINWOHNER_UNGEFAEHR
+        from app.regions import EINWOHNER_UNGEFAEHR
         leaddb.kv_set(conn, "regionen", {
             "gewerbe": {k: round(g * EINWOHNER_UNGEFAEHR[k] / 1000) for k, (g, _) in BEISPIEL_JE_1000.items()},
             "bau": {k: round(b * EINWOHNER_UNGEFAEHR[k] / 1000) for k, (_, b) in BEISPIEL_JE_1000.items()},

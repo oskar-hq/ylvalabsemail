@@ -61,7 +61,7 @@ def _startklar_offen(c, key):
     if not firma.darf(c, key, "einstellungen", firma.VERWALTEN):
         return 0
     from . import startklar
-    return startklar.zusammenfassung(startklar.punkte(c, url_for, demo=SETTINGS["DEMO_MODE"],
+    return startklar.zusammenfassung(startklar.punkte(c, url_for,
                                                       host_backups=bool(SETTINGS["CONTROL_DIR"])))["pflicht"]
 
 
@@ -103,7 +103,7 @@ def mein_tag():
                            was_zuerst_ki=assistent.letzte_prioritaeten(c, key) if darf("assistent") else None,
                            was_zuerst_knopf=darf("assistent") and assistent.regeln(c)["prioritaeten_ki"],
                            startklar_offen=_startklar_offen(c, key),
-                           **_form_kontext(), demo=SETTINGS["DEMO_MODE"])
+                           **_form_kontext())
     aufgaben.erwaehnungen_gesehen(c, key)  # einmal gezeigt, danach nicht mehr „neu“
     return html
 
@@ -125,7 +125,7 @@ def liste():
     erledigt = request.args.get("erledigt") == "1"
     rows = aufgaben.liste(c, me(), ansicht, bereich=bereich, erledigt=erledigt)
     return render_template("aufgaben.html", account=g.account, rows=rows, ansicht=ansicht, ansichten=ANSICHTEN,
-                           bereich=bereich, erledigt=erledigt, **_form_kontext(), demo=SETTINGS["DEMO_MODE"])
+                           bereich=bereich, erledigt=erledigt, **_form_kontext())
 
 
 @bp.post("/aufgaben/neu")
@@ -164,7 +164,7 @@ def detail(aid):
                            darf_aendern=aufgaben.darf_aendern(c, me(), a),
                            darf_entscheiden=aufgaben.darf_entscheiden(c, me(), a),
                            namen={p["key"]: p["name"] for p in firma.personen(c, mit_archiv=True)},
-                           **_form_kontext(), demo=SETTINGS["DEMO_MODE"])
+                           **_form_kontext())
 
 
 @bp.post("/aufgaben/<int:aid>/aendern")

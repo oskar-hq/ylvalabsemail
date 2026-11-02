@@ -7,8 +7,7 @@
   <a class="back" href="{{ url_for('leads.search') }}">‹ Neue Betriebe finden</a>
   <h1 class="title">Automatisch suchen</h1>
   {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if m.startswith('Nicht') else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
-  {% if account.demo %}<p class="note warn small">Demo-Modus: Hier wird nichts gespeichert.</p>
-  {% elif not admin %}<p class="note warn small">Den Zeitplan ändern dürfen nur Admins.</p>{% endif %}
+  {% if not admin %}<p class="note warn small">Den Zeitplan ändern dürfen nur Admins.</p>{% endif %}
   <p class="muted">Läufe starten zur gewählten Zeit von selbst, solange der Server läuft. Läuft gerade einer, wartet der nächste. Verschickt wird trotzdem nichts ohne eure Freigabe. Neue Betriebe warten danach unter <a href="{{ url_for('leads.review') }}">„Zu prüfen“</a>.</p>
   {% if offline %}<div class="note warn small"><b>Der Server war zwischendurch aus</b> (oder der Rechner, auf dem er läuft, war ausgeschaltet oder im Ruhezustand). In dieser Zeit konnte kein Lauf starten:
     <ul class="offline-list">{% for g in offline %}<li>{{ when(g.from) }} bis {{ when(g.to) }}</li>{% endfor %}</ul>

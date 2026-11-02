@@ -47,7 +47,7 @@ def uebersicht():
     ohne = [dict(r) for r in c.execute("SELECT id, name FROM leads WHERE stage='kunde' AND id NOT IN "
                                        "(SELECT lead_id FROM projekte) ORDER BY name")]
     return render_template("kunden.html", account=g.account, gruppen=[gr for gr in gruppen if gr[3]], ohne=ohne,
-                           beendet=beendet, personen=firma.aktive_personen(c), demo=SETTINGS["DEMO_MODE"])
+                           beendet=beendet, personen=firma.aktive_personen(c))
 
 
 @bp.post("/kunden/neu")
@@ -80,8 +80,7 @@ def detail(pid):
                            komm=aufgaben.kommentare(c, "lead", p["lead_id"]), os_personen=firma.aktive_personen(c),
                            verlauf=firma.protokoll(c, objekt=("projekt", pid), limit=25),
                            namen={x["key"]: x["name"] for x in firma.personen(c, mit_archiv=True)},
-                           verwalten=darf("kunden", firma.VERWALTEN), personen=firma.aktive_personen(c),
-                           demo=SETTINGS["DEMO_MODE"], zugaenge=portal.zugaenge(c, pid),
+                           verwalten=darf("kunden", firma.VERWALTEN), personen=firma.aktive_personen(c), zugaenge=portal.zugaenge(c, pid),
                            dokumente=portal.dokumente(c, pid), dok_arten=portal.DOK_ARTEN,
                            berichte=portal.berichte(c, pid), portal_darf=portal.darf_zugang(c, me(), p),
                            portal_link=session.pop("portal_link", None),
@@ -225,13 +224,13 @@ def einstellungen():
     c = db()
     return render_template("projekte_einstellungen.html", account=g.account, regeln=projekte.regeln(c),
                            regel_labels=projekte.REGELN, wochentage=projekte.WOCHENTAGE, bereiche=firma.bereiche(c),
-                           verwalten=darf("kunden", firma.VERWALTEN), demo=SETTINGS["DEMO_MODE"])
+                           verwalten=darf("kunden", firma.VERWALTEN))
 
 
 @bp.post("/einstellungen/projekte")
 @login_required
 def einstellungen_speichern():
-    if g.account.get("demo") or not darf("kunden", firma.VERWALTEN):
+    if not darf("kunden", firma.VERWALTEN):
         abort(403, "Dafür brauchst du „Kunden, Projekte und Änderungen: Verwalten“.")
     try:
         projekte.regeln_speichern(db(), me(), request.form)
@@ -257,7 +256,7 @@ def _portal_fertig(fn, pid, anker, ok_text):
 def zugang(pid):
     from . import portal
     _projekt_or_404(pid)
-    senden = request.form.get("senden", "1") == "1" and not g.account.get("demo")
+    senden = request.form.get("senden", "1") == "1"
 
     def tun():
         link = portal.zugang_schicken(db(), me(), pid, request.form.get("email", ""), request.form.get("name", ""),
@@ -359,7 +358,7 @@ def portal_einstellungen():
 @login_required
 def portal_einstellungen_speichern():
     from . import portal
-    if g.account.get("demo") or not darf("kunden", firma.VERWALTEN):
+    if not darf("kunden", firma.VERWALTEN):
         abort(403, "Dafür brauchst du „Kunden, Projekte und Änderungen: Verwalten“.")
     try:
         geaendert = portal.regeln_speichern(db(), me(), request.form)

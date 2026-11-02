@@ -6,8 +6,7 @@
   zwei werden aus ihren Daten abgeleitet (Anforderung im Projekt, Erstkontakt-Entwurf).
 - **Freigabe-Stufen A–D je Aktion** (docs/FIRMEN-OS.md, Abschnitt 3) stehen als Einstellung in `kv`
   („regel:stufen“). Jede Aktion hat die erlaubten Stufen; was fest ist, steht im Katalog und lässt sich nicht ändern.
-  Hart im Code und nie per Einstellung abschaltbar: Erstkontakt per Mail gesperrt (`OUTREACH_EMAIL`, § 7 UWG),
-  Sperrliste, nichts an Kunden ohne Freigabe, solange die Aktion auf C oder D steht. Stufe B: Das OS kündigt an und
+  Hart im Code und nie per Einstellung abschaltbar: Sperrliste, nichts an Kunden ohne Freigabe, solange die Aktion auf C oder D steht. Stufe B: Das OS kündigt an und
   führt nach der Einspruchsfrist aus (Takt), wenn niemand stoppt.
 - **Entscheidungsrechte** aus docs/ROLLEN-UND-ABLAEUFE.md als Daten (Tabelle `entscheidungsrechte`): wer allein
   entscheidet, was nur gemeinsam geht, Betragsgrenze 200 €.
@@ -74,8 +73,8 @@ AKTIONEN = [
        "Geht über den Google-Kalender der verantwortlichen Person an den Kunden. Auf B kündigt das OS die Einladung "
        "an und verschickt sie nach der Frist, wenn niemand stoppt."),
     _a("erstkontakt", "Nachricht an einen Lead oder Kunden", "C",
-       hinweis="Hart im Code: nie ohne Freigabe. Erstkontakt per Mail bleibt gesperrt, solange § 7 UWG nicht geklärt "
-               "ist; die Sperrliste gilt immer."),
+       hinweis="Hart im Code: nie ohne Freigabe; die Sperrliste gilt immer. Ob der Erstkontakt per Mail rausgeht, "
+               "steht unter Postfach → Versand."),
     _a("kundenversprechen", "Anforderung freigeben (Versprechen mit Technikzeit)", "C",
        hinweis="Verantwortlich und Technik geben beide frei, nie ohne Aufwandsschätzung (Entscheidungsrechte).",
        bereich="Projekte"),

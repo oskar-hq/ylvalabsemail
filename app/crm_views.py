@@ -29,7 +29,7 @@ def board():
                            total_cards=sum(len(col[3]) for col in columns), wer=wer, people=team.names(db()),
                            due=crm.open_tasks(db(), until=today, who=wer, me=me()),
                            upcoming=crm.open_tasks(db(), who=wer, me=me())[:40],
-                           st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+                           st=status_payload())
 
 
 def _wer():
@@ -167,7 +167,7 @@ def heatmap():
     return render_template("karte.html", account=g.account, points=points, hotspots=crm.hotspots(points),
                            kreise=kreise, geo=geo, stand=store.get("stand") or {}, kinds=regions.KINDS,
                            has_stats=bool(store.get("gewerbe") or store.get("bau")), top=regions.TOP,
-                           stage_labels=crm.STAGE_LABELS, st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+                           stage_labels=crm.STAGE_LABELS, st=status_payload())
 
 
 @bp.post("/crm/regionen/import")
@@ -213,7 +213,7 @@ def inbox():
                            weitere=posteingang.postfaecher(db(), nur_aktive=True),
                            moods=mailbox.MOODS, wer=wer, people=team.names(db()),
                            inbox_status=leaddb.kv_get(db(), "inbox_status"), ready=_mail_ready(),
-                           st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+                           st=status_payload())
 
 
 def _mail_ready():
@@ -258,8 +258,6 @@ def notices_read():
 @login_required
 def inbox_fetch():
     """„Jetzt abrufen“: Postfach sofort lesen statt auf die nächsten Minuten zu warten."""
-    if g.account.get("demo"):
-        return jsonify(ok=True, neu=0, message="Demo: Es wird kein echtes Postfach gelesen.")
     from . import posteingang
     weitere = posteingang.postfaecher(db(), nur_aktive=True)
     missing = _mail_ready()
@@ -288,7 +286,7 @@ def compose_mail():
         return render_template("mail_new.html", account=g.account, lead=lead, ready=_mail_ready(),
                                senders=team.members(db()), sender_key=_default_sender(lead), org=SETTINGS["ORG_NAME"],
                                sender=agent.outreach_address(),
-                               st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+                               st=status_payload())
     to = request.form.get("to", "").strip().lower()
     subject = request.form.get("subject", "").strip()
     text = request.form.get("text", "").strip()
@@ -316,7 +314,7 @@ def compose_mail():
         return jsonify(error="Diese Adresse möchte keine Nachrichten mehr bekommen."), 400
     sender = _sender_from_form()
     postfach_id = int(request.form.get("postfach") or 0) or None
-    if postfach_id and not g.account.get("demo"):
+    if postfach_id:
         from . import posteingang
         last = mailbox.last_incoming(db(), lead_id)
         try:
@@ -326,11 +324,6 @@ def compose_mail():
         except posteingang.PosteingangError as exc:
             return jsonify(error=str(exc)), 400
         return jsonify(ok=True)
-    if g.account.get("demo"):
-        agent.record_reply(c, lead, text, team.names(c).get(sender) or who(), subject, to, note=" Demo: nicht verschickt.",
-                           what="Neue Mail aus dem Postfach")
-        crm.claim(c, lead["id"], sender)
-        return jsonify(ok=True, url=f"/crm/postfach/{lead['id']}")
     try:
         agent.send_new(c, lead, to, subject, text, who(), sender=sender)
     except Exception as exc:
@@ -350,20 +343,20 @@ def conversation(lead_id):
     mood, why = mailbox.mood(lead, last_in)
     from . import posteingang
     eigene = posteingang.fuer_person(db(), me()) if me() else []
-    can_send = agent.outreach_configured() or g.account.get("demo") or bool(eigene)
+    can_send = agent.outreach_configured() or bool(eigene)
     zuletzt = next((i.get("postfach_id") for i in reversed(items) if i["direction"] == "in" and i.get("kanal") == "mail"),
                    None)
     projekt = db().execute("SELECT id, verantwortlich FROM projekte WHERE lead_id=? AND status != 'beendet' ORDER BY id "
                            "DESC LIMIT 1", (lead_id,)).fetchone()
     return render_template("conversation.html", account=g.account, lead=lead, items=items, mood=mood, mood_why=why,
                            postfaecher=eigene, postfach_vorschlag=zuletzt if zuletzt in [p["id"] for p in eigene] else "",
-                           akquise=agent.outreach_configured() or g.account.get("demo"), kanaele=posteingang.KANAELE,
+                           akquise=agent.outreach_configured(), kanaele=posteingang.KANAELE,
                            von_hand=posteingang.VON_HAND, wartet=posteingang.wartet_seit(db(), lead_id),
                            wunsch_darf=bool(projekt) and (projekt["verantwortlich"] == me() or darf("kunden", 4)),
                            senders=team.members(db()), sender=_default_sender(lead), people=team.names(db()),
                            moods=mailbox.MOODS, last_in=last_in, can_send=can_send,
                            subject=mailbox.reply_subject((last_in or {}).get("subject") or lead["subject"] or lead["name"]),
-                           st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+                           st=status_payload())
 
 
 def _default_sender(lead=None):
@@ -390,12 +383,6 @@ def reply(lead_id):
         if not ok:
             return jsonify(error=why), 400
     sender = _sender_from_form()
-    if g.account.get("demo"):
-        last = mailbox.last_incoming(db(), lead_id)
-        agent.record_reply(db(), lead, text, team.names(db()).get(sender) or who(), subject or "Re: …",
-                           (last or {}).get("from_addr") or lead["email"] or "", note=" Demo: nicht verschickt.")
-        crm.claim(db(), lead_id, sender)
-        return jsonify(ok=True)
     try:
         agent.send_reply(db(), lead, text, who(), subject, sender=sender)
     except Exception as exc:

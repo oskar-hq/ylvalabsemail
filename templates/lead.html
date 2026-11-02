@@ -68,8 +68,8 @@
           <button type="button" class="btn" data-fu="skip">Nicht nachfassen</button>
           <button type="button" class="btn" data-fu="save">Speichern</button>
           <button type="button" class="btn" data-fu="mark">Als erledigt markieren</button>
-          <button type="button" class="btn primary" data-fu="send" {{ 'disabled' if not (st.email_enabled and lead.email and lead.channel == 'email') and not account.demo }}
-            title="{{ '' if st.email_enabled else 'Versand per Mail ist ausgeschaltet (OUTREACH_EMAIL).' }}">Per Mail senden</button>
+          <button type="button" class="btn primary" data-fu="send" {{ 'disabled' if not (st.email_enabled and lead.email and lead.channel == 'email') }}
+            title="{{ '' if st.email_enabled else 'Erstkontakt per Mail ist ausgeschaltet (Einstellungen → Postfach und Versand).' }}">Per Mail senden</button>
         </div>
         {% endif %}
         {% endif %}
@@ -106,8 +106,8 @@
           <a class="btn" href="{{ url_for('leads.letter', lead_id=lead.id) }}" target="_blank" data-act="letter">Als Brief drucken</a>
           <button type="button" class="btn" data-act="mark">Als versendet markieren</button>
           <a class="btn" href="{{ url_for('compose', lead=lead.id) }}" data-act="design" title="{{ mail_hint or 'Mit Vorlage, Pixel-Band oder Bild im Mailer gestalten und von deinem Postfach senden' }}">Im Mailer gestalten</a>
-          <button type="button" class="btn primary" data-act="send" {{ 'disabled' if not (st.email_enabled and lead.email) and not account.demo }}
-            title="{{ '' if st.email_enabled else 'Versand per Mail ist ausgeschaltet (OUTREACH_EMAIL).' }}">Per Mail senden</button>
+          <button type="button" class="btn primary" data-act="send" {{ 'disabled' if not (st.email_enabled and lead.email) }}
+            title="{{ '' if st.email_enabled else 'Erstkontakt per Mail ist ausgeschaltet (Einstellungen → Postfach und Versand).' }}">Per Mail senden</button>
         </div>
         {% if not can_mail and mail_hint %}<p class="muted small right">{{ mail_hint }}</p>{% endif %}
         {% elif can_mail and lead.stage in ('kontaktiert', 'antwort', 'gespraech', 'angebot', 'kunde') and not replies %}

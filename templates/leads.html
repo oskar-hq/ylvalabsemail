@@ -31,14 +31,6 @@
     {% for title, _, keys in tab_groups %}{% for key, label, _ in tabs if key in keys %}<a href="{{ url_for('leads.overview', tab=key) }}" class="{{ 'on' if tab == key }}">{{ label }} <span class="count">{{ c[key] }}</span></a>{% endfor %}{% endfor %}
   </nav>
 
-  {% if demo and not st.counts.values()|sum %}
-  <form method="post" action="{{ url_for('leads.demo_seed') }}" class="note">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    Noch keine Betriebe. Im Demo-Modus kannst du Beispieldaten laden, um alles auszuprobieren.
-    <button class="btn small">Beispieldaten laden</button>
-  </form>
-  {% endif %}
-
   {% for gtitle, ghint, gsections in groups %}
   <div class="lead-group">
   {% if tab == 'alle' and gsections|selectattr(3)|list %}<p class="label group-label">{{ gtitle }}</p>{% endif %}

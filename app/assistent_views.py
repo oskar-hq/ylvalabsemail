@@ -8,7 +8,7 @@ from markupsafe import Markup, escape
 
 from . import assistent, firma
 from .leads_views import db, me
-from .main import SETTINGS, darf, login_required, safe_next
+from .main import darf, login_required, safe_next
 
 bp = Blueprint("assistent", __name__)
 bp_angebote = Blueprint("angebote", __name__)
@@ -69,8 +69,7 @@ def seite():
     alle = request.args.get("alle") == "1" and darf("assistent", firma.VERWALTEN)
     return render_template("assistent.html", account=g.account, bereit=ok, warum=warum,
                            verlauf=assistent.verlauf(c, me(), limit=30, alle=alle), alle=alle, beispiele=BEISPIELE,
-                           monat=assistent.monatskosten(c, me()), regeln=assistent.regeln(c), eur=_eur,
-                           demo=SETTINGS["DEMO_MODE"])
+                           monat=assistent.monatskosten(c, me()), regeln=assistent.regeln(c), eur=_eur)
 
 
 def _eur(usd):
@@ -152,13 +151,13 @@ def einstellungen():
     return render_template("assistent_einstellungen.html", account=g.account, regeln=assistent.regeln(c),
                            labels=assistent.REGELN, modelle=assistent.MODELLE, schluessel=ai.available(),
                            monat=assistent.monatskosten(c), verwalten=darf("assistent", firma.VERWALTEN),
-                           eur=ai.eur, demo=SETTINGS["DEMO_MODE"])
+                           eur=ai.eur)
 
 
 @bp.post("/einstellungen/assistent")
 @login_required
 def einstellungen_speichern():
-    if g.account.get("demo") or not darf("assistent", firma.VERWALTEN):
+    if not darf("assistent", firma.VERWALTEN):
         abort(403, "Dafür brauchst du „Assistent: Verwalten“.")
     try:
         assistent.regeln_speichern(db(), me(), request.form)
@@ -181,7 +180,7 @@ def _angebot_or_404(aid):
 def liste():
     status = request.args.get("status") or None
     return render_template("angebote.html", account=g.account, angebote=assistent.angebote(db(), status=status),
-                           status=status, labels=assistent.STATUS, demo=SETTINGS["DEMO_MODE"])
+                           status=status, labels=assistent.STATUS)
 
 
 @bp_angebote.post("/angebote/neu")
@@ -207,8 +206,7 @@ def detail(aid):
     return render_template("angebot.html", account=g.account, a=a, labels=assistent.STATUS,
                            technik=a_._technik(db()) == me(), verantwortlich=a_._verantwortlich(db(), a),
                            verlauf=firma.protokoll(db(), objekt=("angebot", aid), limit=20),
-                           namen={p["key"]: p["name"] for p in firma.personen(db(), mit_archiv=True)},
-                           demo=SETTINGS["DEMO_MODE"])
+                           namen={p["key"]: p["name"] for p in firma.personen(db(), mit_archiv=True)})
 
 
 @bp_angebote.get("/angebote/<int:aid>/pdf")

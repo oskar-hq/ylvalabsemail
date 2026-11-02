@@ -58,7 +58,6 @@ SETTINGS = {
     "SEND_DELAY": float(env("SEND_DELAY", "1")),
     "MAX_RECIPIENTS": int(env("MAX_RECIPIENTS", "200")),
     "SESSION_HOURS": float(env("SESSION_HOURS", "12")),
-    "DEMO_MODE": env("DEMO_MODE", "false").lower() in ("1", "true", "yes"),
     "DATA_DIR": _DATA_DIR,
     # Wer Einstellungen ändern und Updates einspielen darf (leer = alle, die sich anmelden dürfen)
     "ADMIN_USERS": [u.lower() for u in re.split(r"[,\s]+", env("ADMIN_USERS")) if u],
@@ -81,7 +80,7 @@ SETTINGS = {
     "LEADS_SENDER_NAME": env("LEADS_SENDER_NAME", "Oskar Jacobsen"),
     "OUTREACH_USER": env("OUTREACH_USER"),
     "OUTREACH_PASSWORD": env("OUTREACH_PASSWORD"),
-    "OUTREACH_EMAIL": env("OUTREACH_EMAIL", "false").lower() in ("1", "true", "yes"),
+    "OUTREACH_EMAIL": env("OUTREACH_EMAIL", "true").lower() in ("1", "true", "yes"),
     "INBOX_MINUTES": float(env("INBOX_MINUTES", "10")),
     "NOTIFY_EMAILS": [a for a in re.split(r"[,\s]+", env("NOTIFY_EMAILS")) if a],
     "BASE_URL": env("BASE_URL"),
@@ -342,7 +341,6 @@ def csrf_token():
 
 app.jinja_env.globals["csrf_token"] = csrf_token
 app.jinja_env.globals["darf"] = lambda modul, stufe=1: darf(modul, stufe)
-app.jinja_env.globals["demo_enabled"] = SETTINGS["DEMO_MODE"]
 
 
 @app.before_request
@@ -473,7 +471,7 @@ def update_session(**values):
 def mail_creds(account):
     """Womit der Mailer verschickt: mit dem eigenen Postfach (Anmeldung per Postfach) oder, bei Anmeldung mit
     Name und Passwort, über das gemeinsame Akquise-Postfach."""
-    if account.get("password") or account.get("demo"):
+    if account.get("password"):
         return account["user"], account["password"], account["address"]
     user = SETTINGS["OUTREACH_USER"]
     return user, SETTINGS["OUTREACH_PASSWORD"], user if "@" in user else SETTINGS["FROM_ADDRESS"]
@@ -520,20 +518,6 @@ def login():
     if current_account():
         return redirect(url_for("index"))
     return _login_page()
-
-
-@app.post("/demo")
-def demo_login():
-    """Demo-Modus: ohne Postfach alles ausprobieren, verschickt wird nichts."""
-    if not SETTINGS["DEMO_MODE"]:
-        abort(404)
-    sid = secrets.token_urlsafe(32)
-    with _sessions_lock:
-        _sessions[sid] = {"user": "demo", "password": "", "since": time.time(), "team": "oskar",
-                          "name": "Oskar Jacobsen", "address": "demo@ylvalabs.de", "demo": True}
-    session.clear()
-    session["sid"] = sid
-    return redirect(url_for("index"))
 
 
 @app.post("/login/vergessen")
@@ -760,7 +744,7 @@ def send():
     account = {**g.account, "address": m_address}
     form = form_data()
     test = form.get("mode") == "test"
-    if not m_password and not g.account.get("demo"):
+    if not m_password:
         return jsonify(error="Zum Senden fehlt das Akquise-Postfach (Einstellungen → Postfach und Versand)."), 400
     if not account["address"]:
         return jsonify(error="Keine Absenderadresse bekannt. Bitte FROM_ADDRESS in der Konfiguration setzen."), 400
@@ -793,17 +777,6 @@ def send():
             c.close()
         if not ok:
             return jsonify(error=why), 400
-    if account.get("demo"):
-        if not test:
-            msgs = [emailbuild.build_message(form, r, SETTINGS, account["address"], img) for r in rcpts]
-            _record_in_crm(lead_id, msgs, "Demo")  # Demo: in der Akte vermerken, verschickt wird nichts
-            return jsonify(demo=True, would_send=len(rcpts))
-        # Statt zu senden: die fertige Mail als .eml-Datei zum Öffnen im Mailprogramm
-        msg = emailbuild.build_message(form, rcpts[0], SETTINGS, account["address"], img)
-        msg.replace_header("To", account["address"])
-        name = re.sub(r"[^\w\-]+", "-", form.get("subject", "mail")).strip("-")[:60] or "mail"
-        return Response(msg.as_bytes(), mimetype="message/rfc822",
-                        headers={"Content-Disposition": f'attachment; filename="{name}.eml"'})
     sent, failed, sent_msgs = [], [], []
     try:
         smtp = smtp_connect(m_user, m_password)

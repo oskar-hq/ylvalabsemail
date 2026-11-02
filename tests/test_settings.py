@@ -8,8 +8,7 @@ from pathlib import Path
 from unittest import mock
 
 if "DATA_DIR" not in os.environ:  # allein gestartet; sonst setzt test_leads die Umgebung
-    os.environ.update(DATA_DIR=tempfile.mkdtemp(), SMTP_HOST="smtp.example.com", LEADS_WORKER="false",
-                      DEMO_MODE="true")
+    os.environ.update(DATA_DIR=tempfile.mkdtemp(), SMTP_HOST="smtp.example.com", LEADS_WORKER="false", OUTREACH_EMAIL="false")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import io  # noqa: E402
@@ -172,7 +171,7 @@ class SettingsViewsTest(unittest.TestCase):
         stored = config_store.load(main.SETTINGS["DATA_DIR"])
         self.assertEqual((stored["ORG_NAME"], stored["OUTREACH_PASSWORD"], stored["SMTP_PORT"]),
                          ("Ylva Labs GmbH", "neu-geheim", "465"))
-        self.assertNotIn("OUTREACH_EMAIL", stored)  # Häkchen-Felder nicht mitgeschickt: Vorgabe false, keine Änderung
+        self.assertNotIn("OUTREACH_EMAIL", stored)  # Häkchen-Felder nicht mitgeschickt: Vorgabe bleibt, keine Änderung
         r = self.post("/einstellungen", {"SMTP_PORT": "abc"})
         self.assertIn("ganze Zahl", self.client.get("/einstellungen").get_data(as_text=True))
         r = self.post("/einstellungen", {"reset_ORG_NAME": "1"})
