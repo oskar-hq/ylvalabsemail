@@ -50,8 +50,6 @@ def run(settings, smtp_connect, sent_folder, data_dir):
             problems.append("SMTP_HOST fehlt")
         if not S["ALLOWED_DOMAINS"] and not S["ALLOWED_USERS"]:
             problems.append("ALLOWED_DOMAINS ist leer (jedes Postfach könnte sich anmelden)")
-        if S["DEMO_MODE"]:
-            problems.append("DEMO_MODE ist an")
         if problems:
             return FAIL, "; ".join(problems), "In der .env korrigieren und neu starten."
         return OK, f"Anmeldung nur für {', '.join(S['ALLOWED_DOMAINS'] + S['ALLOWED_USERS'])}", None

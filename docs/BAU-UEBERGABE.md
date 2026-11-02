@@ -13,7 +13,7 @@ steht, wie hier gearbeitet wird und was als Nächstes sinnvoll ist. Ausführlich
    [DESIGN.md](DESIGN.md) lesen, dann den betroffenen Code.
 2. Kurzen Plan für die Stufe mit Oskar abstimmen. Oskar hat für Stufe 2 bis 10 gesagt: Plan kurz abstimmen, dann bauen,
    testen, im Browser ansehen, Doku nachziehen, Pull Request und mergen.
-3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 187 Tests, alle grün). Neue Tests für das OS
+3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 188 Tests, alle grün). Neue Tests für das OS
    kommen in `tests/test_os.py` (die Reihenfolge der Testdateien ist wichtig: `test_leads.py` setzt die
    Umgebung, Dateien davor dürfen `app.main` nicht importieren).
 4. Seiten im Browser ansehen (Playwright ist vorinstalliert): Handy 390 px und Desktop, hell und dunkel.
@@ -95,8 +95,10 @@ jeweils die erste Option ist die Empfehlung):
 - **Tests:** `python -m unittest discover tests` (dauert etwa 25 Sekunden; Meldungen „Kreisgrenzen nicht geladen“
   und „Fehlgeschlagene Anmeldung“ sind normal). Dazu `python -m pyflakes app tests`; bekannte alte Meldungen in
   `branchentest.py:451` und `main.py` (`firma` doppelt importiert) sind nicht neu.
-- **App lokal ansehen:** `DEMO_MODE=true DATA_DIR=<ordner> SECRET_KEY=x LEADS_WORKER=false flask --app app.main run -p 8097`,
-  dann `/login` → „Demo ansehen“ (angemeldet als Oskar, es wird nichts verschickt). Flask lädt Vorlagen und Python-Code
+- **App lokal ansehen:** Den Demo-Modus gibt es nicht mehr. Einmal `python tests/vorschau.py <ordner>` (erfundene
+  Beispieldaten, Oskar bekommt das Passwort `vorschau123`), dann
+  `DATA_DIR=<ordner> SECRET_KEY=x LEADS_WORKER=false OUTREACH_EMAIL=false flask --app app.main run -p 8097` und unter
+  `/login` als Oskar anmelden. Ohne Postfach in den Einstellungen geht keine Mail raus. Flask lädt Vorlagen und Python-Code
   nicht neu: nach Änderungen den Server neu starten. Screenshots mit Playwright (Handy 390×844, Desktop 1300×900,
   `data-theme` auf `light`/`dark`), auf Überlauf prüfen (`document.documentElement.scrollWidth`).
 - **Skripte außerhalb der App** (z. B. zum Anlegen von Testdaten): `agent.CFG` ist dann leer. Funktionen, die

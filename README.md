@@ -95,12 +95,11 @@ Ohne `ANTHROPIC_API_KEY` funktioniert alles andere.
 
 ### Rechtliches vorab (wichtig)
 
-Werbe-Mails an Firmen ohne deren vorherige Einwilligung sind in Deutschland nach **§ 7 UWG** unzulässig,
-auch im B2B-Bereich. Es drohen Abmahnungen, und das Postfach kann als Spam-Quelle gesperrt werden.
-Deshalb ist der Mailversand für den Erstkontakt **ausgeschaltet** (`OUTREACH_EMAIL=false`), bis ihr das
-geklärt habt, z. B. mit einer Anwältin oder der IHK. Gestaltete Mails aus dem CRM sind ebenfalls gesperrt, bis ein Betrieb geantwortet hat. Bis dahin taugt jeder Entwurf als **Brief**
-(Knopf „Als Brief drucken“) oder als Leitfaden für einen **Anruf**. Beides ist im B2B-Bereich
-bei mutmaßlichem Interesse erlaubt. Antworten per Mail werden trotzdem erkannt.
+Die Frage nach § 7 UWG (Werbe-Mails ohne vorherige Einwilligung) ist geklärt (Stand 02.11.2026). Der
+Erstkontakt per Mail ist deshalb **eingeschaltet** (`OUTREACH_EMAIL=true`, Einstellungen → Postfach und Versand).
+Jede Nachricht geht weiterhin nur nach Freigabe raus, die Sperrliste gilt immer. Wer den Schalter ausmacht, bekommt
+das alte Verhalten: Entwürfe als **Brief** (Knopf „Als Brief drucken“) oder als Leitfaden für einen **Anruf**,
+gestaltete Mails erst nach einer Antwort des Betriebs.
 
 ### Handy-App ohne App Store
 
@@ -125,8 +124,8 @@ kein Apple-Entwicklerkonto.
 5. Unter **Leads → Gehirn und Vorlage** die Texte und die Vorlage prüfen und anpassen, dann den ersten **Lauf starten**,
    am besten klein (z. B. 20 Betriebe bewerten, 0 Entwürfe). Danach unter **CRM** die passenden Betriebe ansehen.
 
-Alle Einstellungen stehen kommentiert in `.env.example`. Mit `DEMO_MODE=true` lassen sich unter
-„Leads“ Beispieldaten laden, um die Oberfläche ohne Schlüssel auszuprobieren.
+Alle Einstellungen stehen kommentiert in `.env.example`. Einen Demo-Modus gibt es nicht mehr; zum Entwickeln legt
+`python tests/vorschau.py <ordner>` eine lokale Datenbank mit erfundenen Beispieldaten an.
 
 ## Schnellstart
 
@@ -243,7 +242,7 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
   Zähler in der Navigation, auf Mein Tag ein Abschnitt. Wer verwaltet, sieht auch „Alle offenen“.
 - **Freigabe-Stufen A–D je Aktion** (Einstellungen → Freigaben und Entscheidungen): A automatisch, B mit Einspruch
   (geht nach der Frist von selbst raus, Standard 24 Stunden, „Stoppen“ jederzeit), C mit Freigabe, D nur Mensch.
-  Umschaltbar ist heute die Einladung an Kunden; der Erstkontakt per Mail bleibt hart gesperrt (§ 7 UWG).
+  Umschaltbar ist heute die Einladung an Kunden; Nachrichten an Leads und Kunden gehen nie ohne Freigabe raus.
 - **Entscheidungsrechte**: wer allein entscheidet, was nur gemeinsam geht, wer gefragt wird, Betragsgrenze
   (Startwerte aus den Rollen, ab 200 € das Gründerteam). In den Einstellungen änderbar.
 - **Entscheidungs-Log**: was, wer, warum, Grundlage. Reicht das eigene Recht nicht, warten die übrigen in ihren
@@ -301,8 +300,8 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
 ## Startklar: was vor dem Start fehlt
 
 - **Einstellungen → Startklar** (`/einstellungen/startklar`): Checkliste für den echten Betrieb, jeder Punkt mit Link
-  dorthin, wo man ihn erledigt. Für den Start: Demo-Modus aus, alle Personen können sich anmelden, jeder Bereich hat
-  eine verantwortliche Person, Postfach verbunden, Adresse der App, Firmendaten und IBAN für Rechnungen, Sicherung
+  dorthin, wo man ihn erledigt. Für den Start: alle Personen können sich anmelden, jeder Bereich hat
+  eine verantwortliche Person, Postfach verbunden, Erstkontakt per Mail an, Adresse der App, Firmendaten und IBAN für Rechnungen, Sicherung
   in den letzten 30 Tagen (oder automatisch auf dem Server). Empfohlen: KI-Schlüssel, Google-Kalender, Meldungen
   aufs Handy. Prüft nur Gespeichertes; echte Verbindungen testet der Systemcheck.
 - Wer Einstellungen verwaltet, sieht auf **Mein Tag** einen Hinweis, solange Pflicht-Punkte offen sind.
@@ -341,7 +340,7 @@ Nach der Einrichtung muss niemand mehr auf den Server:
 - **Einstellungen** (Menü oben rechts): Postfach, Versand, Absender und Texte, Suchgebiet und Bewertung, KI und Budget,
   Benachrichtigungen. Was dort gespeichert wird, gilt vor der `.env`; die App startet danach kurz neu. Passwörter und
   der KI-Schlüssel werden verschlüsselt im Datenordner abgelegt und nie wieder angezeigt. Nur in der `.env` bleiben
-  Zugang und Sicherheit (`ALLOWED_DOMAINS`, `ALLOWED_USERS`, `ADMIN_USERS`, `COOKIE_SECURE`, `TRUST_PROXY`, `DEMO_MODE`),
+  Zugang und Sicherheit (`ALLOWED_DOMAINS`, `ALLOWED_USERS`, `ADMIN_USERS`, `COOKIE_SECURE`, `TRUST_PROXY`),
   damit sich niemand aus Versehen aussperrt.
 - **Software und Updates**: zeigt die installierte Version und was auf GitHub neu ist. „Update einspielen“ sichert,
   holt den neuen Stand, baut neu und startet. Startet die neue Version nicht, wird automatisch die alte wieder
@@ -406,7 +405,6 @@ Zum Aktualisieren `git pull` ausführen und das Skript erneut starten. `.env` un
 | `COOKIE_SECURE` | `true`, sobald die App über HTTPS erreichbar ist |
 | `TRUST_PROXY` | `cloudflare` hinter einem Cloudflare Tunnel, `proxy` hinter einem anderen Reverse Proxy, sonst `none` |
 | `SESSION_HOURS` | Nach wie vielen Stunden man sich neu anmelden muss |
-| `DEMO_MODE` | `true` zeigt „Demo ansehen“ auf der Anmeldeseite: alles ausprobieren ohne Postfach, statt zu senden wird die Mail als `.eml`-Datei geladen. Vor dem Betrieb im Internet auf `false` setzen. |
 
 **Gmail / Microsoft 365:** Dort braucht man ein *App-Passwort*, oder SMTP-AUTH muss für das Postfach
 freigeschaltet sein. Das normale Passwort wird bei aktivierter Zwei-Faktor-Anmeldung abgelehnt.

@@ -55,7 +55,7 @@ Die zwei Piloten zeigen, dass Oskars Kontakte kaufen, aber nicht, dass Fremde ka
 - **Umfang:** je 50 Betriebe, also 200 Kontakte. Wie viele pro Woche machbar sind, legt ihr nach der ersten Woche fest.
 - **Gleiche Bedingungen:** gleicher Preis, gleicher Ablauf, nur das Beispiel für die eingesparte Arbeit passt zur Branche.
 - **Getrennt zählen:** Oskars Kontakte werden als warm markiert und nicht mitgezählt.
-- **Kontaktweg:** Der Erstkontakt per Mail bleibt gesperrt, bis § 7 UWG geklärt ist. Bleiben Telefon und Brief, auch das klärt ihr vorher rechtlich.
+- **Kontaktweg:** Der Erstkontakt per Mail ist erlaubt (§ 7 UWG geklärt, 02.11.2026), dazu Telefon und Brief. Jede Nachricht geht nur nach Freigabe raus.
 - **Entscheidung (Vorschlag):** Zählt am Ende Preisgespräche und Abschlüsse, nicht Antworten. Weiterverfolgt wird eine Branche ab 3 ernsthaften Preisgesprächen. Das zeigt nur eine Richtung und ist keine genaue Prognose.
 - **Produkt:** Gebaut wird erst nach einem Abschluss, nicht vorab für jede Branche.
 

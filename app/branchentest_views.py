@@ -22,14 +22,12 @@ def _fertig(message, url, ok=True):
 
 
 def _verwalten():
-    if g.account.get("demo"):
-        abort(403, "Im Demo-Modus lassen sich die Regeln nicht ändern.")
     if not darf("leads", firma.VERWALTEN):
         abort(403, "Testbranchen und Regeln ändert, wer „Leads und Akquise: Verwalten“ hat.")
 
 
 def _basis():
-    return {"account": g.account, "demo": SETTINGS["DEMO_MODE"], "verwalten": darf("leads", firma.VERWALTEN),
+    return {"account": g.account, "verwalten": darf("leads", firma.VERWALTEN),
             "kennzahlen": bt.KENNZAHLEN}
 
 
@@ -167,7 +165,8 @@ def lead_test(lead_id):
 def kontakt(lead_id):
     lead_or_404(lead_id)
     try:
-        bt.kontakt(db(), me(), lead_id, request.form.get("kanal", ""), request.form.get("notiz", ""))
+        bt.kontakt(db(), me(), lead_id, request.form.get("kanal", ""), request.form.get("notiz", ""),
+                   mail_erlaubt=SETTINGS["OUTREACH_EMAIL"])
     except bt.BranchentestError as exc:
         return _fertig(str(exc), url_for("leads.detail", lead_id=lead_id), ok=False)
     return _fertig("Kontakt protokolliert.", url_for("leads.detail", lead_id=lead_id))

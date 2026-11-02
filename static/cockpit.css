@@ -80,7 +80,6 @@ code{background:var(--s3);border-radius:5px;color:var(--body)}
 .account-menu a,.account-menu button{display:block;width:100%;text-align:left;padding:9px 10px;border-radius:9px;background:none;border:0;color:var(--ink);font:500 14px/1.2 var(--sans);cursor:pointer;text-decoration:none}
 .account-menu a:hover,.account-menu button:hover{background:var(--s4)}
 .account-menu form{margin:0}
-.demo-chip{display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:var(--warn-pill);color:var(--spore);font:600 12px/1 var(--sans);margin-left:8px;white-space:nowrap}
 
 /* Tab-Leiste unten (Handy) */
 .tabbar{display:none}

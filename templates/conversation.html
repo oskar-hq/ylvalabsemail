@@ -51,7 +51,7 @@
       </div>
       <label class="os-field"><span>Betreff</span><input type="text" name="subject" value="{{ subject }}"></label>
       <label class="os-field"><span>Text</span><textarea name="text" rows="6" placeholder="Ihre Antwort an {{ lead.contact_name or lead.name }} …" required></textarea></label>
-      <p class="os-caption">Gruß, Unterschrift und die zitierte Nachricht kommen automatisch dazu.{% if account.demo %} Demo: wird nicht verschickt.{% endif %}</p>
+      <p class="os-caption">Gruß, Unterschrift und die zitierte Nachricht kommen automatisch dazu.</p>
       {% if darf('assistent', 2) and assistent_an() %}<div class="os-btns" style="margin-top:12px"><button type="button" class="os-btn small quiet" id="entwurfAssistent" data-url="{{ url_for('assistent.entwurf_antwort', lead_id=lead.id) }}">Entwurf vom Assistenten</button></div>{% endif %}
     </form>
   </section>

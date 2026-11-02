@@ -112,13 +112,6 @@
   </div>
   <p class="muted small">Auf eine Spaltenüberschrift tippen zum Sortieren. „Fehlt“: Das findet die kostenlose Suche nicht, dafür <a href="{{ url_for('leads.claude') }}">mit Claude recherchieren</a> oder einen Entwurf von der KI schreiben lassen.</p>
   {% endif %}
-  {% if demo and not total_cards %}
-  <form method="post" action="{{ url_for('leads.demo_seed') }}" class="note">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    Noch keine Betriebe in der Pipeline. Im Demo-Modus kannst du Beispieldaten laden.
-    <button class="btn small">Beispieldaten laden</button>
-  </form>
-  {% endif %}
 </main>
 
 <dialog id="newDlg"><form class="dlg" id="newForm">

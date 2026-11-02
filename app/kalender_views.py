@@ -24,8 +24,6 @@ def _fertig(message, url, ok=True):
 
 
 def _verwalten():
-    if g.account.get("demo"):
-        abort(403, "Im Demo-Modus lassen sich die Kalender-Einstellungen nicht ändern.")
     if not darf("kalender", firma.VERWALTEN):
         abort(403, "Dafür brauchst du „Kalender und Termine: Verwalten“.")
 
@@ -85,8 +83,7 @@ def uebersicht():
     return render_template("kalender.html", account=g.account, tage=sorted(tage.items()), ansicht=ansicht,
                            person=person, ab=ab, zurueck=(ab - timedelta(days=14)).isoformat(),
                            vor=bis.isoformat(), heute=date.today(), freigaben=kalender.freigaben_fuer(c, me()),
-                           ergebnisse=kalender.offene_ergebnisse(c, me()), neu=request.args.get("neu") == "1",
-                           demo=SETTINGS["DEMO_MODE"], **_form_kontext(lead))
+                           ergebnisse=kalender.offene_ergebnisse(c, me()), neu=request.args.get("neu") == "1", **_form_kontext(lead))
 
 
 @bp.get("/kalender/vorschlaege.json")
@@ -148,8 +145,7 @@ def detail(tid):
                            darf_aendern=darf_aendern, ergebnisse=kalender.ERGEBNISSE,
                            ergebnis_label=kalender.ERGEBNIS_LABEL, verlauf=firma.protokoll(c, objekt=("termin", tid),
                                                                                           limit=20),
-                           namen={p["key"]: p["name"] for p in firma.personen(c, mit_archiv=True)},
-                           demo=SETTINGS["DEMO_MODE"], **_form_kontext())
+                           namen={p["key"]: p["name"] for p in firma.personen(c, mit_archiv=True)}, **_form_kontext())
 
 
 def _darf_aendern(t):
@@ -239,8 +235,7 @@ def mein():
     neu_link = session.pop("ics_link", None)
     return render_template("kalender_mein.html", account=g.account, konto=kalender.konto(c, me()),
                            google_da=bool(kalender.google_cfg()), ics_link=neu_link,
-                           hat_abo=bool(c.execute("SELECT ics_hash FROM team WHERE key=?", (me(),)).fetchone()["ics_hash"]),
-                           demo=SETTINGS["DEMO_MODE"])
+                           hat_abo=bool(c.execute("SELECT ics_hash FROM team WHERE key=?", (me(),)).fetchone()["ics_hash"]))
 
 
 @bp.get("/kalender/google/verbinden")
@@ -290,8 +285,6 @@ def google_trennen():
 @bp.post("/kalender/abo/neu")
 @login_required
 def abo_neu():
-    if g.account.get("demo"):
-        abort(403)
     token = kalender.ics_token_erneuern(db(), me())
     base = (SETTINGS["BASE_URL"] or request.host_url).rstrip("/")
     session["ics_link"] = f"{base}/kalender/{token}.ics"
@@ -324,7 +317,7 @@ def einstellungen():
     return render_template("kalender_einstellungen.html", account=g.account, google_da=bool(kalender.google_cfg()),
                            rueckweg=_rueckweg(), regeln=kalender.regeln(c), regel_labels=kalender.REGELN,
                            wochentage=kalender.WOCHENTAGE, serien=kalender.serien(c), personen=firma.aktive_personen(c),
-                           konten=konten, verwalten=darf("kalender", firma.VERWALTEN), demo=SETTINGS["DEMO_MODE"])
+                           konten=konten, verwalten=darf("kalender", firma.VERWALTEN))
 
 
 @bp.post("/einstellungen/kalender/regeln")

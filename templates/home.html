@@ -3,14 +3,6 @@
 {% block content %}
 <main class="home">
   <h1>{{ greeting }}, <b>{{ name }}.</b></h1>
-  {% if demo and not st.counts.values()|sum %}
-  <form method="post" action="{{ url_for('leads.demo_seed') }}" class="hero-card">
-    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    <span><b>Noch keine Betriebe</b><span>Im Demo-Modus kannst du Beispieldaten laden.</span></span>
-    <button class="btn small primary">Beispieldaten laden</button>
-  </form>
-  {% endif %}
-
   <p class="hero-n">{{ total }}</p>
   <p class="hero-label">{{ 'Aufgabe' if total == 1 else 'Aufgaben' }} für heute</p>
   {% if parts %}

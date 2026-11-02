@@ -367,7 +367,7 @@ def export_csv(conn, everything=False):
 
 
 def may_email(lead, email_enabled):
-    """Darf an diesen Betrieb eine Mail gehen? Erstkontakt nur, wenn OUTREACH_EMAIL an ist (§ 7 UWG).
+    """Darf an diesen Betrieb eine Mail gehen? Erstkontakt nur, wenn OUTREACH_EMAIL an ist (Standard: an).
     Hat der Betrieb schon geantwortet oder ist im Gespräch, ist weiterer Mailverkehr in Ordnung."""
     if not lead.get("email"):
         return False, "Für diesen Betrieb ist keine E-Mail-Adresse bekannt."
@@ -376,7 +376,7 @@ def may_email(lead, email_enabled):
     replied = lead.get("replied_at") or lead.get("interest") or lead.get("stage") in ("antwort", "gespraech",
                                                                                    "angebot", "kunde")
     if not replied and not email_enabled:
-        return False, ("Der Erstkontakt per Mail ist ausgeschaltet (OUTREACH_EMAIL=false, § 7 UWG). "
+        return False, ("Der Erstkontakt per Mail ist ausgeschaltet (Einstellungen → Postfach → Versand). "
                        "Testmails an dich gehen trotzdem.")
     return True, ""
 

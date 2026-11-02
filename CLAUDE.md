@@ -20,5 +20,6 @@ Funktion bringt ihre Einstellungen gleich mit (Details: FIRMEN-OS.md, Abschnitt 
 
 Kurz zur Technik: Python/Flask, SQLite (`app/leaddb.py`, Schema + `MIGRATIONS`), genau ein Gunicorn-Worker mit
 Hintergrund-Arbeiter (`app/agent.py`). Tests: `python -m unittest discover tests`. Oberfläche, Doku und
-Fachbegriffe auf Deutsch. Erstkontakt per Mail bleibt gesperrt, bis § 7 UWG geklärt ist; nichts geht ohne Freigabe
-an Kunden.
+Fachbegriffe auf Deutsch. Erstkontakt per Mail ist erlaubt (§ 7 UWG geklärt, 02.11.2026; Schalter
+`OUTREACH_EMAIL` unter Einstellungen → Postfach und Versand); nichts geht ohne Freigabe an Kunden. Einen Demo-Modus
+gibt es nicht mehr; lokale Vorschau mit `tests/vorschau.py`.

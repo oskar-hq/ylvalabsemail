@@ -10,8 +10,6 @@ bp = Blueprint("personen", __name__)
 
 
 def _verwalten():
-    if g.account.get("demo"):
-        abort(403, "Im Demo-Modus lassen sich Personen und Rechte nicht ändern.")
     if not darf("personen", firma.VERWALTEN):
         abort(403, "Dafür brauchst du das Recht „Personen, Rollen und Bereiche: Verwalten“.")
 
@@ -22,7 +20,7 @@ def _fehler(exc, url):
 
 
 def _basis():
-    return {"account": g.account, "demo": SETTINGS["DEMO_MODE"], "verwalten": darf("personen", firma.VERWALTEN),
+    return {"account": g.account, "verwalten": darf("personen", firma.VERWALTEN),
             "module": firma.MODULE, "stufen": firma.STUFEN, "lernstufen": firma.LERNSTUFEN}
 
 # ---------------------------------------------------------------- Personen

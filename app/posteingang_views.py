@@ -17,7 +17,7 @@ def _fertig(message, ok=True, anker=""):
 
 
 def _verwalten():
-    if g.account.get("demo") or not darf("einstellungen", firma.VERWALTEN):
+    if not darf("einstellungen", firma.VERWALTEN):
         abort(403, "Dafür brauchst du „Einstellungen: Verwalten“.")
 
 

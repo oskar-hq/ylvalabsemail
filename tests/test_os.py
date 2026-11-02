@@ -9,8 +9,7 @@ from datetime import date, timedelta
 from pathlib import Path
 
 if "DATA_DIR" not in os.environ:  # allein gestartet; sonst setzt test_leads die Umgebung
-    os.environ.update(DATA_DIR=tempfile.mkdtemp(), SMTP_HOST="smtp.example.com", LEADS_WORKER="false",
-                      DEMO_MODE="true")
+    os.environ.update(DATA_DIR=tempfile.mkdtemp(), SMTP_HOST="smtp.example.com", LEADS_WORKER="false", OUTREACH_EMAIL="false")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from app import aufgaben, crm, firma, leaddb, main, team  # noqa: E402
@@ -384,7 +383,7 @@ class WebTest(WebBasis):
             ep = rule.endpoint
             if ep.startswith("portal."):  # Kunden-Bereich: eigene Anmeldung per Einmal-Link, kein Team-Modul
                 continue
-            if ep in main.FREI or ep in frei_ohne_modul or ep in ("static", "login", "logout", "demo_login",
+            if ep in main.FREI or ep in frei_ohne_modul or ep in ("static", "login", "logout",
                                                                   "forget_device", "healthz", "personen.einladung"):
                 continue
             self.assertIsNotNone(main.modul_der_seite(ep), ep)
@@ -493,8 +492,11 @@ class BranchentestTest(unittest.TestCase):
     def test_kontakt_regeln(self):
         bt, c = self.bt, self.c
         lid = lead_anlegen(c, "Elektro E", "elektro")
-        with self.assertRaises(bt.BranchentestError):  # § 7 UWG: kein Erstkontakt per Mail
+        with self.assertRaises(bt.BranchentestError):  # Erstkontakt per Mail ausgeschaltet
             bt.kontakt(c, "oskar", lid, "email")
+        lid_mail = lead_anlegen(c, "Elektro M", "elektro")
+        bt.kontakt(c, "oskar", lid_mail, "email", mail_erlaubt=True)  # eingeschaltet (Standard seit 02.11.2026)
+        self.assertEqual(leaddb.get_lead(c, lid_mail)["stage"], "kontaktiert")
         with self.assertRaises(bt.BranchentestError):
             bt.kontakt(c, "oskar", lid, "fax")
         bt.kontakt(c, "oskar", lid, "brief")
@@ -2341,7 +2343,7 @@ class StartklarTest(WebBasis):
     def test_punkte_zeigen_was_fehlt(self):
         from app import finanzen
         p = self._punkte()
-        for key in ("personen", "bereiche", "postfach", "adresse", "rechnung", "sicherung", "ki", "google", "push"):
+        for key in ("personen", "bereiche", "postfach", "erstkontakt", "adresse", "rechnung", "sicherung", "ki", "google", "push"):
             self.assertIn(key, p)
             self.assertTrue(p[key]["ziel"].startswith("/"), key)
         self.assertFalse(p["rechnung"]["ok"])
@@ -2357,6 +2359,16 @@ class StartklarTest(WebBasis):
                         else os.environ.pop("ANTHROPIC_API_KEY", None))
         self.assertTrue(self._punkte()["ki"]["ok"])
         self.assertEqual(self._punkte()["ki"]["wichtig"], "empfohlen")
+
+    def test_erstkontakt_per_mail(self):
+        alt = os.environ.get("OUTREACH_EMAIL")
+        self.addCleanup(lambda: os.environ.__setitem__("OUTREACH_EMAIL", alt) if alt is not None
+                        else os.environ.pop("OUTREACH_EMAIL", None))
+        os.environ["OUTREACH_EMAIL"] = "false"
+        self.assertFalse(self._punkte()["erstkontakt"]["ok"])
+        os.environ["OUTREACH_EMAIL"] = "true"
+        self.assertTrue(self._punkte()["erstkontakt"]["ok"])
+        self.assertEqual(self.post("/demo").status_code, 404)  # Demo-Modus gibt es nicht mehr
 
     def test_bereich_ohne_verantwortliche_person(self):
         self.c.execute("INSERT INTO bereiche (key, name, verantwortlich) VALUES ('test_leer', 'Testbereich', 'weg')")

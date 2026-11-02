@@ -62,7 +62,7 @@
   {% for w in st.warnings %}<p class="note warn small">{{ w }}</p>{% endfor %}
   {% if not st.ai %}<p class="note small">Kein KI-Schlüssel eingetragen. Das ist in Ordnung: Suche, Bewertung, CRM und Versand laufen ohne KI. Nachrichten schreibst du selbst oder nimmst die Vorlage.</p>{% endif %}
   {% if st.last_run and not st.run %}<p class="note small">Letzter Lauf ({{ st.last_run.started_at|kurzdatum }}, {{ {'fertig': 'fertig', 'gestoppt': 'gestoppt', 'fehler': 'mit Fehler', 'abgebrochen': 'abgebrochen'}.get(st.last_run.status, st.last_run.status) }}): {{ st.last_run.message }}</p>{% endif %}
-  {% if not st.email_enabled %}<p class="note small">Erstkontakt per Mail ist aus (<code>OUTREACH_EMAIL=false</code>, § 7 UWG). Freigegebene Nachrichten gehen als Brief raus oder dienen als Leitfaden fürs Telefonat. Hat ein Betrieb geantwortet, kannst du ihm gestaltete Mails schicken.</p>{% endif %}
+  {% if not st.email_enabled %}<p class="note small">Erstkontakt per Mail ist aus (Einstellungen → Postfach und Versand). Freigegebene Nachrichten gehen als Brief raus oder dienen als Leitfaden fürs Telefonat. Hat ein Betrieb geantwortet, kannst du ihm gestaltete Mails schicken.</p>{% endif %}
   </details>
 </div>
 <dialog id="iosDlg"><div class="dlg">

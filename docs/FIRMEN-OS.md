@@ -115,7 +115,7 @@ im Code), damit sie mit wachsendem Vertrauen hochgestuft werden kann.
 
 - Hamza/Omid auf Lernstufe 1: jeder Lead geht in Oskars Prüf-Warteschlange.
 - Lernstufe 2: Entwürfe immer zu Oskar, Leads nur als Stichprobe (z. B. jeder fünfte, einstellbar).
-- Lernstufe 3: Outreach selbst freigeben; Rechtsregeln (§ 7 UWG, Sperrliste) bleiben hart im Code.
+- Lernstufe 3: Outreach selbst freigeben; Rechtsregeln (Freigabe, Sperrliste) bleiben hart im Code.
 - Kundenversprechen mit Technikzeit: Freigabe braucht **Oskar und Finn** (Finns Aufwandsschätzung ist Pflichtfeld).
 - Ausgaben ab 200 €: Freigabe durch das Gründerteam.
 
@@ -123,9 +123,9 @@ im Code), damit sie mit wachsendem Vertrauen hochgestuft werden kann.
 zwischen Entwurf und Freigabe), gebuchte Termine und begleitete Gespräche, und schlägt den Aufstieg vor, wenn die
 Bedingung 4 Wochen lang erfüllt ist. Den Aufstieg selbst gibt Oskar frei (Stufe C).
 
-**Hart im Code, nie per Einstellung abschaltbar:** Erstkontakt per Mail gesperrt, solange § 7 UWG nicht geklärt
-ist (`OUTREACH_EMAIL`); Sperrliste nach Abmeldung; nichts an Kunden ohne Freigabe der zuständigen Person, solange
-die Aktion auf Stufe C/D steht.
+**Hart im Code, nie per Einstellung abschaltbar:** Sperrliste nach Abmeldung; nichts an Kunden ohne Freigabe der zuständigen Person, solange
+die Aktion auf Stufe C/D steht. Der Erstkontakt per Mail ist seit 02.11.2026 erlaubt (§ 7 UWG geklärt)
+und eine Einstellung (`OUTREACH_EMAIL`, Standard an).
 
 ---
 
@@ -517,7 +517,7 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
     verallgemeinert). Wer prüft, ergibt sich aus den Bereichen: verantwortliche Person der Akquise, bei ihr selbst
     eine Ebene höher. Prüfquoten je Lernstufe und die Stichprobe der nächsten Ebene sind Regeln in der App
     (Branchentest → Regeln). Kontakt (Brief, Telefon, Mail) ist bis zur bestandenen Prüfung gesperrt.
-  - Kontakt mit einem Klick in der Akte (Telefon, Brief, LinkedIn, vor Ort; Mail nur als Antwort, § 7 UWG).
+  - Kontakt mit einem Klick in der Akte (Telefon, Brief, LinkedIn, vor Ort; Mail als Erstkontakt nur, wenn `OUTREACH_EMAIL` an ist, seit 02.11.2026 Standard).
     „Ernsthaftes Preisgespräch“ ist ein Knopf in der Akte; Termin-Ergebnisse folgen mit Stufe 3.
   - Auswertung zählt Betriebe, Kontakte, Antworten, Gespräche, Preisgespräche, Abschlüsse je Branche, nur kalt;
     Ampel ab der eingestellten Zahl Preisgespräche. KPIs „angenommene Leads pro Woche“ und „Anteil angenommen“
@@ -610,7 +610,7 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
     Ist die Aktion nicht mehr ausführbar (Termin abgesagt), bleibt sie als C stehen und steht im Protokoll. Feste
     Aktionen (Erstkontakt C, Anforderung C, Abnahme D, Lead-Prüfung über Lernstufen, Team-Meldungen A) stehen zur
     Übersicht im Katalog; Wochenbericht, Erinnerung, Angebot, Rechnung sind als „kommt mit Stufe 7/8“ sichtbar,
-    aber noch gesperrt. Erstkontakt per Mail bleibt hart gesperrt (§ 7 UWG).
+    aber noch gesperrt. Erstkontakt per Mail war bis 02.11.2026 gesperrt (§ 7 UWG), seitdem per Einstellung an.
   - **Entscheidungsrechte** als Daten mit Startwerten aus ROLLEN-UND-ABLAEUFE.md: Wer entscheidet (verantwortliche
     Person des eigenen Bereichs, die Person selbst, Bereich, Rolle, Person), „eine reicht“ oder „alle gemeinsam“,
     wer vorher gefragt wird, Betragsgrenze und welches Recht ab der Grenze gilt (Startwert: ab 200 € das
@@ -633,7 +633,7 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
     `app/projekte_views.py`. Neue Tabellen `kunden_zugaenge`, `kunden_sitzungen`, `dokumente`, `wochenberichte`.
     Rechte: über das bestehende Modul „Kunden, Projekte und Änderungen“; kein neues Modul.
   - **Zugang:** Die verantwortliche Person (oder wer Kunden verwaltet) klickt am Projekt „Zugang per Mail schicken“;
-    der Klick ist die Freigabe. Alternativ „Nur Link erzeugen“ zum Kopieren (im Demo-Modus immer so). Der Link gilt
+    der Klick ist die Freigabe. Alternativ „Nur Link erzeugen“ zum Kopieren. Der Link gilt
     einmal und 7 Tage, danach bleibt der Kunde 90 Tage auf dem Gerät angemeldet (eigenes Cookie nur für `/portal`,
     getrennt von den Team-Sitzungen). In der Datenbank liegen nur Hashes. Der Link öffnet erst eine Seite mit
     „Anmelden“, damit Virenscanner in Mailprogrammen ihn nicht verbrauchen. Einen neuen Link fordert der Kunde mit
@@ -701,7 +701,7 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
     drei Tage), „Jetzt abrufen“ im Postfach und je Postfach. Zuordnung wie beim Akquise-Postfach (Antwort auf unsere
     Mail, Absender, Domain, sonst neuer Kontakt), Newsletter bleiben draußen; Fehler stehen am Postfach. Antworten im
     Gespräch mit Wahl des Postfachs (vorbelegt: das, über das die letzte Mail kam); ein persönliches Postfach nutzt nur
-    die Person, der es gehört. Sperrliste (Adresse oder Domain) und Erstkontakt-Sperre (§ 7 UWG) gelten für jedes
+    die Person, der es gehört. Sperrliste (Adresse oder Domain) und der Schalter für den Erstkontakt per Mail gelten für jedes
     Postfach. Die Meldung zu einer neuen Mail geht an die Person, der das Postfach gehört, sonst an die zuständige
     Person des Kontakts.
   - **Von Hand festhalten** im Gespräch: Telefonat, Brief, WhatsApp, LinkedIn, vom Kunden oder von uns, mit Zeitpunkt.
@@ -752,6 +752,8 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
   Sicherung; empfohlen KI, Google-Kalender, Meldungen aufs Handy) und verlinkt jeden Punkt auf seine Einstellung.
   `app/startklar.py`; Hinweis auf Mein Tag für alle mit „Einstellungen: Verwalten“. Meldungen aufs Handy jetzt unter
   Mein Profil für jede Person (bisher nur auf der Leads-Seite).
+  - 02.11.2026: § 7 UWG geklärt, Erstkontakt per Mail Standard an (Punkt in Startklar). Demo-Modus ganz entfernt
+    (Login, Beispieldaten-Knopf, „kein Versand“-Zweige); Beispieldaten nur noch für Tests und `tests/vorschau.py`.
 
 Die Reihenfolge 2 und 3 kann getauscht werden, je nachdem, was im Alltag zuerst fehlt.
 

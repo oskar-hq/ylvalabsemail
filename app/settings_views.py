@@ -21,8 +21,6 @@ def who():
 def is_admin(account):
     """Darf Einstellungen ändern, Updates einspielen und Sicherungen zurückspielen: Recht „Einstellungen: Verwalten“
     (Einstellungen → Rollen). Nur solange in der App noch niemand Personen verwalten darf, gilt ADMIN_USERS."""
-    if account.get("demo"):
-        return False
     from . import firma
     from .leads_views import db
     if firma.verwalter(db()):
@@ -130,13 +128,13 @@ def settings():
         return redirect(back)
     return render_template("settings.html", account=g.account, menu=config_store.menu(data_dir),
                            admin=is_admin(g.account), admins_set=bool(SETTINGS["ADMIN_USERS"]),
-                           up=updater.state(SETTINGS["CONTROL_DIR"]), demo=SETTINGS["DEMO_MODE"],
+                           up=updater.state(SETTINGS["CONTROL_DIR"]),
                            startklar=startklar.zusammenfassung(_startklar_punkte()))
 
 
 def _startklar_punkte():
     from .leads_views import db
-    return startklar.punkte(db(), url_for, demo=SETTINGS["DEMO_MODE"], host_backups=bool(SETTINGS["CONTROL_DIR"]))
+    return startklar.punkte(db(), url_for, host_backups=bool(SETTINGS["CONTROL_DIR"]))
 
 
 @bp.get("/einstellungen/startklar")
@@ -144,7 +142,7 @@ def _startklar_punkte():
 def startklar_seite():
     punkte = _startklar_punkte()
     return render_template("startklar.html", account=g.account, punkte=punkte,
-                           summe=startklar.zusammenfassung(punkte), demo=SETTINGS["DEMO_MODE"])
+                           summe=startklar.zusammenfassung(punkte))
 
 
 def _group(gid):
@@ -158,8 +156,6 @@ def _group(gid):
 @login_required
 def mailbox_test():
     """„Verbindung testen“: meldet sich mit den gespeicherten Daten an, verschickt nichts."""
-    if g.account.get("demo"):
-        return jsonify(results=[{"name": "Demo", "ok": True, "text": "Im Demo-Modus wird kein Postfach geprüft."}])
     return jsonify(results=[{"name": n, "ok": ok, "text": t} for n, ok, t in agent.test_mailbox()])
 
 
@@ -167,8 +163,7 @@ def mailbox_test():
 @login_required
 def access():
     return render_template("settings_access.html", account=g.account,
-                           read_only={k: os.environ.get(k, "") for k in config_store.READ_ONLY},
-                           demo=SETTINGS["DEMO_MODE"])
+                           read_only={k: os.environ.get(k, "") for k in config_store.READ_ONLY})
 
 
 @bp.get("/einstellungen/<gid>")
@@ -177,7 +172,7 @@ def group(gid):
     grp = _group(gid)
     if len(grp["pages"]) == 1:
         return redirect(url_for("settings.page", gid=gid, pid=grp["pages"][0]["id"]))
-    return render_template("settings_group.html", account=g.account, grp=grp, demo=SETTINGS["DEMO_MODE"])
+    return render_template("settings_group.html", account=g.account, grp=grp)
 
 
 @bp.get("/einstellungen/<gid>/<pid>")
@@ -190,14 +185,14 @@ def page(gid, pid):
     from . import team
     return render_template("settings_page.html", account=g.account, grp=grp, pg=pg, admin=is_admin(g.account),
                            personal_keys=team.PERSONAL_KEYS,
-                           single=len(grp["pages"]) == 1, demo=SETTINGS["DEMO_MODE"])
+                           single=len(grp["pages"]) == 1)
 
 
 @bp.get("/einstellungen/software")
 @login_required
 def software():
     return render_template("software.html", account=g.account, up=updater.state(SETTINGS["CONTROL_DIR"]),
-                           admin=is_admin(g.account), demo=SETTINGS["DEMO_MODE"])
+                           admin=is_admin(g.account))
 
 
 @bp.get("/einstellungen/software/status.json")
@@ -235,7 +230,7 @@ def software_request(kind):
 @login_required
 def backup_page():
     data_dir = SETTINGS["DATA_DIR"]
-    return render_template("backup.html", account=g.account, admin=is_admin(g.account), demo=SETTINGS["DEMO_MODE"],
+    return render_template("backup.html", account=g.account, admin=is_admin(g.account),
                            history=backups.history(data_dir), can_undo=backups.can_undo(data_dir),
                            pending=backups.pending(data_dir), host_backups=bool(SETTINGS["CONTROL_DIR"]))
 

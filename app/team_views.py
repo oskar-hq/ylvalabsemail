@@ -10,11 +10,6 @@ from .main import SETTINGS, darf, login_required, remember_member, safe_next, up
 bp = Blueprint("team", __name__)
 
 
-def _guard_demo():
-    if g.account.get("demo"):
-        abort(403, "Im Demo-Modus lassen sich Konten nicht ändern.")
-
-
 @bp.route("/profil/wer", methods=["GET", "POST"])
 @login_required
 def who_am_i():
@@ -27,18 +22,17 @@ def who_am_i():
         member = team.get(db(), key)
         if not member or (member.get("status") or "aktiv") != "aktiv":
             abort(400)
-        if member["pw_hash"] and key != g.account.get("team") and not g.account.get("demo"):
+        if member["pw_hash"] and key != g.account.get("team"):
             flash(f"{member['name']} hat schon ein Passwort. Bitte melde dich als {member['name'].split(' ')[0]} "
                   "mit Namen und Passwort an.")
             return redirect(url_for("team.who_am_i", next=nxt))
         update_session(team=key, name=member["name"])
         agent.log.info("%s arbeitet als %s", g.account.get("user"), member["name"])
-        if not member["pw_hash"] and not g.account.get("demo"):
+        if not member["pw_hash"]:
             flash("Lege jetzt dein Passwort fest. Danach meldest du dich einfach mit deinem Namen an.")
             return redirect(url_for("team.profile"))
         return redirect(nxt)
-    return render_template("who.html", account=g.account, people=people, nxt=nxt, st=status_payload(),
-                           demo=SETTINGS["DEMO_MODE"])
+    return render_template("who.html", account=g.account, people=people, nxt=nxt, st=status_payload())
 
 
 @bp.get("/profil")
@@ -55,8 +49,7 @@ def profile():
     return render_template("profile.html", account=g.account, member=team.get(db(), key), pref_fields=fields,
                            month_eur=agent.person_month_eur(db(), key),
                            settings=team.settings(db(), key, SETTINGS["ORG_NAME"]), people=team.members(db()),
-                           admin=is_admin(g.account), min_pw=team.MIN_PASSWORD, st=status_payload(),
-                           demo=SETTINGS["DEMO_MODE"])
+                           admin=is_admin(g.account), min_pw=team.MIN_PASSWORD, st=status_payload())
 
 
 @bp.post("/profil/passwort")
@@ -64,7 +57,6 @@ def profile():
 def password():
     """Eigenes Passwort ändern (mit dem bisherigen). Passwörter anderer setzt nur, wer Personen verwalten darf
     (sonst: Einladungslink unter Einstellungen → Personen)."""
-    _guard_demo()
     c = db()
     key = request.form.get("member") or me()
     member = team.get(c, key)
@@ -74,7 +66,7 @@ def password():
     if key == me() and member["pw_hash"] and not team.check_password(c, key, request.form.get("current", "")):
         flash("Nicht geändert: Das bisherige Passwort stimmt nicht.")
         return redirect(url_for("team.profile"))
-    if key != me() and not g.account.get("demo") and not darf("personen", 4):
+    if key != me() and not darf("personen", 4):
         abort(403, "Passwörter anderer Personen setzt nur, wer Personen verwalten darf. Einfacher: Einladungslink "
                    "unter Einstellungen → Personen.")
     if new != again:
@@ -129,7 +121,7 @@ def save_prefs():
 def overview():
     people, total = team.stats(db())
     return render_template("team.html", account=g.account, people=people, total=total, me=me(),
-                           st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+                           st=status_payload())
 
 # ---------------------------------------------------------------- Eigene Vorlage mit Live-Vorschau
 
@@ -182,7 +174,7 @@ def template_editor():
                            design={**agent.DESIGN_DEFAULT, **(s["design"] or {})},
                            templates={k: v["name"] for k, v in emailbuild.TEMPLATES.items()}, graphics=agent.GRAPHICS,
                            icons={k: v[0] for k, v in pixel.ICONS.items()}, examples=examples,
-                           placeholders=PLACEHOLDERS, st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+                           placeholders=PLACEHOLDERS, st=status_payload())
 
 
 PLACEHOLDERS = [("{firma}", "Firma"), ("{anrede}", "Anrede"), ("{kategorie}", "Branche"), ("{ort}", "Ort"),

@@ -1,5 +1,5 @@
 // Mail-Fenster: Tippen auf ✉ bei einem Betrieb öffnet die fertige Mail (Vorlage mit Firmenname, Anrede …).
-// Ändern, dann senden. Ist der Erstkontakt per Mail aus (§ 7 UWG), bleiben Brief und „als versendet markieren“.
+// Ändern, dann senden. Ist der Erstkontakt per Mail aus (Einstellungen → Postfach und Versand), bleiben Brief und „als versendet markieren“.
 (() => {
   const dlg = document.getElementById('mailSheet');
   if (!dlg) return;

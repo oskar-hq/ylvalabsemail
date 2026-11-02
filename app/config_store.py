@@ -6,7 +6,7 @@ deshalb kurz neu. Passwörter und Schlüssel werden verschlüsselt abgelegt (Sch
 lesbar) und in der Oberfläche nie wieder angezeigt.
 
 Bewusst nicht in der App änderbar, weil man sich damit aussperren oder die Sicherheit aushebeln könnte:
-ALLOWED_DOMAINS, ALLOWED_USERS, ADMIN_USERS, SECRET_KEY, COOKIE_SECURE, TRUST_PROXY, DEMO_MODE, DATA_DIR.
+ALLOWED_DOMAINS, ALLOWED_USERS, ADMIN_USERS, SECRET_KEY, COOKIE_SECURE, TRUST_PROXY, DATA_DIR.
 """
 import json
 import os
@@ -28,8 +28,8 @@ GROUPS = [
         ("IMAP_PORT", "IMAP-Port", "int", "993", ""),
         ("OUTREACH_USER", "Akquise-Postfach", "text", "", "z. B. kontakt@ylvalabs.de"),
         ("OUTREACH_PASSWORD", "Passwort des Akquise-Postfachs", "secret", "", ""),
-        ("OUTREACH_EMAIL", "Erstkontakt per Mail erlauben", "bool", "false",
-         "Erst einschalten, wenn § 7 UWG geklärt ist. Sonst nur Brief und Telefon"),
+        ("OUTREACH_EMAIL", "Erstkontakt per Mail erlauben", "bool", "true",
+         "Freigegebene Erstkontakte gehen per Mail raus. Aus: nur Brief und Telefon"),
         ("SEND_DELAY", "Pause zwischen zwei Mails (Sekunden)", "float", "1", ""),
         ("MAX_RECIPIENTS", "Höchstens Empfänger pro Versand", "int", "200", ""),
         ("FROM_ADDRESS", "Absenderadresse", "emails", "", "Nur nötig, wenn der Login-Name keine E-Mail-Adresse ist"),
@@ -104,7 +104,7 @@ GROUP_HINTS = {"postfach": "Strato, Akquise-Postfach, Versand", "absender": "Fir
                "google": "Client-ID und Schlüssel für die Kalender",
                "unipile": "Vorbereitet für WhatsApp und LinkedIn, noch nicht verbunden",
                "hinweise": "Mail-Benachrichtigungen, Adresse der App"}
-READ_ONLY = ["ALLOWED_DOMAINS", "ALLOWED_USERS", "ADMIN_USERS", "DEMO_MODE", "COOKIE_SECURE", "TRUST_PROXY"]
+READ_ONLY = ["ALLOWED_DOMAINS", "ALLOWED_USERS", "ADMIN_USERS", "COOKIE_SECURE", "TRUST_PROXY"]
 FIELDS = {key: dict(key=key, label=label, type=typ, default=default, hint=hint, group=gid)
           for gid, _, items in GROUPS for key, label, typ, default, hint in items}
 _EMAIL = re.compile(r"^[^@\s,]+@[^@\s,]+\.[^@\s,]+$")

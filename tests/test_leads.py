@@ -16,7 +16,7 @@ from pathlib import Path
 from unittest import mock
 
 TMP = tempfile.mkdtemp()
-os.environ.update(DATA_DIR=TMP, SMTP_HOST="smtp.example.com", LEADS_WORKER="false", DEMO_MODE="true")
+os.environ.update(DATA_DIR=TMP, SMTP_HOST="smtp.example.com", LEADS_WORKER="false", OUTREACH_EMAIL="false")
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from cryptography.hazmat.primitives import serialization  # noqa: E402
@@ -1568,9 +1568,26 @@ class NicheTest(unittest.TestCase):
 
 
 class ViewsTest(unittest.TestCase):
+    """Seiten und Aktionen als Oskar; der Mailserver ist nachgebaut (es geht nichts raus)."""
+
     def setUp(self):
+        from app import main
         self.client = app.test_client()
-        self.client.post("/demo", headers={"X-CSRF-Token": self._csrf("/login")})
+        self.client.get("/login")
+        with self.client.session_transaction() as sess:
+            sess["sid"] = "views-test"
+        main._sessions["views-test"] = {"user": "oskar", "password": "", "since": 9e18, "address": "",
+                                        "team": "oskar", "name": "Oskar Jacobsen"}
+        self.addCleanup(main._sessions.pop, "views-test", None)
+        self.sent = []
+        smtp = mock.Mock()
+        smtp.send_message.side_effect = lambda m, *a, **k: self.sent.append(m)
+        for patch in (mock.patch.dict(main.SETTINGS, {"OUTREACH_USER": "k@ylvalabs.de", "OUTREACH_PASSWORD": "x",
+                                                      "IMAP_HOST": ""}),
+                      mock.patch.object(main, "smtp_connect", lambda u, p: smtp),
+                      mock.patch.dict(agent.CFG, {"smtp_connect": lambda u, p: smtp})):
+            patch.start()
+            self.addCleanup(patch.stop)
         self.csrf = self._csrf("/leads")
 
     def _csrf(self, url):
@@ -1615,12 +1632,13 @@ class ViewsTest(unittest.TestCase):
         crm.set_stage(c, e, "antwort")  # nach einer Antwort darf gemailt werden
         r = self.client.post("/send", data={"recipients": "eck@bulk.example", "subject": "Hallo", "body": "Text",
                                             "template": "brief", "graphic": "none"}, headers={"X-CSRF-Token": self.csrf})
-        self.assertTrue(r.get_json()["demo"])
+        self.assertEqual(r.get_json()["sent"], ["eck@bulk.example"])
         le = leaddb.get_lead(c, e)
         self.assertEqual((le["owner"], le["status"]), ("oskar", "versendet"))
 
     def test_pages_and_actions(self):
-        self.assertEqual(self.client.post("/leads/demo", headers={"X-CSRF-Token": self.csrf}).status_code, 302)
+        import beispieldaten
+        beispieldaten.seed(leaddb.connect(os.path.join(TMP, "mailer.db")))
         html = self.client.get("/leads").get_data(as_text=True)
         self.assertIn("Tischlerei Hansen (Beispiel)", html)
         c = leaddb.connect(os.path.join(TMP, "mailer.db"))
@@ -1651,11 +1669,9 @@ class ViewsTest(unittest.TestCase):
         self.assertIn("/leads/suche", r.headers["Location"])
         self.assertEqual(niches.load(c), {"tischlerei": 15, "werbeagentur": 70, "video": 15})
         self.assertIn("Werbeagentur <i>70 %</i>", self.client.get("/leads/suche").get_data(as_text=True))
-        # automatische Suche: eigene Auswahl, im Demo-Modus (kein Admin) nur ansehen
+        # automatische Suche: eigene Auswahl
         html = self.client.get("/leads/nischen?fuer=auto").get_data(as_text=True)
         self.assertIn("dieselben Nischen wie die manuelle", html)
-        r = self.client.post("/leads/nischen", data={"fuer": "auto", "niche": ["video"]}, headers={"X-CSRF-Token": self.csrf})
-        self.assertEqual(r.status_code, 403)
         self.assertIn("Nischen und Gewichtung", self.client.get("/leads/automatik").get_data(as_text=True))
         # Schnellsuche: Seiten mit Stichworten, Betriebe nach Namen
         pages = self.client.get("/suche.json").get_json()["pages"]
@@ -1667,7 +1683,7 @@ class ViewsTest(unittest.TestCase):
                 self.assertLess(self.client.get(p["u"]).status_code, 400, p["u"])
         leads = self.client.get("/suche.json?q=Tischlerei Hansen").get_json()["leads"]
         self.assertTrue(leads and leads[0]["u"].startswith("/leads/"))
-        # Postfach: neue Mail an eine unbekannte Adresse (Demo: wird nicht verschickt), Glocke, Erstkontakt-Regel
+        # Postfach: neue Mail an eine unbekannte Adresse, Glocke, Erstkontakt-Regel
         r = self.client.post("/crm/postfach/schreiben", data={"to": "neu@partner.example", "subject": "Hallo",
                                                              "text": "Kurze Frage.", "name": "Neue Partnerin"},
                              headers={"X-CSRF-Token": self.csrf})
@@ -1680,13 +1696,14 @@ class ViewsTest(unittest.TestCase):
             r = self.client.post("/crm/postfach/schreiben", data={"to": prospect["email"], "subject": "x", "text": "y"},
                                  headers={"X-CSRF-Token": self.csrf})
             self.assertEqual(r.status_code, 400)  # Betrieb hat nie geschrieben: Erstkontakt per Mail ist aus
-            self.assertIn("OUTREACH_EMAIL", r.get_json()["error"])
+            self.assertIn("Erstkontakt per Mail ist ausgeschaltet", r.get_json()["error"])
         news = self.client.get("/crm/postfach/neu.json").get_json()
         self.assertIn("count", news)
         self.assertIn('id="bellBtn"', self.client.get("/crm/postfach").get_data(as_text=True))
         self.assertEqual(self.client.get("/crm/postfach/schreiben").status_code, 200)
-        self.assertTrue(self.client.post("/crm/postfach/abrufen", headers={"X-CSRF-Token": self.csrf}).get_json()["ok"])
-        # Team: Demo arbeitet als Oskar; Vorlage mit Vorschau, Team-Zahlen, eigenes CRM
+        self.assertEqual(self.client.post("/crm/postfach/abrufen", headers={"X-CSRF-Token": self.csrf}).status_code,
+                         400)  # ohne Posteingang (IMAP) nichts abzurufen
+        # Team: Vorlage mit Vorschau, Team-Zahlen, eigenes CRM
         self.assertIn("Meine Vorlage", self.client.get("/vorlage").get_data(as_text=True))
         r = self.client.post("/vorlage/vorschau", data={"text": "Betreff: Test {firma}\nAnrede: Moin,\n\nHallo von {absender}.",
                                                         "template": "brief", "graphic": "none"},
@@ -1698,8 +1715,6 @@ class ViewsTest(unittest.TestCase):
         self.assertEqual(team.settings(c, "oskar")["gruss"], "Bis bald")
         self.assertIn("Team und Zahlen", self.client.get("/team").get_data(as_text=True))
         self.assertIn("owner-filter", self.client.get("/crm?wer=alle").get_data(as_text=True))
-        self.assertEqual(self.client.post("/profil/passwort", data={"new": "abcdefgh1", "again": "abcdefgh1"},
-                                          headers={"X-CSRF-Token": self.csrf}).status_code, 403)  # Demo: nicht ändern
         r = self.client.post("/profil/meine-einstellungen", data={"LEADS_RUN_CHECK": "33", "LEADS_RULE_MIN": ""},
                              headers={"X-CSRF-Token": self.csrf})
         self.assertIn('value="33"', self.client.get("/leads/suche").get_data(as_text=True))  # eigener Vorschlag
@@ -1717,7 +1732,7 @@ class ViewsTest(unittest.TestCase):
             {"endpoint": "https://192.168.1.1:8006/x", "keys": {"p256dh": "a", "auth": "b"}})},
             headers={"X-CSRF-Token": self.csrf})
         self.assertEqual(r.status_code, 400)  # Abo auf ein Gerät im eigenen Netz: abgelehnt
-        # Demo-Daten: ein Betrieb ist zum Nachfassen fällig
+        # Beispieldaten: ein Betrieb ist zum Nachfassen fällig
         due = c.execute("SELECT id FROM leads WHERE name LIKE 'Steuerbüro%'").fetchone()[0]
         self.assertIn("Erinnerung schreiben lassen", self.client.get(f"/leads/{due}").get_data(as_text=True))
         r = self.client.post(f"/leads/{due}/erinnerung/auslassen", headers={"X-CSRF-Token": self.csrf})
@@ -1742,7 +1757,10 @@ class ViewsTest(unittest.TestCase):
         self.assertEqual((bad["status"], bad["rejected_by"], bad["stage"]), ("aussortiert", "team", None))
         self.client.post(f"/leads/{cand[1][0]}/urteil/zurueck", headers={"X-CSRF-Token": self.csrf})
         self.assertEqual(leaddb.get_lead(c, cand[1][0])["status"], "passt")
-        # Mail-Fenster: Vorlage wird eingesetzt, Demo darf „senden“ (nur markieren)
+        # Mail-Fenster: Vorlage wird eingesetzt, mit eingeschaltetem Erstkontakt per Mail senden
+        from app import main
+        mail_an = mock.patch.dict(main.SETTINGS, {"OUTREACH_EMAIL": True})
+        mail_an.start()
         fresh = c.execute("SELECT id, name FROM leads WHERE status='passt' AND IFNULL(body,'')='' AND email IS NOT NULL "
                           "LIMIT 1").fetchone()
         m = self.client.get(f"/leads/{fresh[0]}/mail.json").get_json()
@@ -1756,7 +1774,9 @@ class ViewsTest(unittest.TestCase):
         sent = leaddb.get_lead(c, fresh[0])
         self.assertEqual((sent["status"], sent["stage"], sent["subject"]), ("versendet", "kontaktiert", "Hallo"))
         self.assertFalse(self.client.get(f"/leads/{fresh[0]}/mail.json").get_json()["can_email"])
-        # Postfach: Demo-Antworten stehen drin, Gespräch öffnen, antworten (Demo: nur vermerkt), Stimmung setzen
+        mail_an.stop()
+        self.assertEqual(self.sent[-1]["To"], leaddb.get_lead(c, fresh[0])["email"])
+        # Postfach: Antworten aus den Beispieldaten stehen drin, Gespräch öffnen, antworten, Stimmung setzen
         inbox = self.client.get("/crm/postfach").get_data(as_text=True)
         self.assertIn("Offen zum Antworten", inbox)
         self.assertIn("Tischlerei Hansen (Beispiel)", inbox)
@@ -1773,7 +1793,6 @@ class ViewsTest(unittest.TestCase):
         self.assertIn('id="crmTable"', table)
         self.assertIn("Ansprechperson", table)
         self.assertIn("Automatisch suchen", self.client.get("/leads/automatik").get_data(as_text=True))
-        self.assertEqual(self.client.post("/leads/automatik/frei", data={"_csrf": self.csrf}).status_code, 403)  # Demo
         self.assertIn("Prompt kopieren", self.client.get("/leads/claude?anzahl=20&branche=pflege").get_data(as_text=True))
         r = self.client.post("/leads/claude/import", data={"_csrf": self.csrf, "text": ClaudeResearchTest.CSV})
         self.assertEqual(r.status_code, 302)
@@ -1781,7 +1800,7 @@ class ViewsTest(unittest.TestCase):
         karte = self.client.get("/crm/karte").get_data(as_text=True)
         self.assertIn("Gegend Kiel", karte)  # Beispieldaten haben Koordinaten
         self.assertIn('id="mapData"', karte)
-        self.assertIn("Beispielzahlen, erfunden", karte)  # Demo-Zahlen sind gekennzeichnet
+        self.assertIn("Beispielzahlen, erfunden", karte)  # erfundene Zahlen sind gekennzeichnet
         self.assertIn("Schleswig-Flensburg", karte)
         r = self.client.post("/crm/regionen/import", headers={"X-CSRF-Token": self.csrf}, content_type="multipart/form-data",
                              data={"kind": "bau", "label": "2025", "file": (io.BytesIO(
@@ -1820,10 +1839,10 @@ class ViewsTest(unittest.TestCase):
                 "template": "brief", "graphic": "none"}
         r = self.client.post("/send", data=form, headers={"X-CSRF-Token": self.csrf})
         self.assertEqual(r.status_code, 400)
-        self.assertIn("OUTREACH_EMAIL", r.get_json()["error"])
+        self.assertIn("Erstkontakt per Mail ist ausgeschaltet", r.get_json()["error"])
         crm.set_stage(c, new_id, "antwort")  # nach einer Antwort ist Mail in Ordnung
         r = self.client.post("/send", data=form, headers={"X-CSRF-Token": self.csrf})
-        self.assertTrue(r.get_json()["demo"])
+        self.assertEqual(r.get_json()["sent"], ["neu@firma.example"])
         lead = leaddb.get_lead(c, new_id)
         self.assertEqual(lead["status"], "versendet")
         self.assertIn("Gestaltete Mail", c.execute("SELECT text FROM lead_events WHERE lead_id=? AND kind='sent'",
@@ -1835,7 +1854,6 @@ class ViewsTest(unittest.TestCase):
             html = self.client.get("/leads/system").get_data(as_text=True)
         self.assertIn("Kartensuche (OpenStreetMap)", html)
         self.assertIn("overpass-api.de erreichen", html)   # Hinweis bei Fehler
-        self.assertIn("DEMO_MODE ist an", html)            # Test läuft im Demo-Modus
         self.assertIn("Bewertung, CRM und Vorlage laufen trotzdem", html)  # ohne KI-Schlüssel nur ein Hinweis
         self.assertIn("Kreise und Wachstumszahlen", html)
         self.assertEqual(len(webpush.b64u_decode(self.client.get("/push/key").get_json()["key"])), 65)

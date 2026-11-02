@@ -127,8 +127,6 @@ def run_defaults():
 def _first_name(account):
     if account.get("name"):
         return account["name"].split(" ")[0]
-    if account.get("demo"):
-        return "Team"
     local = (account.get("address") or account.get("user") or "").split("@")[0]
     return re.split(r"[._\-]", local)[0].capitalize() or "Team"
 
@@ -168,7 +166,7 @@ def home():
     greeting = "Guten Morgen" if hour < 11 else ("Guten Tag" if hour < 18 else "Guten Abend")
     return render_template("home.html", account=g.account, sched=schedule_view(), queue=review_queue(10),
                            to_review=to_review, st=st, parts=[p for p in parts if p[0]], total=total,
-                           start=start, greeting=greeting, name=_first_name(g.account), demo=SETTINGS["DEMO_MODE"])
+                           start=start, greeting=greeting, name=_first_name(g.account))
 
 # ---------------------------------------------------------------- Übersicht
 
@@ -187,7 +185,7 @@ def overview():
     return render_template("leads.html", account=g.account, tab=tab, tabs=leaddb.TABS, sections=sections,
                            sched=schedule_view(), stages=crm.STAGES, members=team.members(db()), me=me(),
                            groups=[grp for grp in groups if grp[2]], tab_groups=leaddb.TAB_GROUPS,
-                           st=status_payload(), rd=run_defaults(), demo=SETTINGS["DEMO_MODE"])
+                           st=status_payload(), rd=run_defaults())
 
 
 OPEN_STATUSES = ("kandidat", "recherche", "vorgeprueft", "analysiert", "passt", "entwurf", "aussortiert", "fehler")
@@ -243,7 +241,7 @@ def search():
     return render_template("search.html", account=g.account, st=status_payload(), rd=run_defaults(),
                            waiting_mine=waiting_mine, report=reports.last_manual(db()),
                            sched=schedule_view(), niche_weights=weights, niche_info=niches.NICHES, known_total=known.count(db()),
-                           niche_summary=niches.describe(weights), demo=SETTINGS["DEMO_MODE"])
+                           niche_summary=niches.describe(weights))
 
 
 @bp.get("/leads/berichte")
@@ -255,7 +253,7 @@ def run_reports():
         art = "hand"
     days = reports.manual_days(db()) if art == "hand" else reports.auto_days(db())
     return render_template("reports.html", account=g.account, art=art, days=days, sched=schedule_view(),
-                           st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+                           st=status_payload())
 
 
 @bp.get("/leads/schon-gefunden")
@@ -278,7 +276,7 @@ def known_list():
     for r in rows:
         r["state"] = _known_state(r)
     return render_template("known.html", account=g.account, rows=rows, q=q, total=known.count(c),
-                           sources=known.SOURCES, people=team.names(c), st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+                           sources=known.SOURCES, people=team.names(c), st=status_payload())
 
 
 def _known_state(r):
@@ -306,7 +304,7 @@ def niche_page():
                            custom=niches.is_custom(c, profile), default_keys=niches.DEFAULT_KEYS, counts=counts,
                            profile=profile, profiles=niches.PROFILE_LABELS, own=niches.has_own(c, profile),
                            locked=profile == "auto" and not is_admin(g.account),
-                           st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+                           st=status_payload())
 
 
 @bp.post("/leads/nischen")
@@ -362,8 +360,7 @@ def automatic():
                            min_every=schedule.MIN_EVERY, st=status_payload(), admin=is_admin(g.account),
                            today_eur=money(leaddb._sum(db(), "at >= ?", (datetime.now().strftime("%Y-%m-%d"),))["usd"]),
                            offline=list(reversed((leaddb.kv_get(db(), "offline_gaps", []) or [])[-3:])),
-                           day_report=next((d for d in reports.auto_days(db()) if d["released"]), None),
-                           demo=SETTINGS["DEMO_MODE"])
+                           day_report=next((d for d in reports.auto_days(db()) if d["released"]), None))
 
 
 @bp.post("/leads/automatik/<kind>")
@@ -454,8 +451,7 @@ def costs():
                              (datetime.now().strftime("%Y-%m-01"),)).fetchone()[0]
     return render_template("costs.html", account=g.account, st=status_payload(), runs=runs, stages=stages,
                            summary=summary, money=money, drafts_month=drafts_month, prices=ai.PRICES,
-                           eur_rate=ai.EUR_PER_USD, models=ai.MODELS, stage_labels=ai.STAGE_LABELS,
-                           demo=SETTINGS["DEMO_MODE"])
+                           eur_rate=ai.EUR_PER_USD, models=ai.MODELS, stage_labels=ai.STAGE_LABELS)
 
 # ---------------------------------------------------------------- Einzelne Firma
 
@@ -478,8 +474,7 @@ def detail(lead_id):
                            testbranchen=branchentest.branchen(db()), kanaele=branchentest.KANAELE,
                            pruefung=branchentest.offene_pruefung(db(), lead_id),
                            lead_termine=kalender.zum_lead(db(), lead_id), projekt=projekte.zum_lead(db(), lead_id),
-                           lead_angebote=assistent.angebote(db(), lead_id=lead_id),
-                           demo=SETTINGS["DEMO_MODE"])
+                           lead_angebote=assistent.angebote(db(), lead_id=lead_id))
 
 
 @bp.route("/leads/<int:lead_id>/preview", methods=["GET", "POST"])
@@ -512,8 +507,6 @@ def mail_json(lead_id):
         agent.template_draft(db(), lead_id, sender)
         lead = lead_or_404(lead_id)
     ok, why = crm.may_email(lead, SETTINGS["OUTREACH_EMAIL"])
-    if g.account.get("demo") and lead["email"]:
-        ok, why = True, "Demo: Es wird nichts verschickt, nur als versendet markiert."
     sent = lead["status"] in ("versendet", "beantwortet")
     own_design = team.settings(db(), sender)["design"] if sender else None
     if not lead.get("mail_design") and (own_design or leaddb.kv_get(db(), "mail_design_last")):
@@ -664,12 +657,6 @@ def send(lead_id):
     if not (lead["body"] or "").strip():
         return jsonify(error="Es gibt noch keinen Text."), 400
     kpis.entwurf_freigegeben(db(), lead_id, me(), lead["body"])  # Lernstufen: wie stark wurde geändert?
-    if g.account.get("demo"):
-        leaddb.update_lead(db(), lead_id, status="versendet", channel="email", sent_at=leaddb.now())
-        leaddb.add_event(db(), lead_id, "sent", "Demo: als versendet markiert (nichts verschickt).", author=who())
-        crm.advance(db(), lead_id, "kontaktiert")
-        crm.claim(db(), lead_id, _sender_key(lead))
-        return jsonify(ok=True)
     sender = _sender_key(lead)
     try:
         agent.send_outreach(db(), lead, who(), sender=sender)
@@ -751,7 +738,7 @@ def review_count():
 @login_required
 def review():
     return render_template("review.html", account=g.account, queue=review_queue(), total=review_count(),
-                           st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+                           st=status_payload())
 
 
 @bp.post("/leads/<int:lead_id>/urteil")
@@ -873,7 +860,7 @@ def draft_template(lead_id):
 def rules():
     return render_template("rules.html", account=g.account, rules=scoring.rules_table(), ko_rules=scoring.KO_RULES,
                            base=scoring.BASE, top=my("LEADS_RUN_TOP"),
-                           threshold=my("LEADS_RULE_MIN"), st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+                           threshold=my("LEADS_RULE_MIN"), st=status_payload())
 
 # ---------------------------------------------------------------- Recherche mit Claude (ohne API-Tokens)
 
@@ -897,8 +884,7 @@ def claude():
     return render_template("claude.html", account=g.account, prompt=prompt, count=count, branche=branche,
                            branchen=claude_research.BRANCHEN, columns=claude_research.COLUMNS,
                            used=claude_research.placeholders(template), own=claude_research.OWN_PLACEHOLDERS,
-                           waiting=waiting, filename=claude_research.FILENAME, st=status_payload(),
-                           demo=SETTINGS["DEMO_MODE"])
+                           waiting=waiting, filename=claude_research.FILENAME, st=status_payload())
 
 
 @bp.post("/leads/claude/import")
@@ -975,10 +961,6 @@ def followup_send(lead_id):
     lead = lead_or_404(lead_id)
     if (lead["followup_count"] or 0) != 0:
         return jsonify(error="Die Erinnerung ist schon raus."), 400
-    if g.account.get("demo"):
-        leaddb.update_lead(db(), lead_id, followup_count=1, followup_sent_at=leaddb.now())
-        leaddb.add_event(db(), lead_id, "sent", "Demo: Erinnerung als versendet markiert (nichts verschickt).", author=who())
-        return jsonify(ok=True)
     try:
         agent.send_outreach(db(), lead, who(), followup=True)
     except Exception as exc:
@@ -1024,7 +1006,7 @@ def brain():
     pending = db().execute("SELECT COUNT(*) FROM signals WHERE processed=0").fetchone()[0]
     return render_template("brain.html", account=g.account, content=leaddb.brain(db()), versions=versions,
                            stats=leaddb.branche_stats(db()), pending=pending, saved=request.args.get("saved"),
-                           st=status_payload(), demo=SETTINGS["DEMO_MODE"])
+                           st=status_payload())
 
 
 @bp.post("/leads/gehirn/lernen")
@@ -1053,20 +1035,7 @@ def brain_version(version_id):
 def system():
     from . import main, systemcheck
     results = systemcheck.run(SETTINGS, main.smtp_connect, main.imap_sent_folder, SETTINGS["DATA_DIR"])
-    return render_template("system.html", account=g.account, results=results, st=status_payload(),
-                           demo=SETTINGS["DEMO_MODE"])
-
-# ---------------------------------------------------------------- Demo
-
-
-@bp.post("/leads/demo")
-@login_required
-def demo_seed():
-    if not SETTINGS["DEMO_MODE"]:
-        abort(404)
-    from . import leads_demo
-    leads_demo.seed(db())
-    return redirect(url_for("leads.overview"))
+    return render_template("system.html", account=g.account, results=results, st=status_payload())
 
 # ---------------------------------------------------------------- Web-App & Push
 

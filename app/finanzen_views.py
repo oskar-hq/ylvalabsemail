@@ -119,9 +119,8 @@ def rechnung_aktion(rid):
             abort(403)
         return _tun(lambda: finanzen.bezahlt(c, wer, rid, f.get("am"), was == "bezahlt"), ziel, "Gespeichert.")
     if was == "versenden":
-        if not darf("finanzen", firma.FREIGEBEN) or g.account.get("demo"):
-            return _fertig("Im Demo-Modus wird nichts verschickt." if g.account.get("demo") else
-                           "Dafür braucht es „Finanzen: Freigeben“.", ziel, ok=False)
+        if not darf("finanzen", firma.FREIGEBEN):
+            return _fertig("Dafür braucht es „Finanzen: Freigeben“.", ziel, ok=False)
         return _tun(lambda: finanzen.versenden(c, wer, rid, SETTINGS["DATA_DIR"]), ziel, "Verschickt.")
     if was == "stornieren":
         if not darf("finanzen", firma.VERWALTEN):
@@ -195,7 +194,7 @@ def einstellungen():
 @bp.post("/einstellungen/finanzen")
 @login_required
 def einstellungen_speichern():
-    if g.account.get("demo") or not darf("finanzen", firma.VERWALTEN):
+    if not darf("finanzen", firma.VERWALTEN):
         abort(403, "Dafür brauchst du „Finanzen: Verwalten“.")
     try:
         geaendert = finanzen.regeln_speichern(db(), me(), request.form)

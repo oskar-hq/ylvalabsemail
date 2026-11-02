@@ -7,7 +7,7 @@
   <header class="os-head">
     <span class="os-eyebrow">Postfach</span>
     <h1 class="os-title-l">Neue Mail</h1>
-    <p class="os-sub os-lead">Geht als schlichte Mail über {{ sender or 'das Akquise-Postfach' }} raus, mit deinem Namen, Gruß und deiner Unterschrift. Antworten landen im Postfach.{% if account.demo %} Demo: wird nicht verschickt.{% endif %}</p>
+    <p class="os-sub os-lead">Geht als schlichte Mail über {{ sender or 'das Akquise-Postfach' }} raus, mit deinem Namen, Gruß und deiner Unterschrift. Antworten landen im Postfach.</p>
   </header>
   {% if ready %}<p class="os-hinweis err">{{ ready }} <a href="{{ url_for('settings.page', gid='postfach', pid='zugang') }}">Einstellungen → Akquise-Postfach</a></p>{% endif %}
   <form id="mailNew" autocomplete="off" style="margin-top:32px">
@@ -22,7 +22,7 @@
 </main>
 <div class="os-float">
   <a class="os-back" href="{{ url_for('crm.inbox') }}" aria-label="Zum Postfach">{{ i('back') }}</a>
-  <button type="submit" form="mailNew" class="os-btn primary" {{ 'disabled' if ready and not account.demo }}><span>Senden</span>{{ i('pfeil') }}</button>
+  <button type="submit" form="mailNew" class="os-btn primary" {{ 'disabled' if ready }}><span>Senden</span>{{ i('pfeil') }}</button>
 </div>
 {% endblock %}
 {% block scripts %}<script src="{{ url_for('static', filename='inbox.js') }}"></script>{% endblock %}
