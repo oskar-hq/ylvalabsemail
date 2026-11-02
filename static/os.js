@@ -362,4 +362,14 @@
     });
     area.addEventListener('blur', () => setTimeout(() => { matches = []; render(); }, 150));
   });
+
+  // Feld ausblenden, solange eine Auswahl bestimmte Werte hat: data-os-verstecken="selectId:wert1,wert2"
+  document.querySelectorAll('[data-os-verstecken]').forEach((el) => {
+    const [id, werte] = el.dataset.osVerstecken.split(':');
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    const pruefen = () => { el.hidden = werte.split(',').includes(sel.value); };
+    sel.addEventListener('change', pruefen);
+    pruefen();
+  });
 })();

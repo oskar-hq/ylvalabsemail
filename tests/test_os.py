@@ -575,6 +575,10 @@ class FakeGoogle:
             return {}
         if url.endswith("/freeBusy"):
             return {"calendars": {"primary": {"busy": self.busy}}}
+        if "/calendars/primary/events?" in url and method == "GET":
+            return {"items": [{"id": b.get("id", f"b{i}"), "start": {"dateTime": b["start"]}, "end": {"dateTime": b["end"]},
+                               **{k: v for k, v in b.items() if k not in ("id", "start", "end")}}
+                              for i, b in enumerate(self.busy)]}
         if "/events" in url and method == "POST":
             eid = f"ev{len(self.events) + 1}"
             self.events[eid] = {"token": token, "body": body, "url": url}
@@ -687,10 +691,16 @@ class KalenderTest(unittest.TestCase):
     def test_belegt_abgleich_nur_zeiten(self):
         k, c = self.k, self.c
         self.verbinden("oskar")
-        self.fake.busy = [{"start": "2030-01-07T09:00:00Z", "end": "2030-01-07T10:00:00Z"}]
+        tid = k.anlegen(c, "oskar", "Aus dem OS", self.morgen10, dauer=30)
+        eigene = c.execute("SELECT google_event_id FROM termin_teilnehmer WHERE termin_id=?", (tid,)).fetchone()[0]
+        self.fake.busy = [{"start": "2030-01-07T09:00:00Z", "end": "2030-01-07T10:00:00Z"},
+                          {"id": eigene, "start": "2030-01-08T09:00:00Z", "end": "2030-01-08T10:00:00Z"},
+                          {"start": "2030-01-09T09:00:00Z", "end": "2030-01-09T10:00:00Z", "transparency": "transparent"},
+                          {"start": "2030-01-10T09:00:00Z", "end": "2030-01-10T10:00:00Z",
+                           "attendees": [{"self": True, "responseStatus": "declined"}]}]
         self.assertTrue(k.belegt_abgleichen(c, "oskar"))
-        row = c.execute("SELECT start, ende FROM belegt WHERE person='oskar'").fetchone()
-        self.assertEqual((row["start"], row["ende"]), ("2030-01-07T10:00", "2030-01-07T11:00"))  # Winterzeit +1
+        rows = c.execute("SELECT start, ende FROM belegt WHERE person='oskar'").fetchall()
+        self.assertEqual([(r["start"], r["ende"]) for r in rows], [("2030-01-07T10:00", "2030-01-07T11:00")])  # +1 h
         raw = c.execute("SELECT refresh_token FROM kalender_konten WHERE person='oskar'").fetchone()[0]
         self.assertNotIn("r-oskar", raw)  # verschlüsselt gespeichert
 
@@ -2435,3 +2445,90 @@ class GoogleDateiTest(WebBasis):
                       .replace("Datei ersetzen", "Datei hochladen"))
         self.als("hamza")
         self.assertEqual(self.post("/einstellungen/kalender/google-datei", {}).status_code, 403)
+
+
+class SerienFlexibelTest(unittest.TestCase):
+    """Serien mit Rhythmus und automatischem Verschieben (Weekly Check-in)."""
+    setUp = KalenderTest.setUp
+    verbinden = KalenderTest.verbinden
+
+    def _naechster(self, wochentag):
+        heute = date.today()
+        return heute + timedelta(days=(wochentag - heute.weekday()) % 7 or 7)
+
+    def test_rhythmen(self):
+        k = self.k
+        anker = date(2026, 11, 1)  # ein Sonntag
+        s = {"wochentag": 6, "start_datum": anker.isoformat()}
+        bis = anker + timedelta(days=63)
+        self.assertEqual(len(k.serien_tage(dict(s, rhythmus="taeglich"), anker, anker + timedelta(days=6))), 7)
+        self.assertEqual(len(k.serien_tage(dict(s, rhythmus="werktags"), anker, anker + timedelta(days=6))), 5)
+        woche = k.serien_tage(dict(s, rhythmus="woche"), anker, bis)
+        self.assertTrue(all(d.weekday() == 6 for d in woche))
+        zwei = k.serien_tage(dict(s, rhythmus="zweiwochen"), anker, bis)
+        self.assertEqual(zwei[1] - zwei[0], timedelta(days=14))
+        monat = k.serien_tage(dict(s, rhythmus="monat"), anker, bis)
+        self.assertEqual([d.isoformat() for d in monat], ["2026-11-01", "2026-12-06", "2027-01-03"])  # erster Sonntag
+        self.assertEqual(k._rhythmus_text(dict(s, rhythmus="monat")), "Jeden 1. Sonntag im Monat")
+
+    def test_verschiebt_wenn_jemand_keine_zeit_hat(self):
+        k, c = self.k, self.c
+        so = self._naechster(6)
+        c.execute("INSERT INTO belegt (person, start, ende) VALUES ('finn', ?, ?)",
+                  (f"{so}T17:45", f"{so}T19:00"))
+        c.commit()
+        sid = k.serie_anlegen(c, "oskar", "Weekly Check-in", 6, "18:00", 60, "oskar", ["finn", "hamza"],
+                              flexibel=True, spielraum=120)
+        t = c.execute("SELECT * FROM termine WHERE serie_id=? AND substr(start,1,10)=?", (sid, so.isoformat())).fetchone()
+        self.assertEqual((t["start"][11:], t["wunsch_start"][11:]), ("19:00", "18:00"))  # später zuerst
+        meldungen = [(r["title"], r["body"]) for r in leaddb.notices(c, "f", 20, "hamza")[0]]
+        self.assertTrue(any(ti == "Verschoben: Weekly Check-in" and "weil Finn" in b for ti, b in meldungen), meldungen)
+        andere = c.execute("SELECT start FROM termine WHERE serie_id=? AND substr(start,1,10)!=?",
+                           (sid, so.isoformat())).fetchall()
+        self.assertTrue(andere and all(r["start"][11:] == "18:00" for r in andere))  # sonst zur Wunschzeit
+        self.assertEqual(k.serie(c, sid)["rhythmus_text"], "Sonntags")
+
+        # Finn wird frei: zurück zur Wunschzeit, mit Meldung
+        c.execute("DELETE FROM belegt")
+        c.commit()
+        self.assertGreaterEqual(k.serien_pruefen(c), 1)
+        t = k.get(c, t["id"])
+        self.assertEqual(t["start"][11:], "18:00")
+        self.assertIn("wieder zur gewohnten Zeit", leaddb.notices(c, "f", 5, "finn")[0][0]["body"])
+
+        # Hamza ist um 18 Uhr bei einem anderen OS-Termin: rückt wieder
+        k.anlegen(c, "hamza", "Kundentermin", f"{so}T18:00", dauer=60)
+        k.serien_pruefen(c)
+        self.assertEqual(k.get(c, t["id"])["start"][11:], "19:00")
+
+        # Den ganzen Abend belegt: bleibt, Oskar bekommt einen Hinweis
+        c.execute("INSERT INTO belegt (person, start, ende) VALUES ('finn', ?, ?)", (f"{so}T07:00", f"{so}T22:00"))
+        c.commit()
+        k.serien_pruefen(c)
+        self.assertEqual(k.get(c, t["id"])["start"][11:], "19:00")
+        self.assertIn("Keine gemeinsame Zeit", leaddb.notices(c, "f", 5, "oskar")[0][0]["title"])
+
+    def test_eigener_google_eintrag_zaehlt_nicht(self):
+        k, c = self.k, self.c
+        so = self._naechster(6)
+        self.verbinden("finn")
+        sid = k.serie_anlegen(c, "oskar", "Check-in", 6, "18:00", 60, "oskar", ["finn"], flexibel=True)
+        t = c.execute("SELECT * FROM termine WHERE serie_id=? AND substr(start,1,10)=?", (sid, so.isoformat())).fetchone()
+        eid = c.execute("SELECT google_event_id FROM termin_teilnehmer WHERE termin_id=? AND person='finn'",
+                        (t["id"],)).fetchone()[0]
+        lokal = lambda h: f"{so}T{h}:00"  # Test-Zeitzone egal: nur die Zuordnung zählt
+        self.fake.busy = [{"id": eid, "start": t["start"] + ":00Z", "end": t["ende"] + ":00Z"},
+                          {"start": lokal("18") + "Z", "end": lokal("19") + "Z"}]
+        k.belegt_abgleichen(c, "finn")
+        self.assertEqual(c.execute("SELECT COUNT(*) FROM belegt WHERE person='finn'").fetchone()[0], 1)  # ohne eigenen
+        self.assertEqual(k.besetzt(c, ["finn"], t["start"], t["start"], k.get(c, t["id"])), [])
+
+    def test_taeglich_ohne_meldungsflut(self):
+        k, c = self.k, self.c
+        vorher = len(leaddb.notices(c, "f", 200, "finn")[0])
+        sid = k.serie_anlegen(c, "oskar", "Daily", 0, "09:00", 15, "oskar", ["finn"], rhythmus="taeglich")
+        n = c.execute("SELECT COUNT(*) FROM termine WHERE serie_id=?", (sid,)).fetchone()[0]
+        self.assertGreaterEqual(n, 14)
+        self.assertEqual(len(leaddb.notices(c, "f", 200, "finn")[0]) - vorher, 1)  # nur „Neue Serie“
+        with self.assertRaises(k.KalenderError):
+            k.serie_anlegen(c, "oskar", "X", 0, "09:00", 15, "oskar", [], rhythmus="jahr")

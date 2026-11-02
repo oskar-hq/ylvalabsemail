@@ -133,6 +133,32 @@ def freebusy(token, von_utc, bis_utc):
     return [(b["start"], b["end"]) for b in cal.get("busy", [])]
 
 
+def belegte_termine(token, von_utc, bis_utc):
+    """Termine im Hauptkalender, die als „belegt“ zählen: [(id, start, ende)] mit RFC3339-Zeit oder bei ganztägigen
+    Terminen einem Datum. Nicht dabei: abgesagte, als „frei“ markierte und abgelehnte Termine. Mit den IDs lassen sich
+    die eigenen OS-Termine herausrechnen (frei/belegt allein kann das nicht)."""
+    out, seite = [], None
+    for _ in range(20):  # höchstens 5.000 Termine
+        q = {"timeMin": von_utc, "timeMax": bis_utc, "singleEvents": "true", "maxResults": "250",
+             "fields": "nextPageToken,items(id,status,transparency,start,end,attendees(self,responseStatus))"}
+        if seite:
+            q["pageToken"] = seite
+        data = _http("GET", f"{API}/calendars/primary/events?" + urllib.parse.urlencode(q), token=token)
+        for e in data.get("items") or []:
+            if e.get("status") == "cancelled" or e.get("transparency") == "transparent":
+                continue
+            if any(a.get("self") and a.get("responseStatus") == "declined" for a in e.get("attendees") or []):
+                continue
+            s, en = e.get("start") or {}, e.get("end") or {}
+            start, ende = s.get("dateTime") or s.get("date"), en.get("dateTime") or en.get("date")
+            if start and ende:
+                out.append((e.get("id"), start, ende))
+        seite = data.get("nextPageToken")
+        if not seite:
+            break
+    return out
+
+
 def _event(termin, gaeste, zeitzone, meet):
     body = {
         "summary": termin["titel"],

@@ -13,7 +13,7 @@ steht, wie hier gearbeitet wird und was als Nächstes sinnvoll ist. Ausführlich
    [DESIGN.md](DESIGN.md) lesen, dann den betroffenen Code.
 2. Kurzen Plan für die Stufe mit Oskar abstimmen. Oskar hat für Stufe 2 bis 10 gesagt: Plan kurz abstimmen, dann bauen,
    testen, im Browser ansehen, Doku nachziehen, Pull Request und mergen.
-3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 190 Tests, alle grün). Neue Tests für das OS
+3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 194 Tests, alle grün). Neue Tests für das OS
    kommen in `tests/test_os.py` (die Reihenfolge der Testdateien ist wichtig: `test_leads.py` setzt die
    Umgebung, Dateien davor dürfen `app.main` nicht importieren).
 4. Seiten im Browser ansehen (Playwright ist vorinstalliert): Handy 390 px und Desktop, hell und dunkel.
