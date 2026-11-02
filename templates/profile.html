@@ -10,6 +10,13 @@
     <li><a href="{{ url_for('team.overview') }}"><span class="txt"><b>Team und Zahlen</b><span>Wer wie viele angeschrieben hat, Antworten, Kunden</span></span><span class="chev">›</span></a></li>
   </ul>
 
+  <section class="auto-card" id="meldungen">
+    <h2>Meldungen aufs Handy</h2>
+    <p class="muted small">Freigaben, Anfragen, Termine und neue Antworten kommen als Meldung aufs Gerät. Auf dem iPhone zuerst
+      „Teilen → Zum Home-Bildschirm“ wählen und die App von dort öffnen. Jedes Gerät einzeln anmelden.</p>
+    <button type="button" class="btn" id="osPush"><span>Meldungen auf diesem Gerät erlauben</span></button>
+  </section>
+
   <section class="auto-card">
     <h2>Passwort</h2>
     {% if account.demo %}<p class="note warn small">Im Demo-Modus lassen sich Passwörter nicht ändern.</p>{% endif %}
@@ -68,3 +75,4 @@
   </section>
 </main>
 {% endblock %}
+{% block scripts %}<script src="{{ url_for('static', filename='push.js') }}"></script>{% endblock %}

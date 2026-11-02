@@ -35,7 +35,7 @@
     <section class="tpl-preview pane" data-pane="preview">
       <div class="tpl-preview-head">
         <label class="small"><span class="muted">Beispiel:</span>
-          <select name="beispiel" id="tplExample"><option value="">Tischlerei Hansen (Beispiel)</option>{% for e in examples %}<option value="{{ e.id }}">{{ e.name }} · {{ e.category_label }}</option>{% endfor %}</select></label>
+          <select name="beispiel" id="tplExample"><option value="">Tischlerei Hansen (Beispiel)</option>{% for e in examples %}<option value="{{ e.id }}">{{ e.name }}{% if e.category_label %} · {{ e.category_label }}{% endif %}</option>{% endfor %}</select></label>
         <span class="muted small" id="tplSubjectOut"></span>
       </div>
       <iframe id="tplFrame" title="Vorschau der Mail" sandbox=""></iframe>

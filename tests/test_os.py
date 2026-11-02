@@ -2329,3 +2329,50 @@ class AssistentWebTest(WebBasis):
         self.assertNotIn("<script>", html)
         self.assertIn('<a href="/leads/1">Akte</a>', html)
         self.assertNotIn('href="https://evil', html)
+
+
+class StartklarTest(WebBasis):
+    def _punkte(self):
+        from app import startklar
+        with main.app.test_request_context():
+            from flask import url_for
+            return {p["key"]: p for p in startklar.punkte(self.c, url_for)}
+
+    def test_punkte_zeigen_was_fehlt(self):
+        from app import finanzen
+        p = self._punkte()
+        for key in ("personen", "bereiche", "postfach", "adresse", "rechnung", "sicherung", "ki", "google", "push"):
+            self.assertIn(key, p)
+            self.assertTrue(p[key]["ziel"].startswith("/"), key)
+        self.assertFalse(p["rechnung"]["ok"])
+        self.assertIn("IBAN", p["rechnung"]["text"])
+        alt = finanzen.regeln(self.c)
+        self.addCleanup(lambda: (self.c.execute("DELETE FROM kv WHERE key='regel:finanzen'"), self.c.commit()))
+        finanzen.regeln_speichern(self.c, "oskar", {**{k: str(v) for k, v in alt.items()}, "firma_anschrift": "Weg 1",
+                                                   "steuernummer": "12/345", "iban": "DE00 1234"})
+        self.assertTrue(self._punkte()["rechnung"]["ok"])
+        alt_key = os.environ.get("ANTHROPIC_API_KEY")
+        os.environ["ANTHROPIC_API_KEY"] = "sk-test"
+        self.addCleanup(lambda: os.environ.__setitem__("ANTHROPIC_API_KEY", alt_key) if alt_key is not None
+                        else os.environ.pop("ANTHROPIC_API_KEY", None))
+        self.assertTrue(self._punkte()["ki"]["ok"])
+        self.assertEqual(self._punkte()["ki"]["wichtig"], "empfohlen")
+
+    def test_bereich_ohne_verantwortliche_person(self):
+        self.c.execute("INSERT INTO bereiche (key, name, verantwortlich) VALUES ('test_leer', 'Testbereich', 'weg')")
+        self.c.commit()
+        self.addCleanup(lambda: (self.c.execute("DELETE FROM bereiche WHERE key='test_leer'"), self.c.commit()))
+        p = self._punkte()["bereiche"]
+        self.assertFalse(p["ok"])
+        self.assertIn("Testbereich", p["text"])
+
+    def test_seiten(self):
+        html = self.client.get("/einstellungen/startklar").get_data(as_text=True)
+        self.assertIn("Für den Start", html)
+        self.assertIn("Firmendaten für Rechnungen", html)
+        self.assertIn("Startklar", self.client.get("/einstellungen").get_data(as_text=True))
+        self.assertIn("bis zum Start", self.client.get("/mein-tag").get_data(as_text=True))
+        self.assertIn("osPush", self.client.get("/profil").get_data(as_text=True))
+        self.als("hamza")
+        self.assertEqual(self.client.get("/einstellungen/startklar").status_code, 403)
+        self.assertNotIn("bis zum Start", self.client.get("/mein-tag").get_data(as_text=True))

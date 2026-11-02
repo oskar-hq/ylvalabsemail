@@ -298,6 +298,16 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
   die Freigabe (Stufe C: Mail mit PDF, Stufe D: persönlich übergeben), danach angenommen oder abgelehnt.
 - **Einstellungen → Assistent:** ein/aus, Modell, Denk-Aufwand, Schritte, Gültigkeit und Nummern der Angebote.
 
+## Startklar: was vor dem Start fehlt
+
+- **Einstellungen → Startklar** (`/einstellungen/startklar`): Checkliste für den echten Betrieb, jeder Punkt mit Link
+  dorthin, wo man ihn erledigt. Für den Start: Demo-Modus aus, alle Personen können sich anmelden, jeder Bereich hat
+  eine verantwortliche Person, Postfach verbunden, Adresse der App, Firmendaten und IBAN für Rechnungen, Sicherung
+  in den letzten 30 Tagen (oder automatisch auf dem Server). Empfohlen: KI-Schlüssel, Google-Kalender, Meldungen
+  aufs Handy. Prüft nur Gespeichertes; echte Verbindungen testet der Systemcheck.
+- Wer Einstellungen verwaltet, sieht auf **Mein Tag** einen Hinweis, solange Pflicht-Punkte offen sind.
+- **Meldungen aufs Handy** lassen sich jetzt für jede Person unter **Mein Profil** einschalten (bisher nur auf Leads).
+
 ## Team: Konten, eigenes CRM, Vorlage, Zahlen
 
 - **Anmelden mit Name und Passwort**. Passwörter liegen nur als scrypt-Hash in der Datenbank, nach Fehlversuchen

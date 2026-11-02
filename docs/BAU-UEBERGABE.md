@@ -13,7 +13,7 @@ steht, wie hier gearbeitet wird und was als Nächstes sinnvoll ist. Ausführlich
    [DESIGN.md](DESIGN.md) lesen, dann den betroffenen Code.
 2. Kurzen Plan für die Stufe mit Oskar abstimmen. Oskar hat für Stufe 2 bis 10 gesagt: Plan kurz abstimmen, dann bauen,
    testen, im Browser ansehen, Doku nachziehen, Pull Request und mergen.
-3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 184 Tests, alle grün). Neue Tests für das OS
+3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 187 Tests, alle grün). Neue Tests für das OS
    kommen in `tests/test_os.py` (die Reihenfolge der Testdateien ist wichtig: `test_leads.py` setzt die
    Umgebung, Dateien davor dürfen `app.main` nicht importieren).
 4. Seiten im Browser ansehen (Playwright ist vorinstalliert): Handy 390 px und Desktop, hell und dunkel.
@@ -39,6 +39,7 @@ Requests gehen dorthin. Nach einem Merge den Arbeits-Branch neu von dort abzweig
 | 7 Kunden-Bereich | `portal.py` (Einmal-Link, Ansicht für Kunden, Dokumente, Wochenbericht, Termin-Erinnerung) | `/portal` (Kunden), Projekt → Kunden-Bereich/Dokumente/Wochenberichte, Einstellungen → Kunden-Bereich |
 | 8 Finanzen | `finanzen.py` (Rechnungen mit Nummernkreis und Storno, Kosten, Kasse, Kennzahlen, Geld-Regel, Export), `pdf.py` | Finanzen, Rechnung, Laufende Kosten, Einstellungen → Finanzen, Projekt → Rechnungen |
 | 9 Posteingang | `posteingang.py` (weitere Postfächer, Kanäle, von Hand festhalten, Wünsche aus Nachrichten, Antwortzeit), `mailbox.py` | CRM → Postfach und Gespräch, Einstellungen → Postfächer, Einstellungen → Unipile |
+| Start | `startklar.py` (Checkliste für den echten Betrieb, nur gespeicherte Werte) | Einstellungen → Startklar, Hinweis auf Mein Tag, Mein Profil → Meldungen aufs Handy |
 | 10 Assistent | `assistent.py` (Fragen mit Werkzeugen und Rechteprüfung, „Was zuerst?“, Entwürfe, Angebote mit PDF und Freigabe), `ai.anfrage` | Assistent, Mein Tag → Was zuerst?, Angebote, Einstellungen → Assistent, Entwurf-Knöpfe in Gespräch/Termin/Projekt |
 
 Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module wieder nutzen sollten:
@@ -73,7 +74,11 @@ jeweils die erste Option ist die Empfehlung):
    optional jeden Morgen automatisch, Fragen per Push-Meldung beantworten lassen.
 3. **Unipile** für WhatsApp und LinkedIn verbinden (vorbereitet in Stufe 9), sobald Budget da ist.
 4. **Restliche alte Seiten** (CRM-Board, Leads, Akte, Mailer, Einstellungen) nach und nach auf `os.css` umstellen;
-   das Postfach im CRM ist schon umgestellt.
+   das Postfach im CRM ist schon umgestellt. Die alten Seiten sehen in hell und dunkel ordentlich aus, eilig ist das
+   nicht.
+
+**Vor dem ersten echten Arbeitstag:** Einstellungen → Startklar abarbeiten (neue Prüfpunkte als `_punkt(...)` in
+`app/startklar.py` ergänzen), dann Systemcheck.
 
 **Bausteine des Assistenten** (für Erweiterungen):
 
@@ -114,6 +119,6 @@ jeweils die erste Option ist die Empfehlung):
 - **Noch nie mit echten Diensten getestet** (nur mit nachgebauten in den Tests): Mailversand an Kunden
   (Kunden-Bereich, Wochenbericht, Rechnungen), weitere Postfächer (IMAP/SMTP), Rechnungs-Mail mit PDF-Anhang.
 - **Später fällig:** E-Rechnung (XRechnung/ZUGFeRD) vor 2028; Unipile-Anbindung für WhatsApp/LinkedIn (nur
-  vorbereitet); das Postfach im CRM auf das neue Design (`os.css`) umstellen; Angebote (siehe Abschnitt 3).
+  vorbereitet).
 - Nach jedem Update auf dem Server: die „Nach dem Update“-Hinweise je Stufe in UEBERGABE.md abarbeiten
   (Omid anlegen, Google-Zugang eintragen, Zielwerte, Projekte-Regeln …).

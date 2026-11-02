@@ -12,7 +12,7 @@
 
   <header class="lead-head">
     <h1 class="title">{{ lead.name }}</h1>
-    <p class="muted">{{ lead.category_label }}{% if lead.address %} · {{ lead.address }}{% endif %}{% if lead.distance_km is not none %} · {{ lead.distance_km }} km von Kappeln{% endif %}</p>
+    {% set meta = [lead.category_label, lead.address, (lead.distance_km ~ ' km von Kappeln') if lead.distance_km is not none else '']|select|join(' · ') %}{% if meta %}<p class="muted">{{ meta }}</p>{% endif %}
     <p>
       {% if lead.stage %}<span class="pill stage-{{ lead.stage }}">{{ stage_labels[lead.stage] }}</span>{% endif %}
       <span class="pill st-{{ tab }}">{{ interest_labels.get(lead.interest) or lead_status_labels.get(lead.status, lead.status) }}</span>

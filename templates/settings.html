@@ -9,6 +9,12 @@
   {% if account.demo %}<p class="note warn small">Demo-Modus: Hier wird nichts gespeichert.</p>
   {% elif not admin %}<p class="note warn small">Ändern darf nur, wer „Einstellungen: Verwalten“ hat (Personen → Rollen und Rechte).</p>{% endif %}
 
+  <ul class="menu">
+    <li><a href="{{ url_for('settings.startklar_seite') }}"><span class="ico">{{ osi('check') }}</span>
+      <span class="txt"><b>Startklar</b><span>{% if startklar.pflicht %}Noch {{ startklar.pflicht }} Punkt{{ 'e' if startklar.pflicht != 1 }} bis zum Start{% elif startklar.empfohlen %}Eingerichtet, {{ startklar.empfohlen }} Empfehlung{{ 'en' if startklar.empfohlen != 1 }} offen{% else %}Alles eingerichtet{% endif %}</span></span>
+      {% if startklar.pflicht %}<span class="flag"><i></i>Offen</span>{% endif %}<span class="chev">›</span></a></li>
+  </ul>
+
   <p class="menu-title">Firma</p>
   <ul class="menu">
     <li><a href="{{ url_for('personen.liste') }}"><span class="ico">{{ osi('person') }}</span>
