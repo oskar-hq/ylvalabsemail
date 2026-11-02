@@ -7,7 +7,7 @@
   <header class="os-head">
     <span class="os-eyebrow">Kalender</span>
     <h1 class="os-title-l">Mein Kalender</h1>
-    <p class="os-sub os-lead">Verbinde den Kalender, den du ohnehin führst. Das OS liest dort nur frei/belegt, keine Titel oder Orte, und trägt Firmentermine direkt ein.</p>
+    <p class="os-sub os-lead">Verbinde dein Google-Konto. Das OS liest in allen gewählten Kalendern (Schule, Sport, Arbeit …) nur, wann du belegt bist, keine Titel oder Orte, und trägt Firmentermine in den Kalender ein, den du wählst.</p>
   </header>
 
   <section class="os-section" style="margin-top:0">
@@ -26,6 +26,26 @@
       <form method="post" action="{{ url_for('kalender.google_trennen') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
         <button class="os-btn small quiet" data-confirm="Google-Kalender trennen? Das OS sieht dann deine freien Zeiten nicht mehr.">Trennen</button></form>
     </div>
+    {% if konto.status == 'ok' %}
+    <h3 class="os-headline" style="margin-top:32px;font-size:17px">Deine Kalender</h3>
+    {% if kalender_liste is none %}
+    <p class="os-hinweis" style="margin-top:8px">Damit das OS alle deine Kalender sieht (nicht nur den Hauptkalender), einmal neu verbinden und das Häkchen für die Kalenderliste erlauben.</p>
+    <div class="os-btns"><a class="os-btn small" href="{{ url_for('kalender.google_verbinden') }}">Neu verbinden</a></div>
+    {% else %}
+    <form method="post" action="{{ url_for('kalender.kalender_wahl') }}" data-os-fetch="reload" style="margin-top:12px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <label class="os-field"><span>Neue Termine eintragen in</span>
+        <select name="ziel">{% for k in kalender_liste if k.schreiben %}<option value="{{ 'primary' if k.primary else k.id }}" {{ 'selected' if (ziel == 'primary' and k.primary) or ziel == k.id }}>{{ k.name }}{{ ' (Hauptkalender)' if k.primary }}</option>{% endfor %}</select></label>
+      <div class="os-field"><span>Zählen als „keine Zeit“</span>
+        <ul class="os-list os-kalender-wahl">{% for k in kalender_liste %}<li><label class="os-row" style="min-height:0;padding:12px 0;cursor:pointer">
+          <span class="os-txt"><b style="font-size:17px">{{ k.name }}</b><span>{{ 'Hauptkalender' if k.primary else ('eigener Kalender' if k.schreiben else 'nur lesbar, z. B. abonniert') }}</span></span>
+          <span class="os-toggle"><input type="checkbox" name="lesen" value="{{ k.id }}" {{ 'checked' if k.lesen }}><span></span></span></label></li>{% endfor %}</ul></div>
+      <div class="os-btns"><button class="os-btn small">Speichern</button></div>
+    </form>
+    <form method="post" action="{{ url_for('kalender.kalender_neu_laden') }}" data-os-fetch="reload" style="margin-top:8px"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="os-link" style="text-align:left">Liste neu laden (neuer Kalender bei Google angelegt?)</button></form>
+    {% endif %}
+    {% endif %}
     {% else %}
     <p class="os-sub">Google zeigt einmal „App nicht überprüft“. Über „Erweitert“ geht es weiter; danach bleibt die Verbindung bestehen.</p>
     <div class="os-btns"><a class="os-btn" href="{{ url_for('kalender.google_verbinden') }}"><span>Mit Google verbinden</span>{{ i('chev') }}</a></div>

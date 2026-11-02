@@ -233,7 +233,12 @@ def briefing(tid):
 def mein():
     c = db()
     neu_link = session.pop("ics_link", None)
-    return render_template("kalender_mein.html", account=g.account, konto=kalender.konto(c, me()),
+    konto = kalender.konto(c, me())
+    liste = kalender.kalender_von(c, me()) if konto else None
+    if konto and liste is None and konto["status"] == "ok" and kalender.google_cfg():
+        liste = kalender.kalender_laden(c, me())  # einmal versuchen; fehlt das Recht, steht unten „neu verbinden“
+    return render_template("kalender_mein.html", account=g.account, konto=konto, kalender_liste=liste,
+                           ziel=kalender.ziel_kalender(c, me()),
                            google_da=bool(kalender.google_cfg()), ics_link=neu_link,
                            hat_abo=bool(c.execute("SELECT ics_hash FROM team WHERE key=?", (me(),)).fetchone()["ics_hash"]))
 
@@ -269,9 +274,34 @@ def google_zurueck():
         flash(f"Nicht verbunden: {exc}")
         return redirect(url_for("kalender.mein"))
     kalender.konto_speichern(db(), me(), data["refresh_token"])
+    kalender.kalender_laden(db(), me())
     kalender.belegt_abgleichen(db(), me())
     flash("Google-Kalender verbunden. Das OS sieht nur frei/belegt und trägt Firmentermine ein.")
     return redirect(url_for("kalender.mein"))
+
+
+@bp.post("/kalender/mein/kalender")
+@login_required
+def kalender_wahl():
+    """Welche eigenen Google-Kalender zählen als belegt, in welchen trägt das OS Termine ein."""
+    c = db()
+    try:
+        kalender.kalender_wahl_speichern(c, me(), request.form.get("ziel", "primary"), request.form.getlist("lesen"))
+    except kalender.KalenderError as exc:
+        return _fertig(str(exc), url_for("kalender.mein"), ok=False)
+    kalender.belegt_abgleichen(c, me())
+    return _fertig("Gespeichert. Deine freien Zeiten sind neu abgeglichen.", url_for("kalender.mein"))
+
+
+@bp.post("/kalender/mein/kalender/laden")
+@login_required
+def kalender_neu_laden():
+    c = db()
+    if kalender.kalender_laden(c, me()) is None:
+        return _fertig("Die Liste deiner Kalender ließ sich nicht laden. Bitte Google neu verbinden.",
+                       url_for("kalender.mein"), ok=False)
+    kalender.belegt_abgleichen(c, me())
+    return _fertig("Liste deiner Kalender neu geladen.", url_for("kalender.mein"))
 
 
 @bp.post("/kalender/google/trennen")

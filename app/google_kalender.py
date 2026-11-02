@@ -16,7 +16,8 @@ TOKEN_URL = "https://oauth2.googleapis.com/token"
 REVOKE_URL = "https://oauth2.googleapis.com/revoke"
 API = "https://www.googleapis.com/calendar/v3"
 SCOPES = ["https://www.googleapis.com/auth/calendar.events.freebusy",
-          "https://www.googleapis.com/auth/calendar.events"]
+          "https://www.googleapis.com/auth/calendar.events",
+          "https://www.googleapis.com/auth/calendar.calendarlist.readonly"]  # welche Kalender gibt es (Schule, Sport …)
 RUECKSPRUNG = "/kalender/google/zurueck"
 TIMEOUT = 20
 
@@ -133,7 +134,28 @@ def freebusy(token, von_utc, bis_utc):
     return [(b["start"], b["end"]) for b in cal.get("busy", [])]
 
 
-def belegte_termine(token, von_utc, bis_utc):
+def _kal(kalender_id):
+    return urllib.parse.quote(kalender_id or "primary", safe="")
+
+
+def kalender_liste(token):
+    """Alle Kalender der Person: [{id, name, primary, schreiben}]. Braucht das Recht calendarlist.readonly."""
+    out, seite = [], None
+    for _ in range(10):
+        q = {"maxResults": "250", "fields": "nextPageToken,items(id,summary,summaryOverride,primary,accessRole)"}
+        if seite:
+            q["pageToken"] = seite
+        data = _http("GET", f"{API}/users/me/calendarList?" + urllib.parse.urlencode(q), token=token)
+        for k in data.get("items") or []:
+            out.append({"id": k["id"], "name": k.get("summaryOverride") or k.get("summary") or k["id"],
+                        "primary": bool(k.get("primary")), "schreiben": k.get("accessRole") in ("owner", "writer")})
+        seite = data.get("nextPageToken")
+        if not seite:
+            break
+    return sorted(out, key=lambda k: (not k["primary"], not k["schreiben"], k["name"].lower()))
+
+
+def belegte_termine(token, von_utc, bis_utc, kalender_id="primary"):
     """Termine im Hauptkalender, die als „belegt“ zählen: [(id, start, ende)] mit RFC3339-Zeit oder bei ganztägigen
     Terminen einem Datum. Nicht dabei: abgesagte, als „frei“ markierte und abgelehnte Termine. Mit den IDs lassen sich
     die eigenen OS-Termine herausrechnen (frei/belegt allein kann das nicht)."""
@@ -143,7 +165,7 @@ def belegte_termine(token, von_utc, bis_utc):
              "fields": "nextPageToken,items(id,status,transparency,start,end,attendees(self,responseStatus))"}
         if seite:
             q["pageToken"] = seite
-        data = _http("GET", f"{API}/calendars/primary/events?" + urllib.parse.urlencode(q), token=token)
+        data = _http("GET", f"{API}/calendars/{_kal(kalender_id)}/events?" + urllib.parse.urlencode(q), token=token)
         for e in data.get("items") or []:
             if e.get("status") == "cancelled" or e.get("transparency") == "transparent":
                 continue
@@ -189,28 +211,29 @@ def _meet_link(data):
     return None
 
 
-def event_anlegen(token, termin, gaeste=(), zeitzone="Europe/Berlin", meet=False, einladen=False):
-    """Termin im eigenen Kalender anlegen. Mit Gästen und einladen=True schickt Google die Einladung."""
+def event_anlegen(token, termin, gaeste=(), zeitzone="Europe/Berlin", meet=False, einladen=False, kalender_id="primary"):
+    """Termin im gewählten Kalender der Person anlegen. Mit Gästen und einladen=True schickt Google die Einladung."""
     q = urllib.parse.urlencode({"conferenceDataVersion": 1 if meet else 0,
                                 "sendUpdates": "all" if einladen and gaeste else "none"})
-    data = _http("POST", f"{API}/calendars/primary/events?{q}", token=token,
+    data = _http("POST", f"{API}/calendars/{_kal(kalender_id)}/events?{q}", token=token,
                  body=_event(termin, list(gaeste), zeitzone, meet))
     return {"id": data["id"], "meet_link": _meet_link(data), "link": data.get("htmlLink")}
 
 
-def event_aendern(token, event_id, termin, gaeste=(), zeitzone="Europe/Berlin", einladen=False):
+def event_aendern(token, event_id, termin, gaeste=(), zeitzone="Europe/Berlin", einladen=False, kalender_id="primary"):
     q = urllib.parse.urlencode({"sendUpdates": "all" if einladen and gaeste else "none"})
     body = _event(termin, list(gaeste), zeitzone, meet=False)
     body.pop("extendedProperties", None)
-    data = _http("PATCH", f"{API}/calendars/primary/events/{urllib.parse.quote(event_id)}?{q}", token=token,
+    data = _http("PATCH", f"{API}/calendars/{_kal(kalender_id)}/events/{urllib.parse.quote(event_id)}?{q}", token=token,
                  body=body)
     return {"id": data.get("id", event_id), "meet_link": _meet_link(data)}
 
 
-def event_loeschen(token, event_id, einladen=False):
+def event_loeschen(token, event_id, einladen=False, kalender_id="primary"):
     q = urllib.parse.urlencode({"sendUpdates": "all" if einladen else "none"})
     try:
-        _http("DELETE", f"{API}/calendars/primary/events/{urllib.parse.quote(event_id)}?{q}", token=token)
+        _http("DELETE", f"{API}/calendars/{_kal(kalender_id)}/events/{urllib.parse.quote(event_id)}?{q}",
+              token=token)
     except GoogleError as exc:
         if "(404)" not in str(exc) and "(410)" not in str(exc):
             raise

@@ -752,6 +752,10 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
   Sicherung; empfohlen KI, Google-Kalender, Meldungen aufs Handy) und verlinkt jeden Punkt auf seine Einstellung.
   `app/startklar.py`; Hinweis auf Mein Tag für alle mit „Einstellungen: Verwalten“. Meldungen aufs Handy jetzt unter
   Mein Profil für jede Person (bisher nur auf der Leads-Seite).
+  - 02.11.2026: Alle Google-Kalender einer Person zählen als belegt (`kalender_laden`, `kalender_wahl_speichern`,
+    `belegt_abgleichen` je gewähltem Kalender), Zielkalender für neue Termine wählbar (`ziel_kalender`, gespeichert je
+    Teilnahme in `termin_teilnehmer.google_kalender_id`). Neues Google-Recht `calendar.calendarlist.readonly`; ohne
+    es gilt weiter nur der Hauptkalender.
   - 02.11.2026: Serien mit Rhythmus (`RHYTHMEN`) und automatischem Verschieben (`serien_pruefen` im Takt,
     `platz_finden`: nächste freie Viertelstunde am selben Tag, erst später, dann früher, im Spielraum). Abgleich mit
     Google über die Termine des Hauptkalenders (`belegte_termine`) statt frei/belegt, damit die eigenen OS-Termine

@@ -562,6 +562,8 @@ class FakeGoogle:
         from app import google_kalender
         self.g = google_kalender
         self.calls, self.events, self.busy, self.kaputt = [], {}, [], set()
+        self.listen = [{"id": "ich@example.com", "summary": "Ich", "primary": True, "accessRole": "owner"}]
+        self.busy_je, self.ohne_liste = {}, False  # belegt je weiterem Kalender; Recht für die Liste fehlt
 
     def __call__(self, method, url, form=None, body=None, token=None):
         self.calls.append((method, url, form, body, token))
@@ -575,10 +577,18 @@ class FakeGoogle:
             return {}
         if url.endswith("/freeBusy"):
             return {"calendars": {"primary": {"busy": self.busy}}}
-        if "/calendars/primary/events?" in url and method == "GET":
-            return {"items": [{"id": b.get("id", f"b{i}"), "start": {"dateTime": b["start"]}, "end": {"dateTime": b["end"]},
+        if "/users/me/calendarList" in url:
+            if self.ohne_liste:
+                raise self.g.GoogleError("Google: Insufficient Permission (403)")
+            return {"items": self.listen}
+        if "/events?" in url and method == "GET":
+            import urllib.parse
+            kid = urllib.parse.unquote(url.split("/calendars/")[1].split("/events")[0])
+            liste = self.busy if kid in ("primary", "ich@example.com") else self.busy_je.get(kid, [])
+            return {"items": [{"id": b.get("id", f"{kid}-b{i}"), "start": {"dateTime": b["start"]},
+                               "end": {"dateTime": b["end"]},
                                **{k: v for k, v in b.items() if k not in ("id", "start", "end")}}
-                              for i, b in enumerate(self.busy)]}
+                              for i, b in enumerate(liste)]}
         if "/events" in url and method == "POST":
             eid = f"ev{len(self.events) + 1}"
             self.events[eid] = {"token": token, "body": body, "url": url}
@@ -2528,7 +2538,86 @@ class SerienFlexibelTest(unittest.TestCase):
         vorher = len(leaddb.notices(c, "f", 200, "finn")[0])
         sid = k.serie_anlegen(c, "oskar", "Daily", 0, "09:00", 15, "oskar", ["finn"], rhythmus="taeglich")
         n = c.execute("SELECT COUNT(*) FROM termine WHERE serie_id=?", (sid,)).fetchone()[0]
-        self.assertGreaterEqual(n, 14)
+        self.assertGreaterEqual(n, 13)  # heute schon vorbei: ein Termin weniger
         self.assertEqual(len(leaddb.notices(c, "f", 200, "finn")[0]) - vorher, 1)  # nur „Neue Serie“
         with self.assertRaises(k.KalenderError):
             k.serie_anlegen(c, "oskar", "X", 0, "09:00", 15, "oskar", [], rhythmus="jahr")
+
+
+class AlleKalenderTest(unittest.TestCase):
+    """Alle Google-Kalender lesen (Schule, Sport, Arbeit), Termine in den gewählten eintragen."""
+    setUp = KalenderTest.setUp
+    verbinden = KalenderTest.verbinden
+
+    def test_liest_alle_und_schreibt_in_gewaehlten(self):
+        k, c = self.k, self.c
+        self.fake.listen += [
+            {"id": "schule@group.calendar.google.com", "summary": "Schule", "accessRole": "owner"},
+            {"id": "sport@group.calendar.google.com", "summary": "Sport", "accessRole": "owner"},
+            {"id": "de.german#holiday@group.v.calendar.google.com", "summary": "Feiertage", "accessRole": "reader"}]
+        self.fake.busy_je = {
+            "schule@group.calendar.google.com": [{"start": "2030-01-07T07:00:00Z", "end": "2030-01-07T12:00:00Z"}],
+            "sport@group.calendar.google.com": [{"start": "2030-01-07T17:00:00Z", "end": "2030-01-07T18:30:00Z"}],
+            "de.german#holiday@group.v.calendar.google.com": [{"start": "2030-01-07T00:00:00Z",
+                                                                "end": "2030-01-08T00:00:00Z"}]}
+        self.verbinden("oskar")
+        liste = k.kalender_laden(c, "oskar")
+        self.assertEqual([x["name"] for x in liste], ["Ich", "Schule", "Sport", "Feiertage"])  # eigene zuerst
+        self.assertEqual({x["name"]: x["lesen"] for x in liste},
+                         {"Ich": True, "Schule": True, "Sport": True, "Feiertage": False})
+        self.assertTrue(k.belegt_abgleichen(c, "oskar"))
+        zeiten = sorted(r["start"][11:] for r in c.execute("SELECT start FROM belegt WHERE person='oskar'"))
+        self.assertEqual(zeiten, ["08:00", "18:00"])  # Schule und Sport, Feiertag nicht (Winterzeit +1)
+
+        # Sport soll nicht zählen, neue Termine in den eigenen Arbeitskalender
+        self.fake.listen.append({"id": "arbeit@group.calendar.google.com", "summary": "Arbeit", "accessRole": "writer"})
+        k.kalender_laden(c, "oskar")
+        k.kalender_wahl_speichern(c, "oskar", "arbeit@group.calendar.google.com",
+                                  ["ich@example.com", "schule@group.calendar.google.com",
+                                   "arbeit@group.calendar.google.com"])
+        k.belegt_abgleichen(c, "oskar")
+        self.assertEqual([r["start"][11:] for r in c.execute("SELECT start FROM belegt WHERE person='oskar'")], ["08:00"])
+        tid = k.anlegen(c, "oskar", "Check-in", self.morgen10, dauer=30)
+        post = self.fake.anfragen("POST", "/events")[-1]
+        self.assertIn("/calendars/arbeit%40group.calendar.google.com/events", post[1])
+        x = c.execute("SELECT google_kalender_id FROM termin_teilnehmer WHERE termin_id=?", (tid,)).fetchone()
+        self.assertEqual(x[0], "arbeit@group.calendar.google.com")
+        # Ändern und Absagen gehen in denselben Kalender, auch wenn die Wahl inzwischen anders ist
+        k.kalender_wahl_speichern(c, "oskar", "primary", ["ich@example.com"])
+        k.absagen(c, "oskar", tid)
+        self.assertIn("/calendars/arbeit%40group.calendar.google.com/events/", self.fake.anfragen("DELETE", "/events/")[-1][1])
+        with self.assertRaises(k.KalenderError):  # nur lesbare Kalender sind kein Ziel
+            k.kalender_wahl_speichern(c, "oskar", "de.german#holiday@group.v.calendar.google.com", [])
+
+    def test_ohne_recht_fuer_die_liste_nur_hauptkalender(self):
+        k, c = self.k, self.c
+        self.fake.ohne_liste = True
+        self.fake.busy = [{"start": "2030-01-07T09:00:00Z", "end": "2030-01-07T10:00:00Z"}]
+        self.verbinden("oskar")
+        self.assertIsNone(k.kalender_laden(c, "oskar"))
+        self.assertTrue(k.belegt_abgleichen(c, "oskar"))
+        self.assertEqual(c.execute("SELECT COUNT(*) FROM belegt WHERE person='oskar'").fetchone()[0], 1)
+        self.assertEqual(k.ziel_kalender(c, "oskar"), "primary")
+
+
+class AlleKalenderWebTest(WebBasis):
+    def test_mein_kalender_wahl(self):
+        from unittest import mock
+        from app import google_kalender, kalender
+        fake = FakeGoogle()
+        fake.listen.append({"id": "sport@group.calendar.google.com", "summary": "Sport", "accessRole": "owner"})
+        for p in (mock.patch.object(google_kalender, "_http", fake),
+                  mock.patch.dict(os.environ, {"GOOGLE_CLIENT_ID": "cid", "GOOGLE_CLIENT_SECRET": "sec"})):
+            p.start()
+            self.addCleanup(p.stop)
+        kalender.konto_speichern(self.c, "oskar", "r-oskar")
+        self.addCleanup(lambda: (self.c.execute("DELETE FROM kalender_konten WHERE person='oskar'"), self.c.commit()))
+        html = self.client.get("/kalender/mein").get_data(as_text=True)
+        self.assertIn("Neue Termine eintragen in", html)
+        self.assertIn("Sport", html)
+        r = self.post("/kalender/mein/kalender", {"ziel": "sport@group.calendar.google.com", "lesen": ["ich@example.com"]},
+                      headers={"X-Requested-With": "fetch"})
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        self.assertEqual(kalender.ziel_kalender(self.c, "oskar"), "sport@group.calendar.google.com")
+        self.assertEqual(self.post("/kalender/mein/kalender/laden", {}, headers={"X-Requested-With": "fetch"})
+                         .status_code, 200)
