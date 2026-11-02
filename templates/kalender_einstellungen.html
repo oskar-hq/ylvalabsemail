@@ -57,10 +57,10 @@
 
   <section class="os-section">
     <h2 class="os-headline">Serientermine</h2>
-    <p class="os-sub">Jede Woche zur selben Zeit, z. B. das Wochengespräch zu viert. Das OS hält die nächsten sechs Wochen im Kalender.</p>
+    <p class="os-sub">Täglich, wöchentlich oder monatlich zur selben Zeit, z. B. das Wochengespräch oder ein Check-in am Sonntag. Auf Wunsch rückt ein Termin automatisch, wenn jemand zur Wunschzeit keine Zeit hat; alle bekommen dann eine Meldung.</p>
     <ul class="os-list" style="margin-top:8px">{% for s in serien %}<li class="os-row">
       <span class="os-ico {{ '' if s.aktiv else 'off' }}">{{ i('kalender') }}</span>
-      <span class="os-txt"><b>{{ s.titel }}</b><span>{{ s.tag }}s {{ s.uhrzeit }}, {{ s.dauer_min }} Minuten · {{ s.teilnehmer|length }} Personen{% if not s.aktiv %} · beendet{% endif %}</span></span>
+      <span class="os-txt"><b>{{ s.titel }}</b><span>{{ s.rhythmus_text }} {{ s.uhrzeit }}, {{ s.dauer_min }} Minuten · {{ s.teilnehmer|length }} Personen{% if s.flexibel %} · weicht bei Bedarf bis {{ s.spielraum_min }} Min. aus{% endif %}{% if not s.aktiv %} · beendet{% endif %}</span></span>
       {% if s.aktiv and verwalten %}<form method="post" action="{{ url_for('kalender.serie_beenden', sid=s.id) }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
         <button class="os-link danger" data-confirm="Serie „{{ s.titel }}“ beenden? Künftige Termine werden abgesagt.">Beenden</button></form>{% endif %}</li>
     {% else %}<li class="os-empty">Noch keine Serie.</li>{% endfor %}</ul>
@@ -77,10 +77,11 @@
     <form method="post" action="{{ url_for('kalender.serie') }}" data-os-fetch="reload" data-os-require=".os-ask">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <span class="os-eyebrow">Neue Serie</span>
-      <input class="os-ask" name="titel" value="Wochengespräch" maxlength="200" required>
+      <input class="os-ask" name="titel" value="Weekly Check-in" maxlength="200" required>
       <div class="os-grid2">
-        <label class="os-field"><span>Wochentag</span><select name="wochentag">{% for t in wochentage %}<option value="{{ loop.index0 }}" {{ 'selected' if loop.index0 == 0 }}>{{ t }}</option>{% endfor %}</select></label>
-        <label class="os-field"><span>Uhrzeit</span><input type="time" name="uhrzeit" value="17:00" step="900" required></label>
+        <label class="os-field"><span>Wie oft?</span><select name="rhythmus" id="serieRhythmus">{% for k, l in rhythmen %}<option value="{{ k }}" {{ 'selected' if k == 'woche' }}>{{ l }}</option>{% endfor %}</select></label>
+        <label class="os-field" id="serieTag" data-os-verstecken="serieRhythmus:taeglich,werktags"><span>Wochentag</span><select name="wochentag">{% for t in wochentage %}<option value="{{ loop.index0 }}" {{ 'selected' if loop.index0 == 6 }}>{{ t }}</option>{% endfor %}</select></label>
+        <label class="os-field"><span>Wunschzeit</span><input type="time" name="uhrzeit" value="18:00" step="900" required></label>
         <label class="os-field"><span>Dauer (Minuten)</span><input type="number" name="dauer" value="60" min="5" max="480"></label>
         <label class="os-field"><span>Verantwortlich</span><select name="verantwortlich">{% for p in personen %}<option value="{{ p.key }}" {{ 'selected' if p.key == account.team }}>{{ p.name }}</option>{% endfor %}</select></label>
       </div>
@@ -88,6 +89,10 @@
         <div class="os-chips">{% for p in personen %}<label><input type="checkbox" name="personen" value="{{ p.key }}" checked>{{ p.name.split(' ')[0] }}</label>{% endfor %}</div></div>
       <label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px"><span style="margin:0">Google Meet anhängen</span>
         <span class="os-toggle"><input type="checkbox" name="meet" value="1" checked><span></span></span></label>
+      <label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px"><span style="margin:0">Automatisch verschieben, wenn jemand keine Zeit hat</span>
+        <span class="os-toggle"><input type="checkbox" name="flexibel" value="1" checked><span></span></span></label>
+      <label class="os-field"><span>Höchstens so weit von der Wunschzeit weg (am selben Tag)</span><select name="spielraum">{% for m in spielraeume %}<option value="{{ m }}" {{ 'selected' if m == 120 }}>{{ m // 60 ~ ' Stunde' ~ ('n' if m > 60 else '') if m >= 60 and m % 60 == 0 else m ~ ' Minuten' }}</option>{% endfor %}</select></label>
+      <p class="os-caption">Das OS nimmt die freie Zeit, die der Wunschzeit am nächsten liegt (Google-Kalender und Termine im OS), und kehrt zur Wunschzeit zurück, sobald sie wieder frei ist. Alle bekommen bei jeder Verschiebung eine Meldung.</p>
       <div class="os-sheet-foot">
         <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
         <button type="submit" class="os-btn"><span>Anlegen</span>{{ i('check') }}</button>

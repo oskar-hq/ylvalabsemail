@@ -172,6 +172,12 @@ MIGRATIONS = [
     "ALTER TABLE messages ADD COLUMN wunsch TEXT",
     "ALTER TABLE messages ADD COLUMN aenderung_id INTEGER",
     "ALTER TABLE messages ADD COLUMN erfasst_von TEXT",
+    # Serien mit Rhythmus (täglich bis monatlich) und automatischem Verschieben, wenn jemand keine Zeit hat
+    "ALTER TABLE serien ADD COLUMN rhythmus TEXT NOT NULL DEFAULT 'woche'",
+    "ALTER TABLE serien ADD COLUMN flexibel INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE serien ADD COLUMN spielraum_min INTEGER NOT NULL DEFAULT 120",
+    "ALTER TABLE serien ADD COLUMN start_datum TEXT",
+    "ALTER TABLE termine ADD COLUMN wunsch_start TEXT",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.

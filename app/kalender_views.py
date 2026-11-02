@@ -318,7 +318,8 @@ def einstellungen():
     return render_template("kalender_einstellungen.html", account=g.account, google_da=bool(kalender.google_cfg()),
                            rueckweg_fehlt=rueckwege is not None and _rueckweg() not in rueckwege,
                            rueckweg=_rueckweg(), regeln=kalender.regeln(c), regel_labels=kalender.REGELN,
-                           wochentage=kalender.WOCHENTAGE, serien=kalender.serien(c), personen=firma.aktive_personen(c),
+                           wochentage=kalender.WOCHENTAGE, serien=kalender.serien(c), rhythmen=kalender.RHYTHMEN,
+                           spielraeume=kalender.SPIELRAEUME, personen=firma.aktive_personen(c),
                            konten=konten, verwalten=darf("kalender", firma.VERWALTEN))
 
 
@@ -366,10 +367,11 @@ def serie():
     try:
         kalender.serie_anlegen(db(), me(), f.get("titel", ""), f.get("wochentag", ""), f.get("uhrzeit", ""),
                                f.get("dauer", ""), f.get("verantwortlich") or me(), f.getlist("personen"),
-                               f.get("meet") == "1")
+                               f.get("meet") == "1", rhythmus=f.get("rhythmus", "woche"),
+                               flexibel=f.get("flexibel") == "1", spielraum=f.get("spielraum", "120"))
     except kalender.KalenderError as exc:
         return _fertig(str(exc), url_for("kalender.einstellungen"), ok=False)
-    return _fertig("Serie angelegt. Die nächsten Wochen stehen im Kalender.", url_for("kalender.einstellungen"))
+    return _fertig("Serie angelegt. Die nächsten Termine stehen im Kalender.", url_for("kalender.einstellungen"))
 
 
 @bp.post("/einstellungen/kalender/serie/<int:sid>/beenden")
