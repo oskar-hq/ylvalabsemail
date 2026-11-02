@@ -105,6 +105,10 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   IBAN für Rechnungen, eine Sicherung; empfohlen KI-Schlüssel, Google-Kalender und Meldungen aufs Handy (jetzt unter
   „Mein Profil“). Nach dem Update: die Liste von oben nach unten abarbeiten, danach einmal den Systemcheck. Wer
   Einstellungen verwaltet, sieht auf Mein Tag, wie viele Punkte noch offen sind.
+- **Serien mit Wunschzeit (02.11.2026):** Einstellungen → Kalender → Neue Serie: Rhythmus (täglich bis monatlich),
+  Wunschzeit und „Automatisch verschieben, wenn jemand keine Zeit hat“. Der Abgleich mit Google liest jetzt die
+  Termine des Hauptkalenders statt nur frei/belegt (eigene OS-Termine zählen nicht doppelt, als „frei“ markierte und
+  abgelehnte auch nicht). Nach dem Update: nichts zu tun; bestehende Serien bleiben wöchentlich und fest.
 - **Google-Datei hochladen (02.11.2026):** Unter Einstellungen → Kalender lässt sich die JSON-Datei des
   OAuth-Clients (Typ „Webanwendung“) direkt hochladen; Client-ID und Schlüssel werden übernommen (Schlüssel
   verschlüsselt), sofort wirksam. Fehlt in der Datei die Rücksprung-Adresse der App, steht dort ein Hinweis. Die Datei

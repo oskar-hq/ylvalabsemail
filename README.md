@@ -216,6 +216,14 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
   von dort muss im Google-Projekt unter „Autorisierte Weiterleitungs-URIs“ stehen. Danach verbindet jede Person unter „Mein Kalender“ ihr eigenes Konto. Google zeigt dabei
   einmal „App nicht überprüft“ (über „Erweitert“ weiter).
 
+- **Serientermine mit Wunschzeit** (Einstellungen → Kalender → Neue Serie), z. B. ein Weekly Check-in am Sonntag:
+  täglich, werktags, wöchentlich, alle zwei Wochen oder monatlich (gleicher Wochentag, z. B. erster Sonntag). Mit
+  „Automatisch verschieben“ legt das OS jeden Termin auf die Zeit am selben Tag, die der Wunschzeit am nächsten liegt
+  und in der alle können (Google-Kalender und Termine im OS, höchstens so weit wie eingestellt). Hat später jemand
+  keine Zeit mehr, rückt der Termin; ist die Wunschzeit wieder frei, kehrt er zurück. Alle bekommen bei jeder
+  Verschiebung eine Meldung (auch aufs Handy). Zwei Stunden vorher wird nicht mehr verschoben; findet sich keine
+  gemeinsame Zeit, bekommt die verantwortliche Person einen Hinweis.
+
 ## Cockpit, Wochenziele und Wochengespräch (Stufe 4)
 
 - **Cockpit**: alle KPIs je Bereich für die Woche, Verlauf über acht Wochen, Ampel gegen den Zielwert. Team oder

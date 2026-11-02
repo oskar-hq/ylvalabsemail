@@ -752,6 +752,10 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
   Sicherung; empfohlen KI, Google-Kalender, Meldungen aufs Handy) und verlinkt jeden Punkt auf seine Einstellung.
   `app/startklar.py`; Hinweis auf Mein Tag für alle mit „Einstellungen: Verwalten“. Meldungen aufs Handy jetzt unter
   Mein Profil für jede Person (bisher nur auf der Leads-Seite).
+  - 02.11.2026: Serien mit Rhythmus (`RHYTHMEN`) und automatischem Verschieben (`serien_pruefen` im Takt,
+    `platz_finden`: nächste freie Viertelstunde am selben Tag, erst später, dann früher, im Spielraum). Abgleich mit
+    Google über die Termine des Hauptkalenders (`belegte_termine`) statt frei/belegt, damit die eigenen OS-Termine
+    herausgerechnet werden können. Einzeltermine einer Serie melden sich nicht mehr einzeln („Neue Serie“ einmal).
   - 02.11.2026: Google-Zugang per Upload der JSON-Datei (Einstellungen → Kalender, `google_kalender.client_aus_datei`;
     nur Typ „Webanwendung“, Dienstkonto und Desktop-Client werden mit Erklärung abgelehnt).
   - 02.11.2026: § 7 UWG geklärt, Erstkontakt per Mail Standard an (Punkt in Startklar). Demo-Modus ganz entfernt
