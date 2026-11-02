@@ -182,6 +182,11 @@ MIGRATIONS = [
     "ALTER TABLE kalender_konten ADD COLUMN kalender TEXT",
     "ALTER TABLE kalender_konten ADD COLUMN ziel_kalender TEXT",
     "ALTER TABLE termin_teilnehmer ADD COLUMN google_kalender_id TEXT",
+    # Wer an einem Serientermin keine Zeit hat, ist „nicht dabei“ und bekommt danach die Zusammenfassung
+    "ALTER TABLE termin_teilnehmer ADD COLUMN abwesend INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE termine ADD COLUMN zusammenfassung TEXT",
+    "ALTER TABLE termine ADD COLUMN zusammenfassung_von TEXT",
+    "ALTER TABLE termine ADD COLUMN zusammenfassung_am TEXT",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.

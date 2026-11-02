@@ -259,6 +259,8 @@ def get(c, tid):
         "SELECT tt.*, p.name AS person_name FROM termin_teilnehmer tt LEFT JOIN team p ON p.key = tt.person "
         "WHERE termin_id=? ORDER BY tt.person IS NULL, tt.id", (tid,))]
     t["personen"] = [x["person"] for x in t["teilnehmer"] if x["person"]]
+    t["abwesend"] = [x["person"] for x in t["teilnehmer"] if x["person"] and x.get("abwesend")]
+    t["dabei"] = [p for p in t["personen"] if p not in t["abwesend"]]
     t["gaeste"] = [x["email"] for x in t["teilnehmer"] if not x["person"] and x["email"]]
     t["zeit"] = zeitraum_text(t)
     t["vorbei"] = t["ende"] <= _iso(datetime.now())
@@ -417,7 +419,8 @@ def freigeben(c, wer, tid, ok, grund=""):
     return get(c, tid)
 
 
-def aendern(c, wer, tid, titel=None, start=None, ende=None, ort=None, beschreibung=None, meldung=None):
+def aendern(c, wer, tid, titel=None, start=None, ende=None, ort=None, beschreibung=None, meldung=None,
+            nur_dabei=False):
     """Termin ändern. `meldung` (z. B. beim automatischen Verschieben einer Serie) geht als Push an alle."""
     from . import firma
     t = get(c, tid)
@@ -449,7 +452,7 @@ def aendern(c, wer, tid, titel=None, start=None, ende=None, ort=None, beschreibu
     if t["status"] == "geplant":
         sync(c, tid, einladen=bool(t["gaeste"]))
     from . import aufgaben
-    for p in t["personen"]:
+    for p in (get(c, tid)["dabei"] if nur_dabei else t["personen"]):
         if meldung:
             aufgaben.melden(c, p, f"Verschoben: {neu.get('titel', t['titel'])}", meldung, f"/kalender/{tid}", push=True)
         elif p != wer:
@@ -508,7 +511,19 @@ def sync(c, tid, einladen=False):
         return
     zone = regeln(c)["zeitzone"]
     fehler = []
-    reihenfolge = sorted([x for x in t["teilnehmer"] if x["person"]], key=lambda x: x["person"] != t["verantwortlich"])
+    for x in t["teilnehmer"]:  # wer nicht dabei ist, hat den Termin nicht im eigenen Kalender
+        if x["person"] and x.get("abwesend") and x["google_event_id"]:
+            token = _token(c, x["person"])
+            try:
+                if token:
+                    google_kalender.event_loeschen(token, x["google_event_id"],
+                                                   kalender_id=x.get("google_kalender_id") or "primary")
+                c.execute("UPDATE termin_teilnehmer SET google_event_id=NULL, google_kalender_id=NULL WHERE id=?",
+                          (x["id"],))
+            except google_kalender.GoogleError as exc:
+                fehler.append(f"{x['person_name']}: {exc}")
+    reihenfolge = sorted([x for x in t["teilnehmer"] if x["person"] and not x.get("abwesend")],
+                         key=lambda x: x["person"] != t["verantwortlich"])
     for x in reihenfolge:
         haupt = x["person"] == t["verantwortlich"]
         token = _token(c, x["person"])
@@ -688,7 +703,8 @@ def _belegungen(c, personen, von, bis, ohne_termin=None):
                        [*personen, bis, von]):
         zeiten.append((r["start"], r["ende"]))
     for r in c.execute(f"""SELECT DISTINCT t.start, t.ende FROM termine t JOIN termin_teilnehmer tt ON tt.termin_id = t.id
-                           WHERE tt.person IN ({marks}) AND t.status != 'abgesagt' AND t.start < ? AND t.ende > ?
+                           WHERE tt.person IN ({marks}) AND tt.abwesend = 0 AND t.status != 'abgesagt'
+                           AND t.start < ? AND t.ende > ?
                            AND t.id != ?""", [*personen, bis, von, ohne_termin or 0]):
         zeiten.append((r["start"], r["ende"]))
     return zeiten
@@ -768,6 +784,29 @@ def ergebnis(c, wer, tid, art, notiz="", preisgespraech=False, folge_titel="", f
         aufgaben.anlegen(c, wer, folge_titel, b, folge_faellig or (date.today() + timedelta(days=1)).isoformat(),
                          person=wer, objekt_typ="lead" if t["lead_id"] else None, objekt_id=t["lead_id"],
                          quelle="termin")
+
+
+def zusammenfassung_speichern(c, wer, tid, text):
+    """Zusammenfassung des Termins. Beim ersten Speichern bekommen alle, die nicht dabei waren, eine Meldung (auch aufs
+    Handy); später Änderungen nur einen Hinweis in der Glocke."""
+    from . import aufgaben, firma
+    t = get(c, tid)
+    if not t:
+        raise KalenderError("Diesen Termin gibt es nicht.")
+    text = (text or "").strip()[:8000]
+    if not text:
+        raise KalenderError("Bitte eine Zusammenfassung schreiben.")
+    erstes = not t.get("zusammenfassung")
+    c.execute("UPDATE termine SET zusammenfassung=?, zusammenfassung_von=?, zusammenfassung_am=? WHERE id=?",
+              (text, wer, now(), tid))
+    firma.log(c, wer, "termin", "termin", tid, f"Zusammenfassung {'geschrieben' if erstes else 'geändert'}: "
+              f"{t['titel']}", commit=False)
+    c.commit()
+    for p in t["abwesend"]:
+        if p != wer:
+            aufgaben.melden(c, p, f"Zusammenfassung{'' if erstes else ' geändert'}: {t['titel']}",
+                            re.sub(r"\s+", " ", text)[:160], f"/kalender/{tid}#zusammenfassung", push=erstes)
+    return erstes
 
 
 def briefing(c, t):
@@ -933,28 +972,77 @@ def besetzt(c, personen, start, ende, termin=None):
     for p in personen:
         if c.execute("SELECT 1 FROM belegt WHERE person=? AND start < ? AND ende > ?", (p, ende, start)).fetchone() or \
                 c.execute("""SELECT 1 FROM termine t JOIN termin_teilnehmer tt ON tt.termin_id = t.id WHERE tt.person=?
-                             AND t.status != 'abgesagt' AND t.start < ? AND t.ende > ? AND t.id != ?""",
+                             AND tt.abwesend = 0 AND t.status != 'abgesagt' AND t.start < ? AND t.ende > ? AND t.id != ?""",
                           (p, ende, start, (termin or {}).get("id") or 0)).fetchone():
             out.append(p)
     return out
 
 
-def platz_finden(c, personen, wunsch, dauer_min, spielraum_min, termin=None):
-    """Die Zeit am selben Tag, die `wunsch` am nächsten liegt und in der alle können (erst später, dann früher, in
-    Viertelstunden). None, wenn es im Spielraum keine gibt."""
+def _kandidaten(wunsch, dauer_min, spielraum_min):
+    """Startzeiten am selben Tag, die nächste zuerst (erst später, dann früher, in Viertelstunden)."""
     dauer = timedelta(minutes=dauer_min)
     tag_ = wunsch.date()
     frueh = datetime.combine(tag_, datetime.strptime(FRUEHESTENS, "%H:%M").time())
     spaet = datetime.combine(tag_, datetime.strptime(SPAETESTENS, "%H:%M").time())
     grenze = datetime.now() + timedelta(minutes=15)
-    schritte = [0] + [v * k for k in range(15, spielraum_min + 1, 15) for v in (1, -1)]
-    for minuten in schritte:
+    for minuten in [0] + [v * k for k in range(15, spielraum_min + 1, 15) for v in (1, -1)]:
         slot = wunsch + timedelta(minutes=minuten)
-        if slot.date() != tag_ or slot < frueh or slot + dauer > spaet or slot < grenze:
-            continue
-        if not besetzt(c, personen, _iso(slot), _iso(slot + dauer), termin):
-            return slot
-    return None
+        if slot.date() == tag_ and slot >= frueh and slot + dauer <= spaet and slot >= grenze:
+            yield slot
+
+
+def platz_finden(c, personen, wunsch, dauer_min, spielraum_min, termin=None):
+    """Die Zeit am selben Tag, die `wunsch` am nächsten liegt und in der alle können. None, wenn es im Spielraum
+    keine gibt."""
+    slot, fehlen = bester_platz(c, personen, wunsch, dauer_min, spielraum_min, termin)
+    return slot if slot and not fehlen else None
+
+
+def bester_platz(c, personen, wunsch, dauer_min, spielraum_min, termin=None):
+    """Zeit, in der möglichst viele können, bei Gleichstand die nächste zur Wunschzeit. Gibt (zeit, wer_fehlt) zurück;
+    (None, []) wenn im Spielraum niemand kann. Wer fehlt, hat an dem Tag im Spielraum gar keine Zeit."""
+    dauer = timedelta(minutes=dauer_min)
+    beste, beste_fehlen = None, None
+    for slot in _kandidaten(wunsch, dauer_min, spielraum_min):
+        fehlen = besetzt(c, personen, _iso(slot), _iso(slot + dauer), termin)
+        if not fehlen:
+            return slot, []
+        if beste is None or len(fehlen) < len(beste_fehlen):
+            beste, beste_fehlen = slot, fehlen
+    if beste is None or len(beste_fehlen) >= len(personen):
+        return None, []
+    return beste, beste_fehlen
+
+
+def abwesend_setzen(c, tid, fehlen):
+    """Wer am Termin nicht dabei ist (keine Zeit). Gibt (neu_abwesend, wieder_dabei) zurück."""
+    t = get(c, tid)
+    alt, neu = set(t["abwesend"]), set(fehlen) & set(t["personen"])
+    for x in t["teilnehmer"]:
+        if x["person"]:
+            c.execute("UPDATE termin_teilnehmer SET abwesend=? WHERE id=?", (1 if x["person"] in neu else 0, x["id"]))
+    c.commit()
+    if alt != neu:
+        sync(c, tid)
+    return sorted(neu - alt), sorted(alt - neu)
+
+
+def _abwesenheit_melden(c, t, neu_abwesend, wieder_dabei):
+    from . import aufgaben
+    from .aufgaben import tag
+    t = get(c, t["id"])
+    wann = f"{_gross(tag(t['start']))} um {t['start'][11:16]} Uhr"
+    for p in neu_abwesend:
+        aufgaben.melden(c, p, f"Ohne dich: {t['titel']}",
+                        f"{wann}: Du hast an dem Tag keine passende Zeit. Der Call findet ohne dich statt; die "
+                        "Zusammenfassung bekommst du danach hier.", f"/kalender/{t['id']}", push=True)
+    for p in wieder_dabei:
+        aufgaben.melden(c, p, f"Wieder dabei: {t['titel']}", f"{wann}: Jetzt passt es auch für dich.",
+                        f"/kalender/{t['id']}", push=True)
+    if neu_abwesend and t["verantwortlich"] not in neu_abwesend:
+        aufgaben.melden(c, t["verantwortlich"], f"Ohne {_namen(c, neu_abwesend)}: {t['titel']}",
+                        f"{wann}. {_namen(c, neu_abwesend)} hat an dem Tag keine Zeit. Nach dem Call bitte die "
+                        "Zusammenfassung am Termin schreiben.", f"/kalender/{t['id']}")
 
 
 def _gross(text):
@@ -986,42 +1074,42 @@ def serien_auffuellen(c, wochen=None):
             if c.execute("SELECT 1 FROM termine WHERE serie_id=? AND substr(start,1,10)=?",
                          (s["id"], tag_.isoformat())).fetchone():
                 continue
-            start, hinweis = wunsch, None
+            start, hinweis, fehlen = wunsch, None, []
             if s["flexibel"]:
                 wer_nicht = besetzt(c, s["teilnehmer"], _iso(wunsch), _iso(wunsch + timedelta(minutes=s["dauer_min"])))
                 if wer_nicht:
-                    platz = platz_finden(c, s["teilnehmer"], wunsch, s["dauer_min"], s["spielraum_min"])
-                    if platz:
-                        start = platz
-                        hinweis = (f"{_gross(tag(_iso(platz)))} um {platz:%H:%M} statt {s['uhrzeit']} Uhr, weil "
-                                   f"{_namen(c, wer_nicht)} um {s['uhrzeit']} keine Zeit "
-                                   f"{'hat' if len(wer_nicht) == 1 else 'haben'}.")
-                    else:
-                        hinweis = (f"Für {tag(_iso(wunsch))} findet sich keine Zeit, in der alle können "
-                                   f"({_namen(c, wer_nicht)} ist belegt). Der Termin steht zur gewohnten Zeit.")
+                    platz, fehlen = bester_platz(c, s["teilnehmer"], wunsch, s["dauer_min"], s["spielraum_min"])
+                    if platz is None:
+                        platz, fehlen = wunsch, []
+                    start = platz
+                    if platz != wunsch:
+                        grund = [p for p in wer_nicht if p not in fehlen]
+                        hinweis = (f"{_gross(tag(_iso(platz)))} um {platz:%H:%M} statt {s['uhrzeit']} Uhr"
+                                   + (f", weil {_namen(c, grund)} um {s['uhrzeit']} keine Zeit "
+                                      f"{'hat' if len(grund) == 1 else 'haben'}." if grund else "."))
             tid = anlegen(c, s["erstellt_von"] or s["verantwortlich"], s["titel"], _iso(start), dauer=s["dauer_min"],
                           verantwortlich=s["verantwortlich"], personen=s["teilnehmer"], meet=bool(s["meet"]),
                           serie_id=s["id"], wunsch_start=_iso(wunsch), melden=False)
-            if hinweis and start != wunsch:
+            if fehlen:
+                neu_ab, _ = abwesend_setzen(c, tid, fehlen)
+                _abwesenheit_melden(c, {"id": tid}, neu_ab, [])
+            if hinweis:
                 for p in s["teilnehmer"]:
-                    aufgaben.melden(c, p, f"Verschoben: {s['titel']}", hinweis, f"/kalender/{tid}", push=True)
-            elif hinweis:
-                aufgaben.melden(c, s["verantwortlich"], f"Keine gemeinsame Zeit: {s['titel']}", hinweis,
-                                f"/kalender/{tid}", push=True)
-                c.execute("UPDATE termine SET erinnert = erinnert || 'konflikt,' WHERE id=?", (tid,))
-                c.commit()
+                    if p not in fehlen:
+                        aufgaben.melden(c, p, f"Verschoben: {s['titel']}", hinweis, f"/kalender/{tid}", push=True)
             neu += 1
     return neu
 
 
 def serien_pruefen(c):
-    """Flexible Serien neu prüfen (neue Termine, Google frei/belegt): Hat jemand zur geplanten Zeit keine Zeit mehr,
-    rückt der Termin auf die nächste Zeit, in der alle können; ist die Wunschzeit wieder frei, kehrt er dorthin zurück.
-    Jede Verschiebung bekommen alle als Meldung. Kurz vor dem Termin wird nicht mehr verschoben."""
-    from . import aufgaben
+    """Flexible Serien neu prüfen (neue Termine, Google-Kalender): Hat jemand zur geplanten Zeit keine Zeit mehr,
+    rückt der Termin auf die nächste Zeit, in der alle können. Gibt es an dem Tag keine, findet er zur Zeit statt, in
+    der die meisten können; wer dann nicht kann, ist „nicht dabei“ und bekommt danach die Zusammenfassung. Ist die
+    Wunschzeit wieder frei, kehrt er zurück. Jede Änderung bekommen die Betroffenen als Meldung. Kurz vor dem Termin
+    wird nichts mehr geändert."""
     from .aufgaben import tag
     jetzt = datetime.now()
-    bewegt = 0
+    geaendert = 0
     for row in c.execute("""SELECT t.id, s.spielraum_min, s.uhrzeit FROM termine t JOIN serien s ON s.id = t.serie_id
                             WHERE s.aktiv=1 AND s.flexibel=1 AND t.status='geplant' AND t.start > ? AND t.start < ?
                             ORDER BY t.start""",
@@ -1029,29 +1117,34 @@ def serien_pruefen(c):
         t = get(c, row["id"])
         dauer = int((_dt(t["ende"]) - _dt(t["start"])).total_seconds() // 60)
         wunsch = _dt(t.get("wunsch_start") or f"{t['start'][:10]}T{row['uhrzeit']}")
-        wer_nicht = besetzt(c, t["personen"], t["start"], t["ende"], t)
-        if not wer_nicht and t["start"] == _iso(wunsch):
+        jetzt_fehlen = besetzt(c, t["personen"], t["start"], t["ende"], t)
+        if not jetzt_fehlen and t["start"] == _iso(wunsch) and not t["abwesend"]:
             continue
-        platz = platz_finden(c, t["personen"], wunsch, dauer, row["spielraum_min"], t)
+        platz, fehlen = bester_platz(c, t["personen"], wunsch, dauer, row["spielraum_min"], t)
         if platz is None:
-            if wer_nicht and "konflikt" not in (t["erinnert"] or ""):
-                aufgaben.melden(c, t["verantwortlich"], f"Keine gemeinsame Zeit: {t['titel']}",
-                                f"{t['zeit']}: {_namen(c, wer_nicht)} ist belegt, und im Spielraum findet sich keine "
-                                "Zeit, in der alle können. Bitte von Hand verschieben oder absagen.",
-                                f"/kalender/{t['id']}", push=True)
-                c.execute("UPDATE termine SET erinnert = erinnert || 'konflikt,' WHERE id=?", (t["id"],))
-                c.commit()
-            continue
-        if _iso(platz) == t["start"] or (not wer_nicht and platz != wunsch):
-            continue  # schon die beste Zeit, oder nur eine andere Ausweichzeit: nicht hin und her schieben
-        if platz == wunsch:
-            meldung = f"{_gross(tag(_iso(platz)))} wieder zur gewohnten Zeit: {platz:%H:%M} Uhr (statt {t['start'][11:16]})."
-        else:
-            meldung = (f"{_gross(tag(_iso(platz)))} um {platz:%H:%M} statt {t['start'][11:16]} Uhr, weil "
-                       f"{_namen(c, wer_nicht)} dann keine Zeit {'hat' if len(wer_nicht) == 1 else 'haben'}.")
-        aendern(c, None, t["id"], start=_iso(platz), meldung=meldung)
-        bewegt += 1
-    return bewegt
+            continue  # niemand kann: so lassen
+        besser = len(fehlen) < len(jetzt_fehlen) or (len(fehlen) == len(jetzt_fehlen) and platz == wunsch
+                                                       and t["start"] != _iso(wunsch))
+        ziel_fehlen = fehlen if besser else jetzt_fehlen
+        if besser and _iso(platz) != t["start"]:
+            grund = [p for p in jetzt_fehlen if p not in fehlen]
+            if platz == wunsch:
+                meldung = f"{_gross(tag(_iso(platz)))} wieder zur gewohnten Zeit: {platz:%H:%M} Uhr (statt {t['start'][11:16]})."
+            else:
+                meldung = (f"{_gross(tag(_iso(platz)))} um {platz:%H:%M} statt {t['start'][11:16]} Uhr"
+                           + (f", weil {_namen(c, grund)} dann keine Zeit {'hat' if len(grund) == 1 else 'haben'}."
+                              if grund else "."))
+            abwesend_setzen(c, t["id"], ziel_fehlen)  # vor dem Verschieben, damit die Meldung nur an die geht,
+            aendern(c, None, t["id"], start=_iso(platz), meldung=meldung, nur_dabei=True)  # die dabei sind
+            geaendert += 1
+            neu_ab = [p for p in ziel_fehlen if p not in t["abwesend"]]
+            wieder = [p for p in t["abwesend"] if p not in ziel_fehlen]
+            _abwesenheit_melden(c, t, neu_ab, wieder)
+        elif set(ziel_fehlen) != set(t["abwesend"]):
+            neu_ab, wieder = abwesend_setzen(c, t["id"], ziel_fehlen)
+            _abwesenheit_melden(c, t, neu_ab, wieder)
+            geaendert += 1
+    return geaendert
 
 # ---------------------------------------------------------------- Taktgeber (Hintergrund-Arbeiter, jede Minute)
 
@@ -1070,7 +1163,7 @@ def takt(c):
                          "AND instr(erinnert, ?) = 0", (_iso(jetzt), _iso(jetzt + vorlauf), key)).fetchall()
         for row in rows:
             t = get(c, row["id"])
-            for p in t["personen"]:
+            for p in t["dabei"]:
                 aufgaben.melden(c, p, f"{'Morgen' if key == '24h' else 'In einer Stunde'}: {t['titel']}",
                                 t["zeit"] + (f" · {t['meet_link']}" if t["meet_link"] else ""), f"/kalender/{t['id']}",
                                 push=key == "1h")
@@ -1082,8 +1175,10 @@ def takt(c):
                                                             _iso(jetzt - timedelta(days=2)))).fetchall()
     for row in rows:
         t = get(c, row["id"])
-        aufgaben.melden(c, t["verantwortlich"], f"Wie war der Termin? {t['titel']}", "Ergebnis eintragen",
-                        f"/kalender/{t['id']}")
+        aufgaben.melden(c, t["verantwortlich"], f"Wie war der Termin? {t['titel']}",
+                        f"Bitte die Zusammenfassung für {_namen(c, t['abwesend'])} schreiben, "
+                        f"{'er war' if len(t['abwesend']) == 1 else 'sie waren'} nicht dabei." if t["abwesend"]
+                        else "Ergebnis eintragen", f"/kalender/{t['id']}#zusammenfassung", push=bool(t["abwesend"]))
         c.execute("UPDATE termine SET erinnert = erinnert || 'ergebnis,' WHERE id=?", (t["id"],))
         c.commit()
         zaehler["ergebnis"] += 1

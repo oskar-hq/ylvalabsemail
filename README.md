@@ -225,8 +225,12 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
   „Automatisch verschieben“ legt das OS jeden Termin auf die Zeit am selben Tag, die der Wunschzeit am nächsten liegt
   und in der alle können (Google-Kalender und Termine im OS, höchstens so weit wie eingestellt). Hat später jemand
   keine Zeit mehr, rückt der Termin; ist die Wunschzeit wieder frei, kehrt er zurück. Alle bekommen bei jeder
-  Verschiebung eine Meldung (auch aufs Handy). Zwei Stunden vorher wird nicht mehr verschoben; findet sich keine
-  gemeinsame Zeit, bekommt die verantwortliche Person einen Hinweis.
+  Verschiebung eine Meldung (auch aufs Handy). Zwei Stunden vorher wird nicht mehr verschoben.
+- **Ohne dich, mit Zusammenfassung**: Hat jemand an einem Serientag im Spielraum gar keine Zeit, findet der Call zur
+  Zeit statt, in der die meisten können. Wer nicht kann, ist bei diesem Termin „nicht dabei“ (bekommt eine Meldung,
+  der Termin kommt nicht in seinen Kalender, keine Erinnerungen) und wird wieder dabei, sobald es doch passt. Nach dem
+  Call schreibt jemand, der dabei war, am Termin die **Zusammenfassung** (die verantwortliche Person wird daran
+  erinnert); wer nicht dabei war, bekommt sie als Meldung aufs Handy und kann sie am Termin nachlesen.
 
 ## Cockpit, Wochenziele und Wochengespräch (Stufe 4)
 

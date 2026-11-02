@@ -752,6 +752,9 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
   Sicherung; empfohlen KI, Google-Kalender, Meldungen aufs Handy) und verlinkt jeden Punkt auf seine Einstellung.
   `app/startklar.py`; Hinweis auf Mein Tag für alle mit „Einstellungen: Verwalten“. Meldungen aufs Handy jetzt unter
   Mein Profil für jede Person (bisher nur auf der Leads-Seite).
+  - 02.11.2026: „Nicht dabei“ je Termin (`termin_teilnehmer.abwesend`, `bester_platz`: Zeit, in der die meisten
+    können) und Zusammenfassung am Termin (`zusammenfassung_speichern`, Meldung mit Push an alle, die nicht dabei
+    waren). Abwesende bekommen keinen Google-Eintrag und keine Erinnerungen, ihr Tag ist durch den Call nicht belegt.
   - 02.11.2026: Alle Google-Kalender einer Person zählen als belegt (`kalender_laden`, `kalender_wahl_speichern`,
     `belegt_abgleichen` je gewähltem Kalender), Zielkalender für neue Termine wählbar (`ziel_kalender`, gespeichert je
     Teilnahme in `termin_teilnehmer.google_kalender_id`). Neues Google-Recht `calendar.calendarlist.readonly`; ohne
