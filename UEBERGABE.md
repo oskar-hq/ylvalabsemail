@@ -100,6 +100,11 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   „Assistent“ eine Frage stellen und prüfen, ob die Quellen stimmen. Für Angebote unter Einstellungen → Finanzen die
   Firmendaten eintragen (stehen auch im Angebots-PDF); die Freigabe-Stufe für Angebote steht auf C (Freigabe, dann
   Mail mit PDF), auf D wird nur das PDF vorbereitet und persönlich übergeben.
+- **Startklar (02.11.2026):** Einstellungen → Startklar zeigt, was für den echten Betrieb noch fehlt: Demo-Modus aus,
+  alle Personen mit Zugang, jeder Bereich mit verantwortlicher Person, Postfach, Adresse der App, Firmendaten und
+  IBAN für Rechnungen, eine Sicherung; empfohlen KI-Schlüssel, Google-Kalender und Meldungen aufs Handy (jetzt unter
+  „Mein Profil“). Nach dem Update: die Liste von oben nach unten abarbeiten, danach einmal den Systemcheck. Wer
+  Einstellungen verwaltet, sieht auf Mein Tag, wie viele Punkte noch offen sind.
 
 - Die automatischen Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.

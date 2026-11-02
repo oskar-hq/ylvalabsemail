@@ -747,6 +747,12 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
     (Team) und im Profil (je Person); ist eines aufgebraucht, fragt der Assistent nicht.
   - Abweichung: Prioritäten nicht automatisch jeden Morgen (nur auf Knopfdruck, Kosten nur beim Klick).
 
+- [x] **Startklar** (gebaut 02.11.2026, nach Stufe 10): Einstellungen → Startklar prüft, was für den echten Betrieb
+  fehlt (Personen mit Zugang, Bereiche mit Verantwortlichen, Postfach, Adresse der App, Rechnungsdaten mit IBAN,
+  Sicherung; empfohlen KI, Google-Kalender, Meldungen aufs Handy) und verlinkt jeden Punkt auf seine Einstellung.
+  `app/startklar.py`; Hinweis auf Mein Tag für alle mit „Einstellungen: Verwalten“. Meldungen aufs Handy jetzt unter
+  Mein Profil für jede Person (bisher nur auf der Leads-Seite).
+
 Die Reihenfolge 2 und 3 kann getauscht werden, je nachdem, was im Alltag zuerst fehlt.
 
 ---

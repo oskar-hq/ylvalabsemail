@@ -56,6 +56,15 @@ def _form_kontext():
 # ---------------------------------------------------------------- Mein Tag
 
 
+def _startklar_offen(c, key):
+    """Wer Einstellungen verwaltet, sieht auf „Mein Tag“, wie viele Start-Punkte noch fehlen."""
+    if not firma.darf(c, key, "einstellungen", firma.VERWALTEN):
+        return 0
+    from . import startklar
+    return startklar.zusammenfassung(startklar.punkte(c, url_for, demo=SETTINGS["DEMO_MODE"],
+                                                      host_backups=bool(SETTINGS["CONTROL_DIR"])))["pflicht"]
+
+
 @bp.get("/mein-tag")
 @login_required
 def mein_tag():
@@ -93,6 +102,7 @@ def mein_tag():
                            was_zuerst=assistent.reihenfolge(c, key, limit=5),
                            was_zuerst_ki=assistent.letzte_prioritaeten(c, key) if darf("assistent") else None,
                            was_zuerst_knopf=darf("assistent") and assistent.regeln(c)["prioritaeten_ki"],
+                           startklar_offen=_startklar_offen(c, key),
                            **_form_kontext(), demo=SETTINGS["DEMO_MODE"])
     aufgaben.erwaehnungen_gesehen(c, key)  # einmal gezeigt, danach nicht mehr „neu“
     return html

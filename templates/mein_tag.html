@@ -15,6 +15,7 @@
       {%- if offen %}{{ offen }} {{ 'Aufgabe' if offen == 1 else 'Aufgaben' }} für heute{% if t.ueberfaellig %}, {{ t.ueberfaellig|length }} davon überfällig{% endif %}.
       {%- elif not t.anfragen %}Heute ist nichts fällig. Plane die Woche oder hilf einem anderen Bereich.{% endif %}</p>
   </header>
+  {% if startklar_offen %}<p class="os-hinweis">Noch {{ startklar_offen }} Punkt{{ 'e' if startklar_offen != 1 }} bis zum Start. <a href="{{ url_for('settings.startklar_seite') }}">Startklar ansehen</a></p>{% endif %}
 
   {% set zl = zeit_laeuft() %}
   {% if zl %}<div class="os-zeit-chip"><span class="os-ico red">{{ i('kalender') }}</span>

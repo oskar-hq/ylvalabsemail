@@ -13,7 +13,7 @@
 <ul class="rep-list">
   {% for l in r.picked[:limit] %}
   <li><a href="{{ url_for('leads.detail', lead_id=l.id) }}">
-    <span class="rep-name">{{ l.name }} <span class="muted">· {{ l.category_label }}{% if l.city %} · {{ l.city }}{% endif %}</span></span>
+    <span class="rep-name">{{ l.name }} <span class="muted">{% set meta = [l.category_label, l.city]|select|join(' · ') %}{% if meta %}· {{ meta }}{% endif %}</span></span>
     <span class="rep-score mono">{{ l.score if l.score is not none else '–' }}</span>
     <span class="pill rep-{{ l.state }}">{{ l.state_label }}</span>
     {% if l.reason %}<span class="rep-why muted small">{{ l.reason }}</span>{% endif %}

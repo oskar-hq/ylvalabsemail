@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Startklar · Ylva Labs{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Einstellungen</span>
+    <h1 class="os-title-l">{% if summe.pflicht %}Noch {{ summe.pflicht }} Punkt{{ 'e' if summe.pflicht != 1 }} bis zum Start{% else %}Startklar{% endif %}</h1>
+    <p class="os-sub os-lead">{% if summe.pflicht %}Was fehlt, damit ihr mit dem OS arbeiten könnt. Jeder Punkt führt dorthin, wo du ihn erledigst.
+      {% elif summe.empfohlen %}Alles Nötige ist eingerichtet. {{ summe.empfohlen }} Empfehlung{{ 'en' if summe.empfohlen != 1 }} machen den Alltag leichter.
+      {% else %}Alles eingerichtet. Ab jetzt gilt: Was nicht im OS steht, ist nicht passiert.{% endif %}</p>
+  </header>
+
+  {% for gruppe, titel, sub in [('pflicht', 'Für den Start', 'Ohne diese Punkte läuft der Alltag nicht richtig.'), ('empfohlen', 'Empfohlen', 'Geht auch ohne, ist aber besser.')] %}
+  <section class="os-section">
+    <h2 class="os-headline">{{ titel }}</h2>
+    <p class="os-sub">{{ sub }}</p>
+    <ul class="os-list os-startklar">{% for p in punkte if p.wichtig == gruppe %}
+      <li><a class="os-row" href="{{ p.ziel }}">
+        <span class="os-ico {{ '' if p.ok else ('red' if gruppe == 'pflicht' else 'off') }}">{{ i('check') if p.ok else '!' }}</span>
+        <span class="os-txt"><b>{{ p.titel }}</b><span>{{ p.text }}</span></span>
+        <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
+    </ul>
+  </section>
+  {% endfor %}
+
+  <section class="os-section">
+    <h2 class="os-headline">Danach</h2>
+    <ul class="os-list">
+      <li><a class="os-row" href="{{ url_for('leads.system') }}"><span class="os-ico">{{ i('link') }}</span>
+        <span class="os-txt"><b>Verbindungen testen</b><span>Der Systemcheck prüft Postfach, KI, Karte und Push wirklich.</span></span>
+        <span class="os-chev">{{ i('chev') }}</span></a></li>
+      <li><a class="os-row" href="{{ url_for('aufgaben.mein_tag') }}"><span class="os-ico">{{ i('aufgabe') }}</span>
+        <span class="os-txt"><b>Mit „Mein Tag“ anfangen</b><span>Jede Person startet dort: Freigaben, Termine, fällige Aufgaben.</span></span>
+        <span class="os-chev">{{ i('chev') }}</span></a></li>
+    </ul>
+    <p class="os-hinweis">Erstkontakt per Mail bleibt gesperrt, bis § 7 UWG geklärt ist (Postfach → Versand). Nichts geht ohne Freigabe an Kunden.</p>
+  </section>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('settings.settings') }}" aria-label="Zu den Einstellungen">{{ i('back') }}</a>
+</div>
+{% endblock %}

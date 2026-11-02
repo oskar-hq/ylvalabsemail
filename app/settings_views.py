@@ -8,7 +8,7 @@ from datetime import datetime
 
 from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from . import agent, backups, config_store, firma, leaddb, updater
+from . import agent, backups, config_store, firma, leaddb, startklar, updater
 from .main import DB_PATH, SETTINGS, login_required
 
 bp = Blueprint("settings", __name__)
@@ -130,7 +130,21 @@ def settings():
         return redirect(back)
     return render_template("settings.html", account=g.account, menu=config_store.menu(data_dir),
                            admin=is_admin(g.account), admins_set=bool(SETTINGS["ADMIN_USERS"]),
-                           up=updater.state(SETTINGS["CONTROL_DIR"]), demo=SETTINGS["DEMO_MODE"])
+                           up=updater.state(SETTINGS["CONTROL_DIR"]), demo=SETTINGS["DEMO_MODE"],
+                           startklar=startklar.zusammenfassung(_startklar_punkte()))
+
+
+def _startklar_punkte():
+    from .leads_views import db
+    return startklar.punkte(db(), url_for, demo=SETTINGS["DEMO_MODE"], host_backups=bool(SETTINGS["CONTROL_DIR"]))
+
+
+@bp.get("/einstellungen/startklar")
+@login_required
+def startklar_seite():
+    punkte = _startklar_punkte()
+    return render_template("startklar.html", account=g.account, punkte=punkte,
+                           summe=startklar.zusammenfassung(punkte), demo=SETTINGS["DEMO_MODE"])
 
 
 def _group(gid):
