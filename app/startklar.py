@@ -101,7 +101,7 @@ def punkte(c, url_for, host_backups=False):
                       url_for("settings.group", gid="ki"), wichtig=EMPFOHLEN))
 
     if not kalender.google_cfg():
-        ok, text = False, "Ohne Google-Zugang laufen Termine nur im OS, ohne Meet-Link und Einladung an Gäste."
+        ok, text = False, "Ohne Google-Zugang laufen Termine nur im OS, ohne Meet-Link und Einladung an Gäste. Die JSON-Datei von Google hier hochladen."
     else:
         offen = [p["name"] for p in personen if not kalender.verbunden(c, p["key"])]
         ok = not offen

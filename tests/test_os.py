@@ -2388,3 +2388,50 @@ class StartklarTest(WebBasis):
         self.als("hamza")
         self.assertEqual(self.client.get("/einstellungen/startklar").status_code, 403)
         self.assertNotIn("bis zum Start", self.client.get("/mein-tag").get_data(as_text=True))
+
+
+class GoogleDateiTest(WebBasis):
+    WEB = {"web": {"client_id": "123-abc.apps.googleusercontent.com", "client_secret": "GOCSPX-geheim",
+                   "redirect_uris": ["https://anders.example/zurueck"]}}
+
+    def test_datei_pruefen(self):
+        import json
+        from app import google_kalender as gk
+        cid, secret, uris = gk.client_aus_datei(json.dumps(self.WEB).encode())
+        self.assertEqual((cid, secret), ("123-abc.apps.googleusercontent.com", "GOCSPX-geheim"))
+        for falsch in (b"", b"kein json", json.dumps({"type": "service_account"}).encode(),
+                       json.dumps({"installed": self.WEB["web"]}).encode(),
+                       json.dumps({"web": {"client_id": "x", "client_secret": ""}}).encode()):
+            with self.assertRaises(gk.GoogleError):
+                gk.client_aus_datei(falsch)
+
+    def test_hochladen(self):
+        import io
+        import json
+        from app import config_store, kalender
+        alt = {k: os.environ.get(k) for k in ("GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET")}
+
+        def zurueck():
+            config_store.save(main.SETTINGS["DATA_DIR"], {}, ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"])
+            for k, v in alt.items():
+                os.environ.pop(k, None) if v is None else os.environ.__setitem__(k, v)
+        self.addCleanup(zurueck)
+        r = self.post("/einstellungen/kalender/google-datei", {"datei": (io.BytesIO(json.dumps(self.WEB).encode()),
+                                                                        "client.json")},
+                      content_type="multipart/form-data", headers={"X-Requested-With": "fetch"})
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        self.assertIn("siehe Hinweis", r.get_json()["message"])  # Adresse fehlt im Google-Projekt
+        self.addCleanup(lambda: (self.c.execute("DELETE FROM kv WHERE key='google_rueckwege'"), self.c.commit()))
+        self.assertIn("Autorisierte Weiterleitungs-URIs", self.client.get("/einstellungen/kalender").get_data(as_text=True))
+        self.assertEqual(kalender.google_cfg(), ("123-abc.apps.googleusercontent.com", "GOCSPX-geheim"))
+        gespeichert = config_store.load(main.SETTINGS["DATA_DIR"])
+        self.assertEqual(gespeichert["GOOGLE_CLIENT_SECRET"], "GOCSPX-geheim")
+        self.assertNotIn("GOCSPX-geheim", (Path(main.SETTINGS["DATA_DIR"]) / config_store.STORE).read_text())
+        r = self.post("/einstellungen/kalender/google-datei", {"datei": (io.BytesIO(b'{"installed": {}}'), "x.json")},
+                      content_type="multipart/form-data", headers={"X-Requested-With": "fetch"})
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("Desktop-App", r.get_json()["error"])
+        self.assertIn("Datei hochladen", self.client.get("/einstellungen/kalender").get_data(as_text=True)
+                      .replace("Datei ersetzen", "Datei hochladen"))
+        self.als("hamza")
+        self.assertEqual(self.post("/einstellungen/kalender/google-datei", {}).status_code, 403)

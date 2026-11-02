@@ -105,6 +105,10 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   IBAN für Rechnungen, eine Sicherung; empfohlen KI-Schlüssel, Google-Kalender und Meldungen aufs Handy (jetzt unter
   „Mein Profil“). Nach dem Update: die Liste von oben nach unten abarbeiten, danach einmal den Systemcheck. Wer
   Einstellungen verwaltet, sieht auf Mein Tag, wie viele Punkte noch offen sind.
+- **Google-Datei hochladen (02.11.2026):** Unter Einstellungen → Kalender lässt sich die JSON-Datei des
+  OAuth-Clients (Typ „Webanwendung“) direkt hochladen; Client-ID und Schlüssel werden übernommen (Schlüssel
+  verschlüsselt), sofort wirksam. Fehlt in der Datei die Rücksprung-Adresse der App, steht dort ein Hinweis. Die Datei
+  danach vom eigenen Rechner löschen.
 - **Mail frei, Demo weg (02.11.2026):** § 7 UWG ist geklärt, der Erstkontakt per Mail ist Standard an. Nach dem
   Update: Steht in der `.env` noch `OUTREACH_EMAIL=false`, unter Einstellungen → Postfach und Versand → Versand
   „Erstkontakt per Mail erlauben“ einschalten (Startklar zeigt den Punkt rot). Der Demo-Modus ist entfernt; eine

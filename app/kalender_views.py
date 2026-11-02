@@ -314,10 +314,37 @@ def abo(token):
 def einstellungen():
     c = db()
     konten = {r["person"]: dict(r) for r in c.execute("SELECT person, status, abgeglichen_am FROM kalender_konten")}
+    rueckwege = leaddb.kv_get(c, "google_rueckwege")
     return render_template("kalender_einstellungen.html", account=g.account, google_da=bool(kalender.google_cfg()),
+                           rueckweg_fehlt=rueckwege is not None and _rueckweg() not in rueckwege,
                            rueckweg=_rueckweg(), regeln=kalender.regeln(c), regel_labels=kalender.REGELN,
                            wochentage=kalender.WOCHENTAGE, serien=kalender.serien(c), personen=firma.aktive_personen(c),
                            konten=konten, verwalten=darf("kalender", firma.VERWALTEN))
+
+
+@bp.post("/einstellungen/kalender/google-datei")
+@login_required
+def google_datei():
+    """Google-Zugang aus der heruntergeladenen JSON-Datei eintragen (statt Client-ID und Schlüssel abzutippen)."""
+    import os
+    from . import config_store
+    from .settings_views import is_admin
+    _verwalten()
+    ziel = url_for("kalender.einstellungen")
+    if not is_admin(g.account):
+        return _fertig("Den Google-Zugang ändert, wer „Einstellungen: Verwalten“ hat.", ziel, ok=False)
+    datei = request.files.get("datei")
+    try:
+        cid, secret, uris = google_kalender.client_aus_datei(datei.read(70 * 1024) if datei else b"")
+    except google_kalender.GoogleError as exc:
+        return _fertig(str(exc), ziel, ok=False)
+    config_store.save(SETTINGS["DATA_DIR"], {"GOOGLE_CLIENT_ID": cid, "GOOGLE_CLIENT_SECRET": secret})
+    os.environ.update(GOOGLE_CLIENT_ID=cid, GOOGLE_CLIENT_SECRET=secret)  # gilt sofort, ohne Neustart
+    firma.log(db(), me(), "einstellung", "system", None, "Google-Zugang aus der JSON-Datei eingetragen.",
+              {"geaendert": ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"]})
+    leaddb.kv_set(db(), "google_rueckwege", uris)  # Hinweis auf der Seite, falls unsere Adresse fehlt
+    return _fertig("Google-Zugang eingetragen." if _rueckweg() in uris
+                   else "Eingetragen, siehe Hinweis.", ziel)
 
 
 @bp.post("/einstellungen/kalender/regeln")

@@ -59,6 +59,35 @@ def _http(method, url, form=None, body=None, token=None):
         raise GoogleError(f"Google nicht erreichbar: {exc}") from exc
 
 
+def client_aus_datei(raw):
+    """Client-ID und Clientschlüssel aus der JSON-Datei, die die Google Cloud Console beim OAuth-Client zum
+    Herunterladen anbietet. Nur der Typ „Webanwendung“ passt. Gibt (client_id, secret, rücksprung_adressen) zurück."""
+    if not raw:
+        raise GoogleError("Bitte die JSON-Datei aus der Google Cloud Console auswählen.")
+    if len(raw) > 64 * 1024:
+        raise GoogleError("Die Datei ist zu groß für einen OAuth-Client von Google.")
+    try:
+        data = json.loads(raw.decode("utf-8-sig"))
+    except (UnicodeDecodeError, ValueError):
+        raise GoogleError("Das ist keine JSON-Datei von Google.") from None
+    if not isinstance(data, dict):
+        raise GoogleError("Das ist keine JSON-Datei für einen OAuth-Client von Google.")
+    if data.get("type") == "service_account":
+        raise GoogleError("Das ist ein Dienstkonto. Gebraucht wird ein OAuth-Client vom Typ „Webanwendung“ "
+                          "(Google Cloud Console → APIs und Dienste → Anmeldedaten).")
+    if "installed" in data:
+        raise GoogleError("Das ist ein OAuth-Client für eine Desktop-App. Bitte einen OAuth-Client vom Typ "
+                          "„Webanwendung“ anlegen und dessen Datei hochladen.")
+    web = data.get("web")
+    if not isinstance(web, dict):
+        raise GoogleError("Das ist keine JSON-Datei für einen OAuth-Client vom Typ „Webanwendung“.")
+    cid, secret = str(web.get("client_id") or "").strip(), str(web.get("client_secret") or "").strip()
+    if not cid.endswith(".apps.googleusercontent.com") or not secret:
+        raise GoogleError("In der Datei fehlen Client-ID oder Clientschlüssel.")
+    uris = [str(u).strip() for u in web.get("redirect_uris") or [] if str(u).strip()]
+    return cid, secret, uris
+
+
 def neuer_state():
     return secrets.token_urlsafe(24)
 
