@@ -469,7 +469,8 @@ def absagen(c, wer, tid, grund=""):
             if token:
                 try:
                     google_kalender.event_loeschen(token, x["google_event_id"],
-                                                   einladen=x["person"] == t["verantwortlich"] and bool(t["gaeste"]))
+                                                   einladen=x["person"] == t["verantwortlich"] and bool(t["gaeste"]),
+                                                   kalender_id=x.get("google_kalender_id") or "primary")
                 except google_kalender.GoogleError as exc:
                     c.execute("UPDATE termine SET sync_fehler=? WHERE id=?", (str(exc)[:300], tid))
     c.execute("UPDATE termine SET status='abgesagt' WHERE id=?", (tid,))
@@ -523,11 +524,15 @@ def sync(c, tid, einladen=False):
         try:
             if x["google_event_id"]:
                 res = google_kalender.event_aendern(token, x["google_event_id"], daten, t["gaeste"] if haupt else (),
-                                                    zone, einladen=haupt and einladen)
+                                                    zone, einladen=haupt and einladen,
+                                                    kalender_id=x.get("google_kalender_id") or "primary")
             else:
+                ziel = ziel_kalender(c, x["person"])
                 res = google_kalender.event_anlegen(token, daten, t["gaeste"] if haupt else (), zone,
-                                                    meet=haupt and bool(t["meet"]), einladen=haupt and einladen)
-                c.execute("UPDATE termin_teilnehmer SET google_event_id=? WHERE id=?", (res["id"], x["id"]))
+                                                    meet=haupt and bool(t["meet"]), einladen=haupt and einladen,
+                                                    kalender_id=ziel)
+                c.execute("UPDATE termin_teilnehmer SET google_event_id=?, google_kalender_id=? WHERE id=?",
+                          (res["id"], ziel, x["id"]))
             if haupt and res.get("meet_link"):
                 c.execute("UPDATE termine SET meet_link=? WHERE id=?", (res["meet_link"], tid))
             c.commit()
@@ -537,21 +542,100 @@ def sync(c, tid, einladen=False):
     c.commit()
 
 
+# Kalender, die standardmäßig nicht als „belegt“ zählen (Feiertage, Geburtstage, Kalenderwochen)
+NICHT_BELEGT = ("#holiday@group.v.calendar.google.com", "#contacts@group.v.calendar.google.com",
+                "#weeknum@group.v.calendar.google.com", "addressbook#")
+
+
+def kalender_von(c, person):
+    """Die Google-Kalender der Person mit ihrer Wahl: [{id, name, primary, schreiben, lesen}] oder None (noch nicht
+    geladen oder Recht fehlt, dann gilt nur der Hauptkalender)."""
+    row = c.execute("SELECT kalender FROM kalender_konten WHERE person=?", (person or "",)).fetchone()
+    try:
+        return json.loads(row["kalender"]) if row and row["kalender"] else None
+    except ValueError:
+        return None
+
+
+def ziel_kalender(c, person):
+    """In diesen Kalender trägt das OS neue Termine der Person ein (Standard: Hauptkalender)."""
+    row = c.execute("SELECT ziel_kalender FROM kalender_konten WHERE person=?", (person or "",)).fetchone()
+    return (row["ziel_kalender"] if row else None) or "primary"
+
+
+def kalender_laden(c, person):
+    """Liste der Google-Kalender holen und mit der bisherigen Wahl zusammenführen. Neue Kalender zählen als belegt,
+    außer Feiertage und Geburtstage. Gibt die Liste zurück oder None, wenn das Recht fehlt (dann neu verbinden)."""
+    from . import google_kalender
+    token = _token(c, person)
+    if not token:
+        return None
+    try:
+        neu = google_kalender.kalender_liste(token)
+    except google_kalender.GoogleError as exc:
+        if "(403)" in str(exc) or "(401)" in str(exc):
+            c.execute("UPDATE kalender_konten SET kalender=NULL WHERE person=?", (person,))
+            c.commit()
+        return None
+    alt = {k["id"]: k for k in kalender_von(c, person) or []}
+    for k in neu:
+        k["lesen"] = alt[k["id"]]["lesen"] if k["id"] in alt else not any(x in k["id"] for x in NICHT_BELEGT)
+    ziel = ziel_kalender(c, person)
+    if ziel != "primary" and not any(k["id"] == ziel and k["schreiben"] for k in neu):
+        ziel = None  # Kalender gibt es nicht mehr oder nur lesend: zurück zum Hauptkalender
+    c.execute("UPDATE kalender_konten SET kalender=?, ziel_kalender=? WHERE person=?",
+              (json.dumps(neu, ensure_ascii=False), None if ziel == "primary" else ziel, person))
+    c.commit()
+    return neu
+
+
+def kalender_wahl_speichern(c, person, ziel, lesen_ids):
+    """Wahl auf „Mein Kalender“: wohin neue Termine kommen, welche Kalender als belegt zählen."""
+    from . import firma
+    liste = kalender_von(c, person)
+    if liste is None:
+        raise KalenderError("Erst die Liste deiner Kalender laden (neu verbinden).")
+    ids = {k["id"] for k in liste}
+    if ziel != "primary" and not any(k["id"] == ziel and k["schreiben"] for k in liste):
+        raise KalenderError("In diesen Kalender darf das OS nicht schreiben. Bitte einen eigenen Kalender wählen.")
+    lesen_ids = set(lesen_ids) & ids
+    haupt = next((k["id"] for k in liste if k["primary"]), None)
+    for k in liste:
+        k["lesen"] = k["id"] in lesen_ids
+    if haupt == ziel:
+        ziel = "primary"
+    c.execute("UPDATE kalender_konten SET kalender=?, ziel_kalender=? WHERE person=?",
+              (json.dumps(liste, ensure_ascii=False), None if ziel == "primary" else ziel, person))
+    name = next((k["name"] for k in liste if k["id"] == ziel or (ziel == "primary" and k["primary"])), "Hauptkalender")
+    firma.log(c, person, "kalender", "person", person, f"Kalender-Wahl gespeichert: Termine in „{name}“, "
+              f"{len(lesen_ids)} Kalender zählen als belegt.")
+    return liste
+
+
 def belegt_abgleichen(c, person, tage=21):
-    """Belegte Zeiten der Person aus ihrem Google-Kalender für die nächsten Wochen holen (nur Zeiten, keine Titel).
-    Termine, die das OS selbst eingetragen hat, zählen nicht doppelt: die stehen schon in `termine`."""
+    """Belegte Zeiten der Person aus allen gewählten Google-Kalendern holen (Schule, Sport, Arbeit …; nur Zeiten,
+    keine Titel). Termine, die das OS selbst eingetragen hat, zählen nicht doppelt: die stehen schon in `termine`."""
     from . import google_kalender
     token = _token(c, person)
     if not token:
         return False
     zone = regeln(c)["zeitzone"]
     von = datetime.now().replace(minute=0, second=0, microsecond=0)
-    try:
-        busy = google_kalender.belegte_termine(token, _utc(von, zone), _utc(von + timedelta(days=tage), zone))
-    except google_kalender.GoogleError as exc:
-        c.execute("UPDATE kalender_konten SET status='fehler', fehler=? WHERE person=?", (str(exc)[:300], person))
-        c.commit()
-        return False
+    liste = kalender_von(c, person)
+    if liste is None:
+        liste = kalender_laden(c, person)
+    ids = [k["id"] for k in liste if k.get("lesen")] if liste is not None else ["primary"]
+    busy, fehler = [], []
+    for kid in ids:
+        try:
+            busy += google_kalender.belegte_termine(token, _utc(von, zone), _utc(von + timedelta(days=tage), zone),
+                                                    kalender_id=kid)
+        except google_kalender.GoogleError as exc:
+            if kid == "primary" or any(k["id"] == kid and k["primary"] for k in liste or []):
+                c.execute("UPDATE kalender_konten SET status='fehler', fehler=? WHERE person=?", (str(exc)[:300], person))
+                c.commit()
+                return False
+            fehler.append(next((k["name"] for k in liste if k["id"] == kid), kid))
     eigene = {r[0] for r in c.execute("SELECT google_event_id FROM termin_teilnehmer WHERE person=? AND "
                                       "google_event_id IS NOT NULL", (person,))}
     c.execute("DELETE FROM belegt WHERE person=?", (person,))
@@ -561,7 +645,9 @@ def belegt_abgleichen(c, person, tage=21):
         start = f"{s}T00:00" if len(s) == 10 else _iso(_lokal(s, zone))  # ganztägig: Datum ohne Uhrzeit
         ende = f"{e}T00:00" if len(e) == 10 else _iso(_lokal(e, zone))
         c.execute("INSERT INTO belegt (person, start, ende) VALUES (?,?,?)", (person, start, ende))
-    c.execute("UPDATE kalender_konten SET status='ok', fehler=NULL, abgeglichen_am=? WHERE person=?", (now(), person))
+    hinweis = f"Nicht lesbar: {', '.join(fehler)}"[:300] if fehler else None
+    c.execute("UPDATE kalender_konten SET status='ok', fehler=?, abgeglichen_am=? WHERE person=?",
+              (hinweis, now(), person))
     c.commit()
     return True
 

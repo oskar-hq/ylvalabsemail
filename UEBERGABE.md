@@ -105,6 +105,12 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   IBAN für Rechnungen, eine Sicherung; empfohlen KI-Schlüssel, Google-Kalender und Meldungen aufs Handy (jetzt unter
   „Mein Profil“). Nach dem Update: die Liste von oben nach unten abarbeiten, danach einmal den Systemcheck. Wer
   Einstellungen verwaltet, sieht auf Mein Tag, wie viele Punkte noch offen sind.
+- **Alle Google-Kalender (02.11.2026):** Das OS liest jetzt alle Kalender einer Person (z. B. Schule, Sport, Arbeit)
+  als „keine Zeit“, Feiertage und Geburtstage standardmäßig nicht. Unter **Mein Kalender** wählt jede Person, welche
+  Kalender zählen und in welchen das OS neue Termine einträgt. Nach dem Update: **jede Person verbindet Google einmal
+  neu** (Mein Kalender → Neu verbinden), weil das Recht „Kalenderliste lesen“ dazukommt. Bis dahin zählt nur der
+  Hauptkalender. Ist der OAuth-Zustimmungsbildschirm in der Google Cloud Console auf bestimmte Rechte beschränkt,
+  dort `calendar.calendarlist.readonly` ergänzen.
 - **Serien mit Wunschzeit (02.11.2026):** Einstellungen → Kalender → Neue Serie: Rhythmus (täglich bis monatlich),
   Wunschzeit und „Automatisch verschieben, wenn jemand keine Zeit hat“. Der Abgleich mit Google liest jetzt die
   Termine des Hauptkalenders statt nur frei/belegt (eigene OS-Termine zählen nicht doppelt, als „frei“ markierte und

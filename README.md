@@ -216,6 +216,10 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
   von dort muss im Google-Projekt unter „Autorisierte Weiterleitungs-URIs“ stehen. Danach verbindet jede Person unter „Mein Kalender“ ihr eigenes Konto. Google zeigt dabei
   einmal „App nicht überprüft“ (über „Erweitert“ weiter).
 
+- **Alle eigenen Kalender zählen**: Unter „Mein Kalender“ sieht jede Person ihre Google-Kalender (Schule, Sport,
+  Arbeit …) und schaltet je Kalender, ob er als „keine Zeit“ zählt (Feiertage und Geburtstage standardmäßig nicht).
+  Ein Auswahlmenü legt fest, in welchen eigenen Kalender das OS neue Termine einträgt; Ändern und Absagen gehen
+  immer in den Kalender, in dem der Termin steht. Gelesen werden nur Zeiten, keine Titel.
 - **Serientermine mit Wunschzeit** (Einstellungen → Kalender → Neue Serie), z. B. ein Weekly Check-in am Sonntag:
   täglich, werktags, wöchentlich, alle zwei Wochen oder monatlich (gleicher Wochentag, z. B. erster Sonntag). Mit
   „Automatisch verschieben“ legt das OS jeden Termin auf die Zeit am selben Tag, die der Wunschzeit am nächsten liegt

@@ -178,6 +178,10 @@ MIGRATIONS = [
     "ALTER TABLE serien ADD COLUMN spielraum_min INTEGER NOT NULL DEFAULT 120",
     "ALTER TABLE serien ADD COLUMN start_datum TEXT",
     "ALTER TABLE termine ADD COLUMN wunsch_start TEXT",
+    # Alle Google-Kalender einer Person lesen (Schule, Sport, Arbeit …), Termine in einen gewählten eintragen
+    "ALTER TABLE kalender_konten ADD COLUMN kalender TEXT",
+    "ALTER TABLE kalender_konten ADD COLUMN ziel_kalender TEXT",
+    "ALTER TABLE termin_teilnehmer ADD COLUMN google_kalender_id TEXT",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.
