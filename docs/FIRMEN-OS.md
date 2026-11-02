@@ -752,6 +752,8 @@ Gebaut wird in kleinen Stufen, jede für sich nutzbar. Jede Stufe endet damit, d
   Sicherung; empfohlen KI, Google-Kalender, Meldungen aufs Handy) und verlinkt jeden Punkt auf seine Einstellung.
   `app/startklar.py`; Hinweis auf Mein Tag für alle mit „Einstellungen: Verwalten“. Meldungen aufs Handy jetzt unter
   Mein Profil für jede Person (bisher nur auf der Leads-Seite).
+  - 02.11.2026: Google-Zugang per Upload der JSON-Datei (Einstellungen → Kalender, `google_kalender.client_aus_datei`;
+    nur Typ „Webanwendung“, Dienstkonto und Desktop-Client werden mit Erklärung abgelehnt).
   - 02.11.2026: § 7 UWG geklärt, Erstkontakt per Mail Standard an (Punkt in Startklar). Demo-Modus ganz entfernt
     (Login, Beispieldaten-Knopf, „kein Versand“-Zweige); Beispieldaten nur noch für Tests und `tests/vorschau.py`.
 

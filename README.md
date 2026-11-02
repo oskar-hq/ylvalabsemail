@@ -211,8 +211,9 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
   Meet-Link und verschickt die Einladung, aber erst nach ihrer Freigabe.
 - **Erinnerungen** 24 h und 1 h vorher, danach „Wie war der Termin?“ mit Ergebnis, Preisgespräch und Folgeaufgabe.
   Bei Leads ein **Briefing** aus der Akte. **Serientermine** wie das Wochengespräch.
-- **Einrichten**: Einstellungen → Google Kalender: Client-ID und Clientschlüssel aus dem Google-Projekt
-  „Firmen OS“ eintragen. Danach verbindet jede Person unter „Mein Kalender“ ihr eigenes Konto. Google zeigt dabei
+- **Einrichten**: Einstellungen → Kalender: die JSON-Datei des OAuth-Clients (Typ „Webanwendung“) aus dem
+  Google-Projekt „Firmen OS“ hochladen, oder Client-ID und Clientschlüssel von Hand eintragen. Die Rücksprung-Adresse
+  von dort muss im Google-Projekt unter „Autorisierte Weiterleitungs-URIs“ stehen. Danach verbindet jede Person unter „Mein Kalender“ ihr eigenes Konto. Google zeigt dabei
   einmal „App nicht überprüft“ (über „Erweitert“ weiter).
 
 ## Cockpit, Wochenziele und Wochengespräch (Stufe 4)

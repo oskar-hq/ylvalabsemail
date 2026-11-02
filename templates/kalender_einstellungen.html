@@ -15,11 +15,20 @@
     <dl class="os-kv" style="margin-top:16px">
       <dt>Client-ID und Schlüssel</dt><dd class="{{ 'late' if not google_da }}">{{ 'Eingetragen' if google_da else 'Fehlen noch' }}</dd>
     </dl>
+    {% if google_da and rueckweg_fehlt %}<p class="os-hinweis err" style="margin-top:16px">In der hochgeladenen Datei fehlt diese Rücksprung-Adresse. In der Google Cloud Console beim OAuth-Client unter „Autorisierte Weiterleitungs-URIs“ eintragen, sonst klappt „Mit Google verbinden“ nicht. Danach die Datei neu herunterladen und hier hochladen.</p>{% endif %}
     <p class="os-caption" style="margin-top:16px">Rücksprung-Adresse (so muss sie im Google-Projekt stehen):</p>
     <div class="os-copy" style="margin-top:8px"><input class="os-input" id="rueckweg" value="{{ rueckweg }}" readonly>
       <button type="button" class="os-btn small quiet" data-os-copy="rueckweg">Kopieren</button></div>
-    {% if verwalten %}<ul class="os-list" style="margin-top:16px"><li><a class="os-row" href="{{ url_for('settings.page', gid='google', pid='zugang') }}"><span class="os-ico">{{ i('schloss') }}</span>
-      <span class="os-txt"><b>{{ 'Zugang ändern' if google_da else 'Client-ID und Schlüssel eintragen' }}</b><span>Aus der Google Cloud Console, Projekt „Firmen OS“</span></span><span class="os-chev">{{ i('chev') }}</span></a></li></ul>{% endif %}
+    {% if verwalten %}
+    <form method="post" action="{{ url_for('kalender.google_datei') }}" enctype="multipart/form-data" data-os-fetch="reload" class="os-google-datei" style="margin-top:16px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <label class="os-field" style="margin:0"><span>JSON-Datei des OAuth-Clients (Typ „Webanwendung“) hochladen</span>
+        <input type="file" name="datei" accept=".json,application/json" required></label>
+      <button class="os-btn small" style="margin-top:12px">{{ 'Datei ersetzen' if google_da else 'Datei hochladen' }}</button>
+      <p class="os-caption" style="margin-top:8px">Liest nur Client-ID und Clientschlüssel; der Schlüssel wird verschlüsselt gespeichert. Die Datei danach vom eigenen Rechner löschen.</p>
+    </form>
+    <ul class="os-list" style="margin-top:8px"><li><a class="os-row" href="{{ url_for('settings.page', gid='google', pid='zugang') }}"><span class="os-ico">{{ i('schloss') }}</span>
+      <span class="os-txt"><b>Oder von Hand eintragen</b><span>Client-ID und Schlüssel aus der Google Cloud Console</span></span><span class="os-chev">{{ i('chev') }}</span></a></li></ul>{% endif %}
     <h3 class="os-headline" style="margin-top:32px;font-size:17px">Wer ist verbunden?</h3>
     <ul class="os-list">{% for p in personen %}{% set k = konten.get(p.key) %}<li class="os-row">{{ avatar(p.name, '' if k and k.status == 'ok' else 'off') }}
       <span class="os-txt"><b>{{ p.name }}</b><span>{% if not k %}Nicht verbunden{% elif k.status == 'ok' %}Verbunden{% if k.abgeglichen_am %} · abgeglichen {{ k.abgeglichen_am[11:16] }}{% endif %}{% else %}{{ 'Abgelaufen' if k.status == 'abgelaufen' else 'Fehler' }}{% endif %}</span></span></li>{% endfor %}</ul>
