@@ -21,13 +21,31 @@
   {% endif %}
   <dl class="os-kv">
     <dt>Verantwortlich</dt><dd>{{ t.verantwortlich_name }}</dd>
-    <dt>Dabei</dt><dd>{% for x in t.teilnehmer if x.person %}{{ x.person_name.split(' ')[0] }}{{ ', ' if not loop.last }}{% endfor %}</dd>
+    <dt>Dabei</dt><dd>{% for x in t.teilnehmer if x.person and not x.abwesend %}{{ x.person_name.split(' ')[0] }}{{ ', ' if not loop.last }}{% endfor %}</dd>
+    {% if t.abwesend %}<dt>Nicht dabei</dt><dd class="late">{% for x in t.teilnehmer if x.person and x.abwesend %}{{ x.person_name.split(' ')[0] }}{{ ', ' if not loop.last }}{% endfor %} (keine Zeit)</dd>{% endif %}
     {% if t.gaeste %}<dt>Gäste</dt><dd>{{ t.gaeste|join(', ') }}</dd>{% endif %}
     {% if t.lead_id %}<dt>Kunde</dt><dd><a href="{{ url_for('leads.detail', lead_id=t.lead_id) }}">{{ t.lead_name }}</a></dd>{% endif %}
     {% if t.ort %}<dt>Ort</dt><dd>{{ t.ort }}</dd>{% endif %}
     {% if t.ergebnis %}<dt>Ergebnis</dt><dd>{{ ergebnis_label[t.ergebnis] }}</dd>{% endif %}
   </dl>
   {% if t.beschreibung %}<p class="os-sub" style="margin-top:24px;white-space:pre-wrap">{{ t.beschreibung }}</p>{% endif %}
+  {% if me in t.abwesend and t.status == 'geplant' and not t.vorbei %}<p class="os-hinweis" style="margin-top:24px">Du hast an dem Tag keine passende Zeit. Der Call findet ohne dich statt; die Zusammenfassung erscheint danach hier, und du bekommst eine Meldung.</p>{% endif %}
+
+  {% set schreibt = me in t.dabei or (darf('kalender', 4) and me not in t.abwesend) %}
+  {% if t.zusammenfassung or (t.status == 'geplant' and (t.vorbei or t.laeuft) and schreibt) %}
+  <section class="os-section" id="zusammenfassung">
+    <h2 class="os-headline">Zusammenfassung</h2>
+    {% if t.zusammenfassung %}<p class="os-caption" style="margin:4px 0 12px">{{ namen.get(t.zusammenfassung_von, t.zusammenfassung_von) }}, {{ t.zusammenfassung_am|kurzdatum }}</p>
+    <div class="os-assistent-text" style="white-space:pre-wrap">{{ t.zusammenfassung }}</div>{% endif %}
+    {% if t.status == 'geplant' and schreibt %}
+    <form method="post" action="{{ url_for('kalender.zusammenfassung', tid=t.id) }}" data-os-fetch="reload" style="margin-top:16px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <label class="os-field"><span>{% if t.abwesend %}Für {% for x in t.teilnehmer if x.person and x.abwesend %}{{ x.person_name.split(' ')[0] }}{{ ' und ' if not loop.last }}{% endfor %}: Was wurde besprochen, entschieden, wer macht was?{% else %}Was wurde besprochen, entschieden, wer macht was?{% endif %}</span>
+        <textarea name="text" rows="{{ 8 if not t.zusammenfassung else 4 }}" maxlength="8000" required>{{ t.zusammenfassung or '' }}</textarea></label>
+      <button class="os-btn small {{ 'ink' if not t.zusammenfassung else 'quiet' }}">{{ 'Ändern' if t.zusammenfassung else ('Speichern und schicken' if t.abwesend else 'Speichern') }}</button>
+    </form>{% endif %}
+  </section>
+  {% endif %}
   {% if t.sync_fehler %}<p class="os-hinweis err">{{ t.sync_fehler }}</p>{% endif %}
 
   {% if freigabe and (freigabe.pruefer == me or darf('kalender', 4)) %}
@@ -44,7 +62,7 @@
   <p class="os-hinweis">Die Einladung wartet auf die Freigabe von {{ namen.get(freigabe.pruefer, freigabe.pruefer) }}.</p>
   {% endif %}
 
-  {% if t.vorbei and t.status == 'geplant' and (me in t.personen or darf('kalender', 4)) %}
+  {% if t.vorbei and t.status == 'geplant' and (me in t.dabei or (darf('kalender', 4) and me not in t.abwesend)) %}
   <section class="os-section" id="ergebnis">
     <h2 class="os-headline">{{ 'Ergebnis' if t.ergebnis else 'Wie war der Termin?' }}</h2>
     {% if t.ergebnis %}<p class="os-sub">{{ ergebnis_label[t.ergebnis] }}{% if t.ergebnis_notiz %}: {{ t.ergebnis_notiz }}{% endif %} · {{ namen.get(t.ergebnis_von, t.ergebnis_von) }}, {{ t.ergebnis_am|kurzdatum }}</p>{% endif %}

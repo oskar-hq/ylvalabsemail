@@ -2511,12 +2511,22 @@ class SerienFlexibelTest(unittest.TestCase):
         k.serien_pruefen(c)
         self.assertEqual(k.get(c, t["id"])["start"][11:], "19:00")
 
-        # Den ganzen Abend belegt: bleibt, Oskar bekommt einen Hinweis
+        # Finn hat den ganzen Tag keine Zeit: der Call bleibt um 19 Uhr, ohne Finn
         c.execute("INSERT INTO belegt (person, start, ende) VALUES ('finn', ?, ?)", (f"{so}T07:00", f"{so}T22:00"))
         c.commit()
         k.serien_pruefen(c)
-        self.assertEqual(k.get(c, t["id"])["start"][11:], "19:00")
-        self.assertIn("Keine gemeinsame Zeit", leaddb.notices(c, "f", 5, "oskar")[0][0]["title"])
+        t2 = k.get(c, t["id"])
+        self.assertEqual((t2["start"][11:], t2["abwesend"], t2["dabei"]), ("19:00", ["finn"], ["oskar", "hamza"]))
+        self.assertEqual(leaddb.notices(c, "f", 5, "finn")[0][0]["title"], "Ohne dich: Weekly Check-in")
+        self.assertIn("Ohne Finn", leaddb.notices(c, "f", 5, "oskar")[0][0]["title"])
+        self.assertEqual(k.serien_pruefen(c), 0)  # nichts Neues: keine weiteren Meldungen
+        # Finn wird wieder frei: wieder dabei, und zurück zur Wunschzeit, wenn Hamza dann kann
+        c.execute("DELETE FROM belegt")
+        c.commit()
+        k.serien_pruefen(c)
+        t3 = k.get(c, t["id"])
+        self.assertEqual((t3["abwesend"], t3["start"][11:]), ([], "19:00"))  # Hamza hat um 18 Uhr noch den Kundentermin
+        self.assertEqual(leaddb.notices(c, "f", 5, "finn")[0][0]["title"], "Wieder dabei: Weekly Check-in")
 
     def test_eigener_google_eintrag_zaehlt_nicht(self):
         k, c = self.k, self.c
@@ -2621,3 +2631,60 @@ class AlleKalenderWebTest(WebBasis):
         self.assertEqual(kalender.ziel_kalender(self.c, "oskar"), "sport@group.calendar.google.com")
         self.assertEqual(self.post("/kalender/mein/kalender/laden", {}, headers={"X-Requested-With": "fetch"})
                          .status_code, 200)
+
+
+class OhneDichTest(unittest.TestCase):
+    """Wer an einem Serientag keine Zeit hat, ist nicht dabei und bekommt danach die Zusammenfassung."""
+    setUp = KalenderTest.setUp
+    verbinden = KalenderTest.verbinden
+
+    def test_ganzer_tag_belegt_dann_zusammenfassung(self):
+        k, c = self.k, self.c
+        heute = date.today()
+        so = heute + timedelta(days=(6 - heute.weekday()) % 7 or 7)
+        c.execute("INSERT INTO belegt (person, start, ende) VALUES ('finn', ?, ?)", (f"{so}T06:00", f"{so}T23:00"))
+        c.commit()
+        self.verbinden("finn")
+        sid = k.serie_anlegen(c, "oskar", "Weekly Check-in", 6, "18:00", 60, "oskar", ["finn", "hamza"],
+                              flexibel=True, spielraum=120)
+        t = k.get(c, c.execute("SELECT id FROM termine WHERE serie_id=? AND substr(start,1,10)=?",
+                               (sid, so.isoformat())).fetchone()[0])
+        self.assertEqual((t["start"][11:], t["abwesend"]), ("18:00", ["finn"]))  # zur Wunschzeit, ohne Finn
+        self.assertFalse(any(x["google_event_id"] for x in t["teilnehmer"] if x["person"] == "finn"))  # nicht im Kalender
+        self.assertIn("Ohne dich", leaddb.notices(c, "f", 5, "finn")[0][0]["title"])
+        # Finns anderer Termin am selben Tag ist nicht durch den Call blockiert
+        self.assertEqual(k.besetzt(c, ["finn"], f"{so}T18:00", f"{so}T19:00", {"id": 0}), ["finn"])  # nur Google
+        c.execute("DELETE FROM belegt WHERE person='finn'")
+        c.commit()
+        self.assertEqual(k.besetzt(c, ["finn"], f"{so}T18:00", f"{so}T19:00", {"id": 0}), [])
+        # Erinnerungen nur an die, die dabei sind
+        self.assertNotIn("finn", t["dabei"])
+        # Nach dem Call: Oskar schreibt die Zusammenfassung, Finn bekommt sie
+        self.assertTrue(k.zusammenfassung_speichern(c, "oskar", t["id"], "Entschieden: Angebot für Hansen bis Freitag."))
+        n = leaddb.notices(c, "f", 5, "finn")[0][0]
+        self.assertEqual(n["title"], "Zusammenfassung: Weekly Check-in")
+        self.assertIn("Angebot für Hansen", n["body"])
+        self.assertFalse(k.zusammenfassung_speichern(c, "oskar", t["id"], "Ergänzt."))
+        self.assertEqual(leaddb.notices(c, "f", 5, "finn")[0][0]["title"], "Zusammenfassung geändert: Weekly Check-in")
+        with self.assertRaises(k.KalenderError):
+            k.zusammenfassung_speichern(c, "oskar", t["id"], "  ")
+
+
+class ZusammenfassungWebTest(WebBasis):
+    def test_seite_und_rechte(self):
+        from app import kalender
+        gestern = (date.today() - timedelta(days=1)).isoformat() + "T10:00"
+        tid = kalender.anlegen(self.c, "oskar", "Weekly Check-in", gestern, dauer=60, personen=["finn", "hamza"])
+        self.addCleanup(lambda: (self.c.execute("DELETE FROM termine WHERE id=?", (tid,)),
+                                 self.c.execute("DELETE FROM termin_teilnehmer WHERE termin_id=?", (tid,)), self.c.commit()))
+        kalender.abwesend_setzen(self.c, tid, ["finn", "hamza"])
+        html = self.client.get(f"/kalender/{tid}").get_data(as_text=True)
+        self.assertIn("Nicht dabei", html)
+        self.assertIn("Speichern und schicken", html)
+        r = self.post(f"/kalender/{tid}/zusammenfassung", {"text": "Alles besprochen."},
+                      headers={"X-Requested-With": "fetch"})
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        self.als("hamza")
+        html = self.client.get(f"/kalender/{tid}").get_data(as_text=True)
+        self.assertIn("Alles besprochen.", html)
+        self.assertEqual(self.post(f"/kalender/{tid}/zusammenfassung", {"text": "x"}).status_code, 403)  # war nicht dabei

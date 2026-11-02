@@ -105,6 +105,9 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   IBAN für Rechnungen, eine Sicherung; empfohlen KI-Schlüssel, Google-Kalender und Meldungen aufs Handy (jetzt unter
   „Mein Profil“). Nach dem Update: die Liste von oben nach unten abarbeiten, danach einmal den Systemcheck. Wer
   Einstellungen verwaltet, sieht auf Mein Tag, wie viele Punkte noch offen sind.
+- **Ohne dich, mit Zusammenfassung (02.11.2026):** Hat jemand an einem Tag einer flexiblen Serie gar keine Zeit,
+  findet der Call ohne ihn statt; er bekommt danach die Zusammenfassung, die jemand am Termin schreibt (Abschnitt
+  „Zusammenfassung“). Funktioniert für jeden Termin, nicht nur Serien. Nach dem Update: nichts zu tun.
 - **Alle Google-Kalender (02.11.2026):** Das OS liest jetzt alle Kalender einer Person (z. B. Schule, Sport, Arbeit)
   als „keine Zeit“, Feiertage und Geburtstage standardmäßig nicht. Unter **Mein Kalender** wählt jede Person, welche
   Kalender zählen und in welchen das OS neue Termine einträgt. Nach dem Update: **jede Person verbindet Google einmal

@@ -216,6 +216,20 @@ def ergebnis(tid):
     return _fertig("Ergebnis gespeichert.", url_for("kalender.detail", tid=tid))
 
 
+@bp.post("/kalender/<int:tid>/zusammenfassung")
+@login_required
+def zusammenfassung(tid):
+    t = _termin_or_404(tid)
+    if me() not in t["dabei"] and (me() in t["abwesend"] or not darf("kalender", firma.VERWALTEN)):
+        abort(403, "Die Zusammenfassung schreibt, wer dabei war.")
+    try:
+        kalender.zusammenfassung_speichern(db(), me(), tid, request.form.get("text", ""))
+    except kalender.KalenderError as exc:
+        return _fertig(str(exc), url_for("kalender.detail", tid=tid), ok=False)
+    return _fertig("Gespeichert." + (f" {kalender._namen(db(), t['abwesend'])} bekommt sie." if t["abwesend"] else ""),
+                   url_for("kalender.detail", tid=tid) + "#zusammenfassung")
+
+
 @bp.post("/kalender/<int:tid>/briefing")
 @login_required
 def briefing(tid):
