@@ -43,7 +43,7 @@
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <label class="os-field"><span>Name</span><input name="name" value="{{ a.name }}" maxlength="40" required {{ 'disabled' if not verwalten }}></label>
       <label class="os-field"><span>Wofür</span><input name="beschreibung" value="{{ a.beschreibung or '' }}" maxlength="300" {{ 'disabled' if not verwalten }}></label>
-      <label class="os-field"><span>Bereich (dort landen Freigaben ohne Lead oder Projekt)</span><select name="bereich" {{ 'disabled' if not verwalten }}><option value="">–</option>
+      <label class="os-field"><span>Bereich (dort landen Freigaben ohne Lead oder Projekt)</span><select name="bereich" {{ 'disabled' if not verwalten }}><option value="">Alle Bereiche</option>
         {% for b in bereiche %}<option value="{{ b.key }}" {{ 'selected' if b.key == a.bereich }}>{{ b.voll }}</option>{% endfor %}</select></label>
       <table class="os-matrix"><tbody>
         {% for k, label in module %}<tr><td>{{ label }}</td><td><select class="os-input" name="r_{{ k }}" aria-label="{{ label }}" {{ 'disabled' if not verwalten }}>
@@ -55,6 +55,9 @@
       </div>
       {% if verwalten %}<button class="os-btn small ink">Speichern</button>{% endif %}
     </form>
+    {% if verwalten %}<form method="post" action="{{ url_for('agenten.alles', key=a.key) }}" data-os-fetch="reload" style="margin-top:12px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <button class="os-btn small quiet">Alles lesen und bearbeiten erlauben</button></form>{% endif %}
   </section>
 
   <section class="os-section">

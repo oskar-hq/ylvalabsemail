@@ -1380,13 +1380,13 @@ class FreigabenWebTest(WebBasis):
 class PostfachMock:
     """Akquise-Postfach zum Mitlesen: alle Mails landen in `self.mails`."""
 
-    def __init__(self, test):
+    def __init__(self, test, versand="agent"):
         from unittest import mock
         from app import agent
         self.mails = []
         smtp = mock.Mock(send_message=lambda m: self.mails.append(m))
         settings = dict(agent.CFG["settings"], OUTREACH_USER="kontakt@ylvalabs.de", OUTREACH_PASSWORD="x",
-                        IMAP_HOST="", BASE_URL="https://os.example.de")
+                        IMAP_HOST="", BASE_URL="https://os.example.de", MAIL_VERSAND=versand)
         p = mock.patch.dict(agent.CFG, {"settings": settings, "smtp_connect": lambda u, pw: smtp})
         p.start()
         test.addCleanup(p.stop)
@@ -3003,8 +3003,10 @@ class AgentenTest(unittest.TestCase):
         self.assertIn("finn", [f["pruefer"] for f in freigaben.offen(c, "finn") if f["art"] == "entscheidung"])
 
     def test_ausfuehrung_nur_mit_freigegebenem_inhalt(self):
+        """Einstellung „Das OS verschickt“ (MAIL_VERSAND=os): das OS schickt genau die freigegebene Fassung."""
         from app import agenten
         c = self.c
+        self.postfach = PostfachMock(self, versand="os")
         lid = lead_anlegen(c, "Cutter Kiel", stage="antwort", owner="oskar", email="info@cutter.de", replied_at=HEUTE)
         eid = agenten.entwurf_anlegen(c, "agent:outreach", "mail", "Danke für die Antwort!", lead_id=lid, betreff="Re")
         fid = agenten.anfragen(c, "outreach", "mail", "Antwort an Cutter Kiel", "Kurze Antwort.", entwurf_id=eid)["freigabe_ids"][0]
@@ -3050,6 +3052,7 @@ class AgentenTest(unittest.TestCase):
         geht trotzdem über das Postfach von Ylva Labs raus (Stufe 11 + 12)."""
         from app import agenten, arbeitsbereiche
         c = self.c
+        self.postfach = PostfachMock(self, versand="os")
         kunde = kunde_anlegen(c, "Kunde Agent")
         lid = lead_anlegen(c, "Studio Ylva", stage="antwort", owner="oskar", email="hallo@studio.de", replied_at=HEUTE)
         eid = agenten.entwurf_anlegen(c, "agent:outreach", "mail", "Danke, passt!", lead_id=lid, betreff="Re: Termin")
@@ -3058,6 +3061,43 @@ class AgentenTest(unittest.TestCase):
             erg = agenten.entscheiden(c, "oskar", fid, True)
         self.assertEqual(erg["status"], "ausgefuehrt", erg)
         self.assertEqual(self.postfach.mails[-1]["From"].addresses[0].addr_spec, "kontakt@ylvalabs.de")
+
+    def test_alles_lesen_und_bearbeiten(self):
+        from app import agenten
+        c = self.c
+        key = agenten.anlegen(c, "oskar", "Claude", "Allgemein", None,
+                              rechte_neu={k: 4 for k in firma.MODUL_KEYS})  # mehr als erlaubt: wird gedeckelt
+        self.assertEqual(set(firma.rechte(c, f"agent:{key}").values()), {agenten.MAX_STUFE})
+        agenten.speichern(c, "oskar", key, {"name": "Claude"})
+        self.assertEqual(set(firma.rechte(c, f"agent:{key}").values()), {0})
+        agenten.alles_erlauben(c, "oskar", key)
+        self.assertEqual(set(firma.rechte(c, f"agent:{key}").values()), {agenten.MAX_STUFE})
+        self.assertFalse(firma.darf(c, f"agent:{key}", "entscheidungen", firma.FREIGEBEN))  # freigeben nie
+
+    def test_mail_verschickt_der_agent(self):
+        """Standard seit Stufe 14: Nach dem Ja verschickt der Agent; das OS prüft Sperrliste und Erstkontakt-Regel und
+        hält die Mail nach der Rückmeldung im Chat fest."""
+        from app import agenten, mailbox
+        c = self.c
+        lid = lead_anlegen(c, "Agentur Nord", stage="antwort", owner="oskar", email="hi@nord.de", replied_at=HEUTE)
+        eid = agenten.entwurf_anlegen(c, "agent:outreach", "mail", "Gern, Dienstag passt.", lead_id=lid, betreff="Re: Call")
+        fid = agenten.anfragen(c, "outreach", "mail", "Antwort Agentur Nord", "Kurze Zusage.", entwurf_id=eid)["freigabe_ids"][0]
+        erg = agenten.entscheiden(c, "oskar", fid, True)
+        self.assertEqual(erg["status"], "bitte_ausfuehren", erg)
+        self.assertEqual(self.postfach.mails, [])  # das OS schickt nichts
+        st = agenten.status_fuer_agent(c, "outreach")
+        eintrag = next(x for x in st["entschieden"] if x["freigabe_id"] == fid)
+        self.assertEqual(eintrag["ausfuehrung"], "bitte_ausfuehren")
+        self.assertIn("Dienstag", eintrag["freigegebene_fassung"]["text"])
+        agenten.erledigt_melden(c, "outreach", fid, "gesendet")
+        raus = [m for m in mailbox.thread(c, leaddb.get_lead(c, lid)) if m["direction"] == "out"]
+        self.assertTrue(any("Dienstag passt" in m["text"] for m in raus))
+        # Sperrliste gilt auch, wenn der Agent verschickt: dann gar nicht erst „bitte ausführen“
+        leaddb.kv_set(c, "blocklist", ["hi@nord.de"])
+        self.addCleanup(leaddb.kv_set, c, "blocklist", [])
+        e2 = agenten.entwurf_anlegen(c, "agent:outreach", "mail", "Noch eine", lead_id=lid, betreff="Re")
+        f2 = agenten.anfragen(c, "outreach", "mail", "Zweite Mail Nord", "Noch eine.", entwurf_id=e2)["freigabe_ids"][0]
+        self.assertEqual(agenten.entscheiden(c, "oskar", f2, True)["status"], "fehler")
 
     def test_status_kontaktloses_und_manuelles(self):
         from app import agenten, crm
@@ -3336,7 +3376,17 @@ class SlackUeberAgentsTest(unittest.TestCase):
         _, f = mcp_server.aufrufen(c, "agent:outreach", "nachricht_gesendet_melden", {"nachricht_id": mid})
         self.assertTrue(f)  # nicht zweimal
         with self.assertRaises(posteingang.PosteingangError):
-            posteingang.zum_senden(c, "oskar", lid, "mail", "Über Mail schickt das OS selbst")
+            posteingang.zum_senden(c, "oskar", lid, "telefon", "Telefon verschickt kein Agent")
+        # Mail tragen die Agents ebenfalls ein (der Server ruft keine Postfächer mehr ab); No-Reply zählt nie als wartend
+        d, f = mcp_server.aufrufen(c, "agent:outreach", "nachricht_eintragen",
+                                   {"lead_id": lid, "kanal": "mail", "text": "Können wir telefonieren?", "betreff": "Frage",
+                                    "adresse": "chef@slack-kunde.de", "extern_id": "<m1@x>",
+                                    "zeitpunkt": "2099-01-01T10:00"})
+        self.assertFalse(f, d)
+        self.assertIn(lid, [w["id"] for w in posteingang.wartend(c)])
+        werbung = lead_anlegen(c, "Hosting GmbH", stage="kunde")
+        posteingang.agent_nachricht(c, "agent:ops", werbung, "mail", "in", "Plan abgelaufen", adresse="no-reply@host.example")
+        self.assertNotIn(werbung, [w["id"] for w in posteingang.wartend(c)])
 
 
 class AufgabenstapelWebTest(WebBasis):

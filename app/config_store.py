@@ -28,6 +28,12 @@ GROUPS = [
         ("IMAP_PORT", "IMAP-Port", "int", "993", ""),
         ("OUTREACH_USER", "Akquise-Postfach", "text", "", "z. B. kontakt@ylvalabs.de"),
         ("OUTREACH_PASSWORD", "Passwort des Akquise-Postfachs", "secret", "", ""),
+        ("POSTFACH_ABRUFEN", "Postfach vom Server abrufen", "bool", "false",
+         "Aus (Standard): Die Agents lesen eure Mails, Slack und GitHub selbst und tragen nur Freigaben, Aufgaben und "
+         "wichtige Gespräche ins OS ein. An: Der Server liest das Akquise-Postfach und weitere Postfächer selbst"),
+        ("MAIL_VERSAND", "Freigegebene Mails verschickt", "select:agent|os", "agent",
+         "agent (Standard): Der Agent schickt nach eurem Ja genau den freigegebenen Text aus seinem Postfach und "
+         "meldet es zurück. os: Das OS verschickt selbst über das Akquise-Postfach"),
         ("OUTREACH_EMAIL", "Erstkontakt per Mail erlauben", "bool", "true",
          "Freigegebene Erstkontakte gehen per Mail raus. Aus: nur Brief und Telefon"),
         ("SEND_DELAY", "Pause zwischen zwei Mails (Sekunden)", "float", "1", ""),
@@ -75,6 +81,7 @@ PAGES = {
     "postfach": [("ausgang", "Postausgang", ["SMTP_HOST", "SMTP_PORT", "SMTP_SECURITY"]),
                  ("eingang", "Posteingang", ["IMAP_HOST", "IMAP_PORT", "IMAP_SENT_FOLDER", "FEHLER_ORDNER"]),
                  ("zugang", "Akquise-Postfach", ["OUTREACH_USER", "OUTREACH_PASSWORD", "FROM_ADDRESS"]),
+                 ("agents", "Mails und Agents", ["POSTFACH_ABRUFEN", "MAIL_VERSAND"]),
                  ("versand", "Versand", ["OUTREACH_EMAIL", "LEADS_FOLLOWUP_DAYS", "SEND_DELAY", "MAX_RECIPIENTS"])],
     "absender": [("name", "Name und Unterschrift", ["ORG_NAME", "LEADS_SENDER_NAME", "DEFAULT_SENDER_NAME"]),
                  ("texte", "Fußzeile und Schlusssatz", ["DEFAULT_FOOTER", "DEFAULT_CLOSING"])],
@@ -86,7 +93,7 @@ PAGES = {
     "hinweise": [("hinweise", "Benachrichtigungen", ["BASE_URL", "INBOX_MINUTES"])],
 }
 # Fehlt einer dieser Werte, steht beim Bereich „Fehlt“
-NEEDED = {"SMTP_HOST", "OUTREACH_USER", "OUTREACH_PASSWORD", "IMAP_HOST"}
+NEEDED = {"SMTP_HOST", "OUTREACH_USER", "OUTREACH_PASSWORD"}  # IMAP nur, wenn der Server selbst abruft
 GROUP_HINTS = {"postfach": "Strato, Akquise-Postfach, Versand", "absender": "Firmenname, Unterschrift, Fußzeile",
                "ki": "Schlüssel, Modelle, Budget",
                "google": "Client-ID und Schlüssel für die Kalender",

@@ -159,7 +159,10 @@ def export_csv():
 def _chat_liste(c, wer):
     from . import posteingang
     person = me() if wer == "meine" else None
-    gespraeche = mailbox.conversations(c, person)
+    # Gespräche nur mit automatischen Absendern (No-Reply, Newsletter, Rechnungen) zählt conversations() nicht mit;
+    # ausgeblendete kommen erst mit einer neuen Nachricht zurück
+    gespraeche = [x for x in mailbox.conversations(c, person)
+                  if not (x.get("chat_aus") and x["chat_aus"] >= (x["last_at"] or ""))]
     wartend = {w["id"] for w in posteingang.wartend(c, person)}
     letzte_kanal = {r["lead_id"]: r["kanal"] for r in c.execute(
         "SELECT lead_id, kanal FROM messages m WHERE fehler=0 AND id = (SELECT MAX(id) FROM messages x WHERE "
@@ -198,7 +201,8 @@ def chat(lead_id=None):
                    "can_mail": agent.outreach_configured() and bool(lead.get("email")),
                    "subject": mailbox.reply_subject((last_in or {}).get("subject") or lead["subject"] or lead["name"]),
                    "wartet_seit": posteingang.wartet_seit(c, lead_id), "von_hand": posteingang.VON_HAND,
-                   "senders": team.members(c), "sender": _default_sender(lead)}
+                   "senders": team.members(c), "sender": _default_sender(lead),
+                   "mail_agent": agent.S("MAIL_VERSAND") != "os"}
         projekt = c.execute("SELECT verantwortlich FROM projekte WHERE lead_id=? AND status != 'beendet' ORDER BY id "
                             "DESC LIMIT 1", (lead_id,)).fetchone()
         kontext["wunsch_darf"] = bool(projekt) and (projekt["verantwortlich"] == me() or darf("kunden", 4))
@@ -209,14 +213,32 @@ def chat(lead_id=None):
 @bp.post("/chat/<int:lead_id>/senden")
 @login_required
 def chat_senden(lead_id):
-    """Antwort auf Slack, WhatsApp oder LinkedIn: wartet, bis ein Agent sie dort verschickt."""
+    """Antwort über Mail (wenn die Agents Mails verschicken), Slack, WhatsApp oder LinkedIn: wartet, bis ein Agent
+    sie verschickt."""
     from . import posteingang
     lead_or_404(lead_id)
     try:
-        posteingang.zum_senden(db(), me(), lead_id, request.form.get("kanal", ""), request.form.get("text", ""))
+        posteingang.zum_senden(db(), me(), lead_id, request.form.get("kanal", ""), request.form.get("text", ""),
+                               betreff=request.form.get("subject"))
     except posteingang.PosteingangError as exc:
         return jsonify(error=str(exc)), 400
     return jsonify(ok=True, message="Liegt beim Agent zum Verschicken. Im Verlauf steht, sobald es raus ist.")
+
+
+@bp.post("/chat/<int:lead_id>/ausblenden")
+@login_required
+def chat_ausblenden(lead_id):
+    """Gespräch aus dem Chat nehmen (z. B. Werbung, die früher vom Server abgerufen wurde). Schreibt der Kontakt
+    wieder, ist es zurück."""
+    lead = lead_or_404(lead_id)
+    c = db()
+    c.execute("UPDATE leads SET chat_aus=? WHERE id=?", (leaddb.now(), lead_id))
+    c.execute("UPDATE messages SET read=1 WHERE lead_id=?", (lead_id,))
+    c.commit()
+    leaddb.update_lead(c, lead_id, unread=0)
+    from . import firma
+    firma.log(c, me() or "System", "lead", "lead", lead_id, f"Gespräch mit {lead['name']} im Chat ausgeblendet")
+    return jsonify(ok=True, message="Ausgeblendet.", redirect=url_for("crm.chat"))
 
 
 @bp.get("/crm/postfach")
@@ -283,6 +305,9 @@ def notices_read():
 def inbox_fetch():
     """„Jetzt abrufen“: Postfach sofort lesen statt auf die nächsten Minuten zu warten."""
     from . import posteingang
+    if not agent.S("POSTFACH_ABRUFEN"):
+        return jsonify(error="Der Server ruft keine Postfächer ab; das machen die Agents. Einschalten unter "
+                             "Einstellungen → Postfach und Versand → Mails und Agents."), 400
     weitere = posteingang.postfaecher(db(), nur_aktive=True)
     missing = _mail_ready()
     if missing and not weitere:

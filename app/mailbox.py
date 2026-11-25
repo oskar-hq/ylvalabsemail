@@ -67,6 +67,16 @@ FEHLER_ABSENDER = re.compile(r"^(?:mailer-?daemon|postmaster|mail-?daemon|mailer
 FEHLER_BETREFF = re.compile(r"undeliver|unzustellbar|nicht zugestellt|nicht zustellbar|zustellung fehlgeschlagen|"
                             r"delivery status|delivery (?:failure|failed|has failed)|failure notice|returned mail|"
                             r"mail delivery (?:failed|system|subsystem)|message not delivered|zustellfehler", re.I)
+# Absender, die nie eine Antwort erwarten (No-Reply, Newsletter, Benachrichtigungen, Rechnungen von Anbietern)
+AUTOMATISCH = re.compile(r"^(?:no[-_.]?reply|do[-_.]?not[-_.]?reply|donotreply|mailer[-_.]?daemon|postmaster|bounces?|"
+                         r"newsletter|news|notifications?|notify|alerts?|updates?|marketing|mailer|automated|"
+                         r"info[-_.]?mail|billing|invoices?|receipts?)\b", re.I)
+
+
+def ist_automatisch(adresse):
+    """True für Adressen wie noreply@…, newsletter@…, billing@… (dort antwortet niemand)."""
+    lokal = (adresse or "").strip().lower().split("@")[0]
+    return bool(lokal) and bool(AUTOMATISCH.match(lokal))
 
 
 def fehler_art(msg, text=""):
@@ -143,7 +153,7 @@ def conversations(c, me=None, ordner="haupt"):
                (SELECT text FROM messages x WHERE x.lead_id=l.id AND x.fehler=0 ORDER BY x.at DESC, x.id DESC LIMIT 1) AS last_text,
                (SELECT direction FROM messages x WHERE x.lead_id=l.id AND x.fehler=0 ORDER BY x.at DESC, x.id DESC LIMIT 1) AS last_dir
         FROM leads l JOIN messages m ON m.lead_id = l.id AND m.fehler = 0 WHERE l.arbeitsbereich=ab() {where}
-        GROUP BY l.id HAVING SUM(m.direction='in') > 0
+        GROUP BY l.id HAVING SUM(m.direction='in' AND NOT automatisch(m.from_addr)) > 0
         ORDER BY unread_msgs > 0 DESC, last_at DESC""", args).fetchall()
     return [dict(r) for r in rows]
 
@@ -152,6 +162,7 @@ def unread_count(c, me=None):
     where, args = _owner(me)
     return c.execute(f"SELECT COUNT(DISTINCT m.lead_id) FROM messages m JOIN leads l ON l.id = m.lead_id "
                      f"WHERE l.arbeitsbereich=ab() AND m.direction='in' AND m.read=0 AND m.fehler=0 "
+                     f"AND NOT automatisch(m.from_addr) AND m.at > IFNULL(l.chat_aus, '') "
                      f"AND {ORDNER_SQL['haupt']} {where}", args).fetchone()[0]
 
 

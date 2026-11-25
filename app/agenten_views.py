@@ -300,8 +300,11 @@ def neu():
     if not _verwalten():
         return _fertig("Anlegen darf, wer Personen und Rechte verwaltet.", url_for("agenten.einstellungen"), ok=False)
     try:
+        from . import firma
+        alles = request.form.get("zugriff") == "alles"
         key = agenten.anlegen(db(), me(), request.form.get("name"), request.form.get("beschreibung"),
-                              request.form.get("bereich") or None)
+                              request.form.get("bereich") or None,
+                              rechte_neu={k: agenten.MAX_STUFE for k in firma.MODUL_KEYS} if alles else None)
     except agenten.AgentError as exc:
         return _fertig(str(exc), url_for("agenten.einstellungen"), ok=False)
     return _fertig("Agent angelegt. Jetzt Rechte setzen und verbinden.", url_for("agenten.detail", key=key))
@@ -335,6 +338,19 @@ def speichern(key):
     except agenten.AgentError as exc:
         return _fertig(str(exc), ziel, ok=False)
     return _fertig("Gespeichert. Gilt ab dem nächsten Aufruf des Agents.", ziel)
+
+
+@bp.post("/einstellungen/agenten/<key>/alles")
+@login_required
+def alles(key):
+    ziel = url_for("agenten.detail", key=key)
+    if not _verwalten():
+        return _fertig("Ändern darf, wer Personen und Rechte verwaltet.", ziel, ok=False)
+    try:
+        agenten.alles_erlauben(db(), me(), key)
+    except agenten.AgentError as exc:
+        return _fertig(str(exc), ziel, ok=False)
+    return _fertig("Darf jetzt alles lesen und bearbeiten. Freigeben bleibt bei euch.", ziel)
 
 
 @bp.post("/einstellungen/agenten/<key>/status")

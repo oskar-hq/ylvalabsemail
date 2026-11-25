@@ -83,7 +83,8 @@ SEED = [
 # darf (Recht „Freigeben“ im Modul), was das OS danach selbst tut.
 ARTEN = {
     "mail": {"label": "Mail an Lead oder Kunden", "recht": "eigener_bereich", "modul": "crm", "ausfuehren": "mail",
-             "hinweis": "Das OS verschickt genau den freigegebenen Text über das Postfach."},
+             "hinweis": "Nach dem Ja verschickt der Agent genau den freigegebenen Text (oder das OS, wenn unter "
+                        "Einstellungen → Postfach und Versand so eingestellt)."},
     "nachricht": {"label": "Nachricht (LinkedIn, WhatsApp, Brief, Anruf)", "recht": "eigener_bereich", "modul": "crm",
                   "ausfuehren": "manuell", "hinweis": "Kein Kanal im OS: Der Agent oder ihr führt es aus."},
     "content": {"label": "Content-Post (LinkedIn, Website, Case Study)", "recht": "eigener_bereich",
@@ -326,6 +327,19 @@ def speichern(c, wer, key, form):
     firma.log(c, wer, "agent", "agent", a["key"], f"Agent geändert: {name}" +
               (" (Rechte: " + ", ".join(f"{k} {firma.STUFE_LABEL[v]}" for k, v in geaendert.items()) + ")"
                if geaendert else ""), {"rechte": geaendert} if geaendert else None)
+
+
+def alles_erlauben(c, wer, key):
+    """„Alles lesen und bearbeiten“: jedes Modul auf die höchste Stufe für Agents (Bearbeiten). Freigeben und
+    Verwalten bleiben Menschen vorbehalten (MAX_STUFE, hart im Code)."""
+    from . import firma
+    a = get(c, key)
+    if not a:
+        raise AgentError("Diesen Agent gibt es nicht.")
+    c.execute("UPDATE agenten SET rechte=? WHERE key=?",
+              (json.dumps({k: MAX_STUFE for k in firma.MODUL_KEYS}), a["key"]))
+    firma.log(c, wer, "agent", "agent", a["key"], f"Agent {a['name']}: darf alles lesen und bearbeiten "
+              "(nicht freigeben)", {"rechte": "alle_bearbeiten"})
 
 
 def status_setzen(c, wer, key, status):
@@ -1061,6 +1075,13 @@ def _ausfuehren(c, wer, fid, data_dir=None):
             if e["status"] == "ausgefuehrt":
                 return _ausfuehrung_setzen(c, fid, "ausgefuehrt", "Schon verschickt.")
             lead = leaddb.get_lead(c, e["lead_id"])
+            from . import agent
+            if agent.S("MAIL_VERSAND") != "os":  # Standard: der Agent verschickt aus seinem Postfach
+                _mail_pruefen(c, lead, e)
+                c.execute("UPDATE agent_entwuerfe SET status='freigegeben' WHERE id=?", (e["id"],))
+                c.commit()
+                return _ausfuehrung_setzen(c, fid, "bitte_ausfuehren", f"Freigegeben. Der Agent schickt die Mail an "
+                                           f"{e['an']} mit genau diesem Text und meldet es mit freigabe_erledigt_melden.")
             _mail_senden(c, f["entschieden_von"], lead, e)
             c.execute("UPDATE agent_entwuerfe SET status='ausgefuehrt' WHERE id=?", (e["id"],))
             firma.log(c, f["entschieden_von"], "freigabe", "lead", lead["id"],
@@ -1094,6 +1115,19 @@ def _ausfuehren(c, wer, fid, data_dir=None):
         return _ausfuehrung_setzen(c, fid, "fehler", msg)
 
 
+def _mail_pruefen(c, lead, e):
+    """Was das OS auch dann prüft, wenn der Agent verschickt: Lead da, Sperrliste, Erstkontakt-Regel."""
+    from . import agent, crm, leaddb
+    if not lead:
+        raise AgentError("Den Lead gibt es nicht mehr.")
+    gesperrt = {x.lower() for x in leaddb.kv_get(c, "blocklist", []) or []}
+    if (e["an"] or "").lower() in gesperrt:
+        raise AgentError("Diese Adresse steht auf der Sperrliste. Nicht verschicken.")
+    ok, warum = crm.may_email(dict(lead, email=e["an"]), agent.S("OUTREACH_EMAIL"))
+    if not ok:
+        raise AgentError(warum)
+
+
 def _mail_senden(c, person, lead, e):
     from . import agent, crm, leaddb
     if not lead:
@@ -1123,9 +1157,29 @@ def erledigt_melden(c, agent, fid, notiz=""):
     v = _json(f["vorschlag"], {})
     if v.get("entwurf_id"):
         c.execute("UPDATE agent_entwuerfe SET status='ausgefuehrt' WHERE id=?", (v["entwurf_id"],))
+        e = entwurf_get(c, v["entwurf_id"])
+        if e and e["art"] == "mail" and e["lead_id"]:
+            _mail_vermerken(c, f, e, agent)
     _ausfuehrung_setzen(c, fid, "erledigt", (notiz or "").strip()[:500])
     firma.log(c, wer_von(schluessel(agent)), "freigabe", f["objekt_typ"], f["objekt_id"],
               f"Erledigt: {v.get('titel')}" + (f" ({notiz.strip()[:120]})" if (notiz or "").strip() else ""))
+
+
+def _mail_vermerken(c, f, e, agent):
+    """Der Agent hat eine freigegebene Mail selbst verschickt: im Chat und in der Akte festhalten, Lead weiter."""
+    from . import crm, firma, leaddb, mailbox
+    lead = leaddb.get_lead(c, e["lead_id"], alle=True)
+    if not lead:
+        return
+    person = f["entschieden_von"]
+    mailbox.add(c, lead["id"], "out", e["text"], subject=e["betreff"] or "", to_addr=e["an"],
+                sent_by=f"{firma.name_von(c, person)} (über {name_von(c, wer_von(schluessel(agent)))})",
+                read=True, kanal="mail", erfasst_von=wer_von(schluessel(agent)))
+    if lead["status"] in ("passt", "entwurf", "neu", None) and not e["antwort"]:
+        leaddb.update_lead(c, lead["id"], status="versendet", channel="email", sent_at=leaddb.now(), unread=0)
+        crm.advance(c, lead["id"], "kontaktiert")
+    leaddb.add_event(c, lead["id"], "sent", f"Mail an {e['an']} verschickt (freigegeben, Agent hat gesendet).",
+                     author=firma.name_von(c, person))
 
 
 def status_fuer_agent(c, agent, nur_neue=True, freigabe_id=None):
@@ -1153,7 +1207,7 @@ def status_fuer_agent(c, agent, nur_neue=True, freigabe_id=None):
         if v.get("entwurf_id"):
             e = entwurf_get(c, v["entwurf_id"])
             d["entwurf_id"] = v["entwurf_id"]
-            if g.get("text_geaendert") and e:
+            if e and (g.get("text_geaendert") or aus.get("status") == "bitte_ausfuehren"):  # Agent führt genau das aus
                 d["freigegebene_fassung"] = {"an": e["an"], "betreff": e["betreff"], "text": e["text"]}
                 d["hinweis"] = "Die Person hat den Text vor der Freigabe geändert. Lern daraus für die nächsten Entwürfe."
         if f["art"] == "angebot":

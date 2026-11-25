@@ -74,7 +74,13 @@
       <h2 class="os-title-m">Wie heißt der Agent?</h2>
       <label class="os-field" style="margin-top:24px"><span>Name</span><input name="name" maxlength="40" required placeholder="z. B. Claude Assistent"></label>
       <label class="os-field"><span>Wofür</span><input name="beschreibung" maxlength="300"></label>
-      <label class="os-field"><span>Bereich</span><select name="bereich"><option value="">–</option>{% for b in bereiche %}<option value="{{ b.key }}">{{ b.voll }}</option>{% endfor %}</select></label>
+      <label class="os-field"><span>Bereich</span><select name="bereich"><option value="">Alle Bereiche</option>{% for b in bereiche %}<option value="{{ b.key }}">{{ b.voll }}</option>{% endfor %}</select></label>
+      <div class="os-field"><span>Zugriff</span>
+        <div class="os-chips" role="radiogroup" aria-label="Zugriff">
+          <label><input type="radio" name="zugriff" value="alles" checked>Alles lesen und bearbeiten</label>
+          <label><input type="radio" name="zugriff" value="wenig">Nur Aufgaben, Rest später einstellen</label>
+        </div>
+        <p class="os-caption" style="margin-top:8px">Freigeben kann ein Agent nie, das bleibt bei euch. Einzelne Rechte stellst du danach beim Agent ein.</p></div>
       <div class="os-sheet-foot">
         <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
         <button type="submit" class="os-btn"><span>Anlegen</span>{{ i('check') }}</button>

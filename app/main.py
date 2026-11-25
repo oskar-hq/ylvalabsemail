@@ -73,6 +73,9 @@ SETTINGS = {
     "OUTREACH_USER": env("OUTREACH_USER"),
     "OUTREACH_PASSWORD": env("OUTREACH_PASSWORD"),
     "OUTREACH_EMAIL": env("OUTREACH_EMAIL", "true").lower() in ("1", "true", "yes"),
+    # Seit Stufe 14: Mails lesen und verschicken die Agents; das OS ist nur noch die Freigabe-Schnittstelle
+    "POSTFACH_ABRUFEN": env("POSTFACH_ABRUFEN", "false").lower() in ("1", "true", "yes"),
+    "MAIL_VERSAND": env("MAIL_VERSAND", "agent") if env("MAIL_VERSAND", "agent") in ("agent", "os") else "agent",
     "INBOX_MINUTES": float(env("INBOX_MINUTES", "10")),
     "NOTIFY_EMAILS": [a for a in re.split(r"[,\s]+", env("NOTIFY_EMAILS")) if a],
     "BASE_URL": env("BASE_URL"),

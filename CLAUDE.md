@@ -26,4 +26,5 @@ Fachbegriffe auf Deutsch. Erstkontakt per Mail ist erlaubt (§ 7 UWG geklärt, 0
 `OUTREACH_EMAIL` unter Einstellungen → Postfach und Versand); nichts geht ohne Freigabe an Kunden. Einen Demo-Modus
 gibt es nicht mehr; lokale Vorschau mit `tests/vorschau.py`. Eine automatische Lead-Suche gibt es seit Stufe 13
 nicht mehr: Leads tragen die Agents per MCP ein. Oben fünf Reiter (Freigaben, Aufgaben, Pipeline, CRM, Chat):
-Freigaben = nur Ja/Nein-Entscheidungen, Aufgaben = Erinnerungsliste für das, was Menschen tun müssen.
+Freigaben = nur Ja/Nein-Entscheidungen, Aufgaben = Erinnerungsliste für das, was Menschen tun müssen. Seit Stufe 14
+liest der Server keine Postfächer; Mails lesen und verschicken die Agents (Einstellung `POSTFACH_ABRUFEN`, `MAIL_VERSAND`).
