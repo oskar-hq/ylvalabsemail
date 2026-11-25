@@ -910,6 +910,17 @@ def history_html(mail_id):
 
 @app.get("/healthz")
 def healthz():
+    """Läuft die App wirklich? Öffnet auch die Datenbank (mit allen Umbauten beim Start). Scheitert das nach einem
+    Update, meldet die Prüfung einen Fehler und der Update-Dienst spielt die alte Version automatisch wieder ein."""
+    try:
+        c = leaddb.connect(DB_PATH)
+        try:
+            c.execute("SELECT COUNT(*) FROM kv").fetchone()
+        finally:
+            c.close()
+    except Exception as exc:
+        app.logger.error("Gesundheitsprüfung: Datenbank lässt sich nicht öffnen: %s", exc)
+        return "datenbank", 500
     return "ok"
 
 
