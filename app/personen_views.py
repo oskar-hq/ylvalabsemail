@@ -157,7 +157,7 @@ def einladung(token):
                     _start_session({"user": p["key"], "team": p["key"], "name": p["name"], "password": "",
                                     "address": ""})
                     flash(f"Willkommen, {p['name'].split(' ')[0]}. Ab jetzt meldest du dich mit deinem Namen an.")
-                    return remember_member(redirect(url_for("aufgaben.mein_tag")), p["key"])
+                    return remember_member(redirect(url_for("stapel.start")), p["key"])
         from . import team
         return render_template("einladung.html", p=p, account=None, min_pw=team.MIN_PASSWORD)
     finally:

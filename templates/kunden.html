@@ -44,7 +44,7 @@
   {% endif %}
 </main>
 <div class="os-float">
-  <a class="os-back" href="{{ url_for('aufgaben.mein_tag') }}" aria-label="Zurück">{{ i('back') }}</a>
+  <a class="os-back" href="{{ url_for('stapel.start') }}" aria-label="Zurück">{{ i('back') }}</a>
   {% if ohne and darf('kunden', 2) %}<button type="button" class="os-btn" data-sheet="sheet-projekt"><span>Projekt anlegen</span>{{ i('plus') }}</button>{% endif %}
 </div>
 {% if ohne and darf('kunden', 2) %}

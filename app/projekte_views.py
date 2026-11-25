@@ -183,7 +183,7 @@ def aenderung_aktion(aid):
 @login_required
 def zeit_start():
     f = request.form
-    nxt = safe_next(f.get("next", "")) or url_for("aufgaben.mein_tag")
+    nxt = safe_next(f.get("next", "")) or url_for("stapel.start")
     if f.get("typ") in ("projekt", "aenderung") and not darf("kunden"):
         abort(403, "Zeit an Projekten erfasst, wer Kunden und Projekte sehen darf.")
     try:
@@ -196,7 +196,7 @@ def zeit_start():
 @bp.post("/zeit/stopp")
 @login_required
 def zeit_stopp():
-    nxt = safe_next(request.form.get("next", "")) or url_for("aufgaben.mein_tag")
+    nxt = safe_next(request.form.get("next", "")) or url_for("stapel.start")
     minuten = projekte.stopp(db(), me())
     return _fertig(f"{minuten} Minuten erfasst." if minuten else "Es lief keine Zeit.", nxt)
 
@@ -205,7 +205,7 @@ def zeit_stopp():
 @login_required
 def zeit_nachtragen():
     f = request.form
-    nxt = safe_next(f.get("next", "")) or url_for("aufgaben.mein_tag")
+    nxt = safe_next(f.get("next", "")) or url_for("stapel.start")
     if f.get("typ") in ("projekt", "aenderung") and not darf("kunden"):
         abort(403, "Zeit an Projekten erfasst, wer Kunden und Projekte sehen darf.")
     try:

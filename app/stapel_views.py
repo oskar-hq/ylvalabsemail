@@ -32,6 +32,8 @@ def _gruss(name):
 @bp.get("/aufgaben")
 @login_required
 def start():
+    if request.args:  # alte Links wie /aufgaben?ansicht=alle: das ist die Liste
+        return redirect(url_for("aufgaben.liste", **request.args))
     c = db()
     key = me()
     if not key:
@@ -44,12 +46,16 @@ def start():
         if firma.darf(c, key, "kalender") else []
     _, spaeter = agenten.karten(c, key)
     person = firma.person(c, key) or {}
+    from . import kpis
+    woche = kpis.woche_von()
+    cockpit = firma.darf(c, key, "cockpit")
     return render_template("stapel.html", account=g.account, items=items, zahlen=stapel.zusammenfassung(items),
                            n=sum(z["n"] for z in stapel.zusammenfassung(items)), gruss=_gruss(person.get("name")),
                            termine=termine, infos=agenten.infos_fuer(c, key), spaeter=spaeter,
                            einrichten=firma.darf(c, key, "personen", firma.VERWALTEN)
                            and not agenten.einrichtung(c)["fertig"], startklar_offen=_startklar_offen(c, key),
-                           **_form_kontext())
+                           ziele=kpis.ziele_der_woche(c, woche, key) if cockpit else None, woche=woche,
+                           katalog=[k for k in kpis.KATALOG if k["fn"] and k["je_person"]], **_form_kontext())
 
 
 @bp.get("/aufgaben/fokus")

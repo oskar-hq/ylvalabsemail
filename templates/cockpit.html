@@ -54,7 +54,7 @@
   {% endif %}
 </main>
 <div class="os-float">
-  <a class="os-back" href="{{ url_for('aufgaben.mein_tag') }}" aria-label="Zurück">{{ i('back') }}</a>
+  <a class="os-back" href="{{ url_for('stapel.start') }}" aria-label="Zurück">{{ i('back') }}</a>
   <a class="os-btn ink" href="{{ url_for('cockpit.wochengespraech', woche=woche) }}"><span>Wochengespräch</span>{{ i('chev') }}</a>
 </div>
 {% if verwalten %}

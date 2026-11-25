@@ -240,5 +240,6 @@ def menu(data_dir, environ=os.environ):
                           "summary": " · ".join(x for x in (_short(f) for f in fs) if x) or "nicht gesetzt"})
         out.append({"id": gid, "title": title, "hint": GROUP_HINTS.get(gid, ""), "pages": pages,
                     "missing": [m for pg in pages for m in pg["missing"]],
-                    "changed": any(pg["changed"] for pg in pages)})
+                    "changed": any(pg["changed"] for pg in pages),
+                    "worte": " ".join(f"{pg['title']} {f['label']} {f['key']}" for pg in pages for f in pg["fields"])})
     return out

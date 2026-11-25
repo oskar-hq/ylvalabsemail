@@ -212,3 +212,42 @@ def seed(conn):
                 conn.execute("INSERT INTO ai_usage (at, run_id, stage, model, input_tokens, output_tokens, cost_usd)"
                              " VALUES (?,?,?,?,?,?,?)", (at, run_id, stage, model, tin, tout, usd))
     conn.commit()
+
+
+def seed_os(conn):
+    """Für die Vorschau der Aufgaben, der Pipeline und des Chats: was die Agents heute getan haben, eine offene
+    Freigabe, zwei Projekte und ein Gespräch über Slack."""
+    from app import agenten, posteingang, projekte
+    if conn.execute("SELECT 1 FROM ereignisse WHERE wer LIKE 'agent:%'").fetchone():
+        return
+    heute = date.today().isoformat()
+    leads = [r["id"] for r in conn.execute("SELECT id FROM leads WHERE source_id LIKE 'demo:%' AND stage IS NOT NULL "
+                                           "ORDER BY id LIMIT 3")]
+    plan = {"outreach": [(8, "lead", 3), (9, "agent", 2), (10, "lead", 4), (11, "freigabe", 1), (14, "lead", 2)],
+            "delivery": [(9, "projekt", 2), (10, "aufgabe", 3), (13, "projekt", 1), (15, "kommentar", 2)],
+            "content": [(10, "agent", 1), (16, "agent", 2)], "ops": []}
+    for key, eintraege in plan.items():
+        for stunde, art, n in eintraege:
+            for i in range(n):
+                conn.execute("INSERT INTO ereignisse (at, wer, art, objekt_typ, text) VALUES (?,?,?,?,?)",
+                             (f"{heute}T{stunde:02d}:{10 + i * 7:02d}:00", agenten.wer_von(key), art, art,
+                              f"Beispiel: {art} bearbeitet"))
+    conn.execute("UPDATE agenten SET zuletzt_aktiv=?, zuletzt_was=? WHERE key='delivery'",
+                 (datetime.now().isoformat(timespec="seconds"), "Projekt Gärtnerei Grünholz"))
+    if leads:
+        agenten.anfragen(conn, "outreach", "entscheidung", "Nachfassen bei Hansen", "Zweite Nachricht nach einer "
+                         "Woche ohne Antwort oder anrufen?", optionen=[{"key": "A", "text": "Kurze Mail nachschieben"},
+                                                                       {"key": "B", "text": "Morgen anrufen"}],
+                         empfehlung="B", lead_id=leads[0])
+        for lead_id, phase in zip(leads[:2], ("bau", "anforderung")):
+            pid = projekte.anlegen(conn, "oskar", lead_id, preis_einmal=2400, pauschale_monat=150)
+            conn.execute("UPDATE projekte SET status=? WHERE id=?", (phase, pid))
+        t = datetime.now() - timedelta(hours=5)
+        verlauf = [("in", "Moin! Kurze Frage zum Prototyp: Können die Kunden auch selbst Termine verschieben?"),
+                   ("out", "Moin, ja, das geht. Ich zeig es dir morgen im Call."),
+                   ("in", "Super, passt. 10 Uhr?")]
+        for i, (richtung, text) in enumerate(verlauf):
+            posteingang.agent_nachricht(conn, "agent:outreach", leads[-1], "slack", richtung, text,
+                                        am=(t + timedelta(minutes=40 * i)).isoformat(timespec="minutes"),
+                                        extern_id=f"demo-{i}")
+    conn.commit()

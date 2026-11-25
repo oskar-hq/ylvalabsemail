@@ -976,10 +976,10 @@ def arbeitsbereich_wechseln():
     if not arbeitsbereiche.darf(db(), g.account.get("team"), key):
         abort(403, "In diesem Arbeitsbereich arbeitest du nicht.")
     session["ab"] = key
-    nxt = safe_next(request.form.get("next") or "") or url_for("leads.overview")
+    nxt = safe_next(request.form.get("next") or "") or url_for("stapel.start")
     # Seiten eines einzelnen Leads gibt es im anderen Arbeitsbereich nicht: zur Übersicht des Bereichs
-    if re.search(r"^/(leads|crm/postfach|crm)/\d+", nxt):
-        nxt = "/crm/postfach" if nxt.startswith("/crm") else url_for("leads.overview")
+    if re.search(r"^/(leads|crm/postfach|crm|chat)/\d+", nxt):
+        nxt = url_for("crm.chat") if nxt.startswith(("/crm/postfach", "/chat")) else url_for("crm.board")
     return redirect(nxt)
 
 from .agenten_views import bp as agenten_bp  # noqa: E402  Stufe 12: MCP, OAuth, Einstellungen → Agenten

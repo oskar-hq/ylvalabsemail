@@ -13,6 +13,8 @@
     return json;
   }
 
+  const euro = (v) => v.toFixed(2).replace('.', ',') + ' €';
+
   function busy(btn, on, text) {
     if (!btn) return;
     if (on) { btn.dataset.label = btn.textContent; btn.disabled = true; if (text) btn.textContent = text; }
@@ -30,88 +32,11 @@
 
   $$('dialog [data-close]').forEach(b => b.addEventListener('click', () => b.closest('dialog').close()));
 
-  // ---------------------------------------------------------------- Läufe und Kosten
-  const euro = (v) => v.toFixed(2).replace('.', ',') + ' €';
-  const runForm = $('#runForm');
-  if (runForm) {
-    const est = $('#estimate');
-    let timer;
-    runForm.addEventListener('input', () => {
-      clearTimeout(timer);
-      timer = setTimeout(async () => {
-        const q = new URLSearchParams({ entwuerfe: runForm.entwuerfe.disabled ? 0 : (runForm.entwuerfe.value || 0),
-                                        erinnerungen: runForm.erinnerungen?.checked ? '1' : '0' });
-        try {
-          const e = await (await fetch('/leads/schaetzung?' + q)).json();
-          const budget = parseFloat(String(runForm.budget_eur.value).replace(',', '.')) || 0;
-          const per = JSON.parse(runForm.dataset.per || '{}');
-          const web = runForm.web?.checked && !runForm.web.disabled;
-          const eur = (e.eur || 0) + (web ? (per.websuche || 0) : 0);
-          est.innerHTML = (eur ? `KI geschätzt: <b>ca. ${euro(eur)}</b>` : 'Ohne KI-Kosten.')
-            + (web ? ' · Websuche' : '') + (e.entwuerfe ? ` · ${e.entwuerfe} Entwürfe` : '')
-            + (e.erinnerungen ? ` · ${e.erinnerungen} Erinnerungen` : '')
-            + ' Passende Betriebe warten danach unter <a href="/leads/pruefen">„Zu prüfen“</a>.'
-            + (eur > budget ? ' <span class="err">Das KI-Budget reicht dafür vermutlich nicht, der Lauf stoppt dann vorher.</span>' : '');
-        } catch {}
-      }, 250);
-    });
-    const webBox = $('#webOpts');
-    const syncWeb = () => { if (webBox && runForm.web) webBox.hidden = !runForm.web.checked; };
-    runForm.web?.addEventListener('change', syncWeb);
-    syncWeb();
-    runForm.addEventListener('submit', async (ev) => {
-      ev.preventDefault();
-      const btn = $('button.primary', runForm);
-      busy(btn, true, 'Startet …');
-      try {
-        const fd = new FormData(runForm);
-        toast((await post('/leads/run', fd)).message);
-        setTimeout(() => location.reload(), 1200);
-      } catch (e) { toast(e.message, true); busy(btn, false); }
-    });
-  }
-  $('#stopRun')?.addEventListener('click', async (ev) => {
-    busy(ev.target, true, 'Stoppt …');
-    try { toast((await post('/leads/stop')).message); } catch (e) { toast(e.message, true); busy(ev.target, false); }
-  });
-
   $('#learnNow')?.addEventListener('click', async (ev) => {
     busy(ev.target, true);
     try { toast((await post('/leads/gehirn/lernen')).message); setTimeout(() => location.reload(), 60000); }
     catch (e) { toast(e.message, true); busy(ev.target, false); }
   });
-
-  // Aktivität und Kosten live; wenn ein Lauf endet oder neue Einträge da sind: Hinweis bzw. neu laden
-  const agentBox = $('#agent');
-  if (agentBox) {
-    const initial = agentBox.dataset.counts;
-    const wasRunning = !!agentBox.dataset.running;
-    setInterval(async () => {
-      if (document.hidden) return;
-      try {
-        const resp = await fetch('/leads/status.json', { headers: { Accept: 'application/json' } });
-        if (!resp.ok) return;
-        const st = await resp.json();
-        if (wasRunning && !st.run) { location.reload(); return; }
-        if (!wasRunning && st.run) { location.reload(); return; }
-        const text = st.activity !== 'Wartet' ? st.activity : (st.run ? 'Startet gleich …' : 'Bereit.');
-        $('#activity').textContent = text;
-        if ($('#progress')) $('#progress').textContent = st.activity;
-        $('#runEur').textContent = euro(st.run_eur);
-        $('#runTokens').textContent = st.run_tokens.toLocaleString('de-DE') + ' Tokens';
-        $('#todayEur').textContent = euro(st.today_eur);
-        $('#monthEur').textContent = euro(st.month_eur);
-        if ($('#monthBar') && st.cap_eur) $('#monthBar').style.width = Math.min(100, st.month_eur / st.cap_eur * 100) + '%';
-        $('.agent .dot').className = 'dot ' + (st.run || st.activity !== 'Wartet' ? 'busy' : '');
-        if (JSON.stringify(st.counts) !== JSON.stringify(JSON.parse(initial)) && !$('#reloadHint')) {
-          const a = document.createElement('a');
-          a.id = 'reloadHint'; a.href = location.href; a.className = 'btn small primary';
-          a.textContent = 'Neue Einträge · neu laden';
-          $('.agent-line').append(a);
-        }
-      } catch {}
-    }, wasRunning ? 4000 : 15000);
-  }
 
   // ---------------------------------------------------------------- Push
   const pushBtn = $('#pushBtn');
@@ -313,22 +238,6 @@
       $('#importDlg').close();
       setTimeout(() => location.reload(), r.skipped_count ? 6000 : 1500);
     } catch (e) { toast(e.message, true); } finally { busy(btn, false); }
-  });
-  // Karte: Zahlen je Kreis importieren, Kreisgrenzen laden
-  $('#regionForm')?.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
-    const btn = $('button.primary', ev.target);
-    busy(btn, true, 'Importiert …');
-    try {
-      const r = await post('/crm/regionen/import', new FormData(ev.target));
-      toast(`${r.count} Kreise übernommen.` + (r.missing.length ? ` Ohne Wert: ${r.missing.join(', ')}.` : ''));
-      setTimeout(() => location.reload(), r.missing.length ? 4000 : 1200);
-    } catch (e) { toast(e.message, true); busy(btn, false); }
-  });
-  $('#loadBorders')?.addEventListener('click', async (ev) => {
-    busy(ev.target, true);
-    try { toast((await post('/crm/regionen/grenzen')).message); } catch (e) { toast(e.message, true); }
-    finally { busy(ev.target, false); }
   });
   $$('.drop input[type=file]').forEach(inp => inp.addEventListener('change', () => {
     inp.nextElementSibling.textContent = inp.files[0]?.name || 'CSV-Datei auswählen';
@@ -552,69 +461,5 @@
     const input = $('input', ev.target);
     try { await post(`${base}/note`, { text: input.value }); reload(); } catch (e) { toast(e.message, true); }
   });
-
-  // „Finden“ im Ablauf: Lauf-Formular aufklappen
-  const openRun = () => { if (location.hash === '#lauf' && $('#lauf')) { $('#lauf').open = true; $('#lauf').scrollIntoView({ block: 'start' }); } };
-  window.addEventListener('hashchange', openRun);
-  openRun();
 })();
 
-// Leads-Liste: mehrere auswählen und auf einmal ins CRM schicken (Reiter und Person wählbar)
-(() => {
-  const bar = document.getElementById('bulkBar');
-  if (!bar) return;
-  const csrf = document.querySelector('meta[name=csrf-token]').content;
-  const boxes = () => [...document.querySelectorAll('.lead-sel')];
-  const picked = () => boxes().filter((b) => b.checked);
-  const update = () => {
-    const n = picked().length;
-    document.getElementById('bulkCount').textContent = n;
-    bar.hidden = !n;
-    document.body.classList.toggle('has-bulk', n > 0);
-    document.querySelectorAll('[data-sel-all]').forEach((btn) => {
-      const list = [...document.querySelectorAll(`[data-section="${btn.dataset.selAll}"] .lead-sel`)];
-      btn.textContent = list.length && list.every((b) => b.checked) ? 'keine auswählen' : 'alle auswählen';
-    });
-  };
-  document.addEventListener('change', (e) => { if (e.target.classList?.contains('lead-sel')) update(); });
-  document.querySelectorAll('[data-sel-all]').forEach((btn) => btn.addEventListener('click', () => {
-    const list = [...document.querySelectorAll(`[data-section="${btn.dataset.selAll}"] .lead-sel`)];
-    const on = !list.every((b) => b.checked);
-    list.forEach((b) => { b.checked = on; });
-    update();
-  }));
-  document.getElementById('bulkClear').addEventListener('click', () => { boxes().forEach((b) => { b.checked = false; }); update(); });
-  document.getElementById('bulkGo').addEventListener('click', async (e) => {
-    const btn = e.currentTarget;
-    const ids = [...new Set(picked().map((b) => b.value))];
-    const body = new FormData();
-    ids.forEach((id) => body.append('id', id));
-    body.append('stage', document.getElementById('bulkStage').value);
-    body.append('owner', document.getElementById('bulkOwner').value);
-    btn.disabled = true;
-    try {
-      const resp = await fetch('/leads/ins-crm', { method: 'POST', body, headers: { 'X-CSRF-Token': csrf } });
-      const d = await resp.json().catch(() => ({ error: `Fehler ${resp.status}` }));
-      if (!resp.ok || d.error) throw new Error(d.error || `Fehler ${resp.status}`);
-      picked().forEach((b) => {
-        b.checked = false;
-        b.closest('li').classList.add('moved');
-        const name = b.closest('li').querySelector('.lead-name');
-        if (name && !name.querySelector('.in-crm')) name.insertAdjacentHTML('beforeend', ' <em class="in-crm">CRM</em>');
-      });
-      update();
-      const where = d.owner ? `im CRM von ${d.owner}` : 'im Gesamt-CRM';
-      const note = document.getElementById('bulkDone') || Object.assign(document.createElement('p'), { id: 'bulkDone', className: 'note small bulk-done' });
-      note.textContent = `${d.moved} ${d.moved === 1 ? 'Betrieb' : 'Betriebe'} ${where} unter „${d.stage}“. `;
-      if (d.kept.length) note.textContent += `Schon zugeordnet, bleiben bei ihrer Person: ${d.kept.join(', ')}. `;
-      const a = Object.assign(document.createElement('a'), { href: d.url, textContent: 'Im CRM ansehen →' });
-      note.append(a);
-      document.querySelector('.kpis').before(note);
-      note.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      btn.disabled = false;
-    }
-  });
-})();

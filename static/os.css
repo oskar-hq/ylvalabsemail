@@ -502,11 +502,11 @@ body.os-sheet-open .os-page,body.os-sheet-open main.page{transform:scale(.94);bo
 .st-teile{display:flex;justify-content:center;flex-wrap:wrap;gap:8px 24px;margin:20px 0 0;font:500 16px/22px var(--sans)}
 .st-teile a{color:var(--text-secondary);text-decoration:none}
 .st-teile a b{color:var(--text-primary);font-weight:600;font-variant-numeric:tabular-nums;margin-right:2px}
-.st-hinweis{display:inline-flex;align-items:center;gap:10px;margin:24px auto 0;padding:10px 16px;border-radius:var(--radius-full);
+.st-hinweis{display:flex;width:fit-content;align-items:center;gap:10px;margin:24px auto 0;padding:10px 16px;border-radius:var(--radius-full);
   background:var(--surface-sunken);color:var(--text-secondary);font:500 15px/20px var(--sans);text-decoration:none;max-width:100%}
 .st-hinweis b{color:var(--text-primary);font-weight:600}
 .st-hinweis svg{flex:none;width:16px;height:16px;color:var(--link)}
-.st-start-knopf{display:inline-flex;align-items:center;gap:14px;margin:28px auto 0;height:60px;padding:0 20px 0 28px;border-radius:var(--radius-md);
+.st-start-knopf{display:flex;width:fit-content;align-items:center;gap:14px;margin:28px auto 0;height:60px;padding:0 20px 0 28px;border-radius:var(--radius-md);
   background:var(--ink-solid);color:var(--on-ink);font:600 19px/1 var(--sans);text-decoration:none;box-shadow:var(--shadow-float);
   transition:transform var(--t-snappy) var(--spring-snappy)}
 .st-start-knopf:active{transform:scale(.97)}
@@ -534,7 +534,8 @@ body.os-sheet-open .os-page,body.os-sheet-open main.page{transform:scale(.94);bo
 .st-fortschritt b{font:600 14px/1 var(--sans);font-variant-numeric:tabular-nums}
 .st-fortschritt span{display:block;width:150px;height:4px;border-radius:2px;background:var(--surface-sunken);overflow:hidden}
 .st-fortschritt i{display:block;height:100%;background:var(--text-primary);transform-origin:left;transition:transform var(--t-smooth) var(--spring-smooth)}
-.st-karte{margin-top:48px;animation:os-in 400ms var(--spring-smooth) both}
+.st-karte{margin-top:48px;animation:st-in 300ms ease-out both}
+@keyframes st-in{from{opacity:0}}  /* ohne transform: sonst hängen die festen Knöpfe an der Karte */
 .st-eyebrow{margin:0 0 10px;text-align:center;font:600 14px/18px var(--sans);color:var(--text-secondary)}
 .st-titel{margin:0;text-align:center;font:700 34px/40px var(--display);letter-spacing:-.02em;overflow-wrap:anywhere}
 .st-text{margin:12px auto 0;max-width:560px;text-align:center;font:500 17px/24px var(--sans);color:var(--text-secondary);overflow-wrap:anywhere}
@@ -571,6 +572,8 @@ body.os-sheet-open .os-page,body.os-sheet-open main.page{transform:scale(.94);bo
 /* Pipeline: Agents als Karten mit Aktivität, Projekte als Board */
 .pl-seite{max-width:1240px}
 .pl-kacheln{margin-top:8px}
+.pl-kacheln .os-tile{width:170px}
+.pl-kacheln .os-tile span{font-size:16px;line-height:20px}
 .pl-agents{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px;margin-top:16px}
 .pl-agent{display:flex;flex-direction:column;gap:12px;padding:18px;border-radius:var(--radius-md);background:var(--surface);border:1px solid var(--border-hairline);
   box-shadow:var(--shadow-tile);color:inherit;text-decoration:none;transition:transform var(--t-snappy) var(--spring-snappy)}
@@ -652,6 +655,8 @@ body.os-sheet-open .os-page,body.os-sheet-open main.page{transform:scale(.94);bo
 .ch-blase.rein p{background:var(--surface-sunken);border-bottom-left-radius:6px}
 .ch-blase.raus p{background:var(--ink-solid);color:var(--on-ink);border-bottom-right-radius:6px}
 .ch-blase.fehler p{opacity:.55}
+.ch-wunsch{display:flex;flex-direction:column;gap:8px;padding:4px 6px}
+.ch-wunsch .os-btns{display:flex;gap:8px;flex-wrap:wrap}
 .ch-meta{padding:0 6px;font:500 12px/16px var(--sans);color:var(--text-secondary)}
 .ch-warte{color:#C77700}
 .ch-antwort{padding:12px 20px 20px;border-top:1px solid var(--border-hairline)}
@@ -670,3 +675,19 @@ body.os-sheet-open .os-page,body.os-sheet-open main.page{transform:scale(.94);bo
   .ch-blase{max-width:88%}
   .ch-kopf .os-btn{display:none}
 }
+
+/* Einstellungen wie im Cockpit: Suche, Update-Zeile, „Auf einen Blick“, Kategorien */
+.ein-suche{margin:24px 0 8px}
+.ein-update{display:flex;align-items:center;justify-content:space-between;gap:12px;margin:16px 0 0;padding:14px 16px;border-radius:var(--radius-md);
+  background:var(--surface-sunken);color:var(--text-primary);text-decoration:none;font:500 15px/20px var(--sans)}
+.ein-update .os-btn{flex:none}
+.ein-blick{margin:32px 0 8px}
+.ein-kacheln{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+@media (min-width:600px){.ein-kacheln{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.ein-kachel{display:flex;flex-direction:column;gap:4px;padding:14px 16px;border-radius:var(--radius-md);background:var(--surface);
+  border:1px solid var(--border-hairline);color:var(--text-primary);text-decoration:none}
+.ein-kachel i{width:10px;height:10px;border-radius:50%;background:var(--positive);margin-bottom:6px}
+.ein-kachel.offen i{background:#FF9F0A}
+.ein-kachel b{font:600 16px/20px var(--sans)}
+.ein-kachel span{font:500 13px/18px var(--sans);color:var(--text-secondary)}
+.ein-seite .menu-title{margin-top:32px}

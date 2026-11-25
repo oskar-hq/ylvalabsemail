@@ -824,7 +824,7 @@ def handle_reply(c, lead_id, msg, message_id=None):
                          meta={"from": addr, "subject": subject, "date": str(msg.get("Date", ""))})
         if not mailbox.ist_sonstige(c, lead_id):  # Unbekannte landen still unter „Sonstige“
             notify(c, f"Neue Mail von {lead['name']}" if lead["status"] == "kontakt" else f"Neue Antwort von {lead['name']}",
-                   (text or subject)[:220], f"/crm/postfach/{lead_id}")
+                   (text or subject)[:220], f"/chat/{lead_id}")
         return True
     leaddb.add_event(c, lead_id, "reply", text or "(leere Nachricht)", author=name or addr,
                      meta={"from": addr, "subject": subject, "date": str(msg.get("Date", ""))})
@@ -852,7 +852,7 @@ def handle_reply(c, lead_id, msg, message_id=None):
     leaddb.add_signal(c, "antwort", f"{lead['name']} ({lead['branche']} / {lead['category_label']}, "
                       f"{lead['distance_km']} km, Größe: {lead['research'].get('groesse') or '?'}): {kind}. "
                       f"Antwort: {result['zusammenfassung']}", lead_id)
-    notify(c, f"{INTEREST_TITLES[kind]} {lead['name']}", result["zusammenfassung"][:220], f"/crm/postfach/{lead_id}")
+    notify(c, f"{INTEREST_TITLES[kind]} {lead['name']}", result["zusammenfassung"][:220], f"/chat/{lead_id}")
     return True
 
 

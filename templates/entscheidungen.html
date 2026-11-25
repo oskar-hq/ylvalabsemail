@@ -28,7 +28,7 @@
   </section>
 </main>
 <div class="os-float">
-  <a class="os-back" href="{{ url_for('aufgaben.mein_tag') }}" aria-label="Zu Mein Tag">{{ i('back') }}</a>
+  <a class="os-back" href="{{ url_for('stapel.start') }}" aria-label="Zu den Aufgaben">{{ i('back') }}</a>
 </div>
 {% if darf('entscheidungen', 2) %}{{ sheet_entscheidung(rechte, url_for('freigaben.log')) }}{% endif %}
 {% endblock %}

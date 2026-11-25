@@ -111,7 +111,7 @@ def save_prefs():
         return redirect(url_for("team.profile") + "#meine-einstellungen")
     team.save_settings(db(), key, einstellungen=values)
     agent.log.info("Eigene Einstellungen von %s: %s", who(), values)
-    flash("Deine Einstellungen sind gespeichert. Sie gelten für deine Läufe und deine KI-Aktionen."
+    flash("Deine Einstellungen sind gespeichert. Sie gelten für deine KI-Aktionen."
           if values else "Für dich gelten wieder überall die Team-Standards.")
     return redirect(url_for("team.profile") + "#meine-einstellungen")
 

@@ -312,23 +312,23 @@ class WebBasis(unittest.TestCase):
 class WebTest(WebBasis):
 
     def test_seiten_rendern(self):
-        html = self.client.get("/mein-tag").get_data(as_text=True)
+        html = self.client.get("/aufgaben").get_data(as_text=True)
         self.assertIn("Oskar", html)
         self.assertIn("os.css", html)
         self.assertIn("Neue Aufgabe", html)
-        self.assertEqual(self.client.get("/").headers["Location"], "/mein-tag")
+        self.assertEqual(self.client.get("/").headers["Location"], "/aufgaben")
         r = self.post("/aufgaben/neu", {"titel": "Website-Text prüfen", "bereich": "technik", "schnell": "heute"},
                       headers={"X-Requested-With": "fetch"})
         self.assertTrue(r.get_json()["ok"], r.get_data(as_text=True))
         aid = self.c.execute("SELECT MAX(id) FROM aufgaben").fetchone()[0]
         self.addCleanup(lambda: (self.c.execute("DELETE FROM aufgaben WHERE id=?", (aid,)), self.c.commit()))
-        for url in ("/aufgaben", "/aufgaben?ansicht=alle", "/aufgaben?ansicht=vergeben", "/aufgaben?erledigt=1",
+        for url in ("/aufgaben", "/aufgaben/alle?ansicht=alle", "/aufgaben/alle?ansicht=vergeben", "/aufgaben/alle?erledigt=1",
                     f"/aufgaben/{aid}", "/einstellungen/personen", "/einstellungen/personen/hamza",
                     "/einstellungen/rollen", "/einstellungen/rollen/recherche", "/einstellungen/rollen/neu",
                     "/einstellungen/bereiche", "/einstellungen/protokoll", "/einstellungen", "/profil"):
             r = self.client.get(url)
             self.assertEqual(r.status_code, 200, url)
-        self.assertIn("Website-Text prüfen", self.client.get("/aufgaben?ansicht=vergeben").get_data(as_text=True))
+        self.assertIn("Website-Text prüfen", self.client.get("/aufgaben/alle?ansicht=vergeben").get_data(as_text=True))
         r = self.post(f"/kommentar/aufgabe/{aid}", {"text": "@Finn magst du schauen?"})
         self.assertEqual(r.status_code, 302)
         self.assertIn("<mark>@Finn</mark>", self.client.get(f"/aufgaben/{aid}").get_data(as_text=True))
@@ -351,23 +351,23 @@ class WebTest(WebBasis):
         self.assertIn("Willkommen, Omid", page)
         csrf = page.split('name="csrf-token" content="')[1].split('"')[0]
         r = guest.post(path, data={"new": "omid-pass-12", "again": "omid-pass-12"}, headers={"X-CSRF-Token": csrf})
-        self.assertEqual(r.headers["Location"], "/mein-tag")
-        self.assertIn("Omid", guest.get("/mein-tag").get_data(as_text=True))
+        self.assertEqual(r.headers["Location"], "/aufgaben")
+        self.assertIn("Omid", guest.get("/aufgaben").get_data(as_text=True))
         self.assertEqual(guest.get("/einstellungen").status_code, 403)  # Recherche
         self.assertEqual(guest.get(path).status_code, 410)  # Link verbraucht
         # Sperren wirft die laufende Sitzung raus
         self.post(f"/einstellungen/personen/{key}/status", {"status": "gesperrt"})
-        self.assertEqual(guest.get("/mein-tag").status_code, 302)
+        self.assertEqual(guest.get("/aufgaben").status_code, 302)
 
     def test_rechte(self):
         self.als("hamza")
-        self.assertEqual(self.client.get("/mein-tag").status_code, 200)
-        self.assertEqual(self.client.get("/leads").status_code, 200)
+        self.assertEqual(self.client.get("/aufgaben").status_code, 200)
+        self.assertEqual(self.client.get("/crm").status_code, 200)
         self.assertEqual(self.client.get("/einstellungen").status_code, 403)
         self.assertEqual(self.client.get("/einstellungen/personen").status_code, 403)
         self.assertEqual(self.client.get("/leads/kosten").status_code, 403)
         self.assertEqual(self.post("/einstellungen/personen/neu", {"name": "X Y", "rolle": "gruender"}).status_code, 403)
-        html = self.client.get("/mein-tag").get_data(as_text=True)
+        html = self.client.get("/aufgaben").get_data(as_text=True)
         self.assertNotIn('href="/einstellungen"', html)
         self.assertNotIn('href="/leads/kosten"', html)
         # Ein Modul abschalten: CRM weg für Hamza (eigenes Recht), gilt sofort
@@ -376,7 +376,7 @@ class WebTest(WebBasis):
         self.addCleanup(lambda: (self.c.execute("UPDATE team SET rechte=NULL WHERE key='hamza'"), self.c.commit()))
         self.assertEqual(self.client.get("/crm").status_code, 403)
         self.assertEqual(self.post("/crm/neu", {"name": "X"}).status_code, 403)
-        self.assertNotIn('href="/crm"', self.client.get("/mein-tag").get_data(as_text=True))
+        self.assertNotIn('href="/crm"', self.client.get("/aufgaben").get_data(as_text=True))
 
     def test_postfach_ohne_person(self):
         """Mit dem Postfach angemeldet: nur Mailer, und wählbar sind nur Personen ohne Passwort."""
@@ -418,157 +418,6 @@ def lead_anlegen(c, name, niche=None, **felder):
     if felder:
         leaddb.update_lead(c, cur.lastrowid, **felder)
     return cur.lastrowid
-
-
-class BranchentestTest(unittest.TestCase):
-    def setUp(self):
-        from app import branchentest as bt
-        self.bt = bt
-        self.c = frische_db()
-        self.omid = firma.person_anlegen(self.c, "oskar", "Omid Beispiel", "recherche", bereiche_neu=["akquise"],
-                                         lernstufe=1)
-
-    def test_startwerte_und_pruefer(self):
-        bt, c = self.bt, self.c
-        self.assertEqual([b["key"] for b in bt.branchen(c)], ["video", "design", "handwerk", "verwaltung"])
-        self.assertEqual(bt.branche(c, "video")["person"], "hamza")
-        self.assertIsNone(bt.branche(c, "handwerk")["person"])  # Omid trägt Oskar in der App ein
-        self.assertEqual(bt.pruefer_fuer(c, self.omid), ("hamza", "oskar"))
-        self.assertEqual(bt.pruefer_fuer(c, "hamza"), ("oskar", None))
-        self.assertEqual(bt.pruefer_fuer(c, "oskar"), (None, None))
-
-    def test_pruefung_omid_hamza_stichprobe_oskar(self):
-        bt, c = self.bt, self.c
-        leaddb.kv_set(c, "regel:branchentest", {"stufe2": 5, "stufe3": 10, "stichprobe": 2, "preisgespraeche": 3})
-        ids = [lead_anlegen(c, f"Sanitär {n}", "sanitaer") for n in range(3)]
-        for lid in ids:
-            felder = bt.eingang(c, lid, self.omid)
-            self.assertEqual(felder["testbranche"], "handwerk")  # nach Nische
-            self.assertEqual(felder["pruef_status"], "wartet")  # Lernstufe 1: jeder Lead
-        bt.eingang(c, ids[0], self.omid)  # zweimal schadet nicht
-        offen = bt.pruefungen(c, "hamza")
-        self.assertEqual(len(offen), 3)
-        self.assertIn("Lead prüfen: Sanitär 0", [r["title"] for r in leaddb.notices(c, "h", 20, "hamza")[0]])
-        lead = leaddb.get_lead(c, ids[0])
-        with self.assertRaises(bt.BranchentestError):  # Kontakt erst nach der Prüfung
-            bt.kontakt(c, self.omid, ids[0], "telefon")
-        self.assertFalse(bt.darf_entscheiden(c, self.omid, offen[0]))
-        self.assertTrue(bt.darf_entscheiden(c, "hamza", offen[0]))
-        bt.entscheiden(c, "hamza", offen[0]["id"], True)
-        bt.entscheiden(c, "hamza", offen[1]["id"], True)  # 2. bestandener: Stichprobe an Oskar (Quote 2)
-        with self.assertRaises(bt.BranchentestError):
-            bt.entscheiden(c, "hamza", offen[2]["id"], False, "")  # Ablehnen nur mit Grund
-        bt.entscheiden(c, "hamza", offen[2]["id"], False, "Kein eigener Betrieb, nur Filiale")
-        self.assertEqual(leaddb.get_lead(c, ids[2])["status"], "aussortiert")
-        self.assertIn("Lead abgelehnt: Sanitär 2", [r["title"] for r in leaddb.notices(c, "o", 20, self.omid)[0]])
-        stich = bt.pruefungen(c, "oskar")
-        self.assertEqual([(p["objekt_id"], p["stufe"]) for p in stich], [(ids[1], "stichprobe")])
-        self.assertTrue(bt.kontakt_frei(leaddb.get_lead(c, ids[1])))  # Stichprobe hält den Kontakt nicht auf
-        bt.entscheiden(c, "oskar", stich[0]["id"], False, "Zu klein")
-        empf = [r["title"] for r in leaddb.notices(c, "h", 30, "hamza")[0]]
-        self.assertIn("Lead abgelehnt: Sanitär 1", empf)  # Hamza lernt aus Oskars Stichprobe
-        kpi = bt.recherche_kpis(c, self.omid)
-        self.assertEqual((kpi["entschieden"], kpi["anteil"], kpi["offen"]), (3, 67, 0))
-        bt.kontakt(c, self.omid, ids[0], "telefon", "Inhaber erreicht")
-        self.assertEqual(leaddb.get_lead(c, ids[0])["stage"], "kontaktiert")
-        self.assertTrue(firma.protokoll(c, art="pruefung"))
-        del lead
-
-    def test_lernstufen(self):
-        bt, c = self.bt, self.c
-        firma.person_aendern(c, "oskar", self.omid, "Omid Beispiel", "recherche", bereiche_neu=["akquise"], lernstufe=2)
-        geprueft = []
-        for n in range(6):
-            lid = lead_anlegen(c, f"Lead {n}")
-            geprueft.append(bt.eingang(c, lid, self.omid).get("pruef_status") == "wartet")
-        self.assertEqual(geprueft, [True, False, False, False, False, True])  # Stufe 2: jeder 5.
-        firma.person_aendern(c, "oskar", self.omid, "Omid Beispiel", "recherche", bereiche_neu=["akquise"], lernstufe=4)
-        self.assertNotIn("pruef_status", bt.eingang(c, lead_anlegen(c, "Frei"), self.omid))
-        self.assertNotIn("pruef_status", bt.eingang(c, lead_anlegen(c, "Gründer"), "oskar"))  # ohne Lernstufe
-
-    def test_auswertung_nur_kalt(self):
-        bt, c = self.bt, self.c
-        k1 = lead_anlegen(c, "Studio A", "video", testbranche="video", herkunft="kalt", stage="kontaktiert",
-                          sent_at=HEUTE)
-        k2 = lead_anlegen(c, "Studio B", "video", testbranche="video", stage="gespraech", sent_at=HEUTE,
-                          replied_at=HEUTE)
-        lead_anlegen(c, "Freund C", "video", testbranche="video", herkunft="warm", stage="kunde", sent_at=HEUTE)
-        lead_anlegen(c, "Abgelehnt D", "video", testbranche="video", pruef_status="abgelehnt")
-        self.assertTrue(bt.preisgespraech(c, "oskar", k2))
-        self.assertFalse(bt.preisgespraech(c, "oskar", k2))  # schon markiert
-        video = next(z for z in bt.auswertung(c) if z["key"] == "video")
-        self.assertEqual((video["kalt"]["betriebe"], video["kalt"]["kontakte"], video["kalt"]["antworten"],
-                          video["kalt"]["gespraeche"], video["kalt"]["preisgespraeche"], video["kalt"]["abschluesse"]),
-                         (2, 2, 1, 1, 1, 0))
-        self.assertEqual((video["warm"]["betriebe"], video["warm"]["abschluesse"]), (1, 1))
-        self.assertEqual((video["ampel"], video["antwortquote"]), ("gelb", 50))
-        for n in range(2):
-            bt.preisgespraech(c, "oskar", lead_anlegen(c, f"P{n}", testbranche="video", stage="angebot"))
-        self.assertEqual(next(z for z in bt.auswertung(c) if z["key"] == "video")["ampel"], "gruen")
-        bt.herkunft_setzen(c, "oskar", k1, "warm", "video")
-        self.assertEqual(leaddb.get_lead(c, k1)["herkunft"], "warm")
-
-    def test_kontakt_regeln(self):
-        bt, c = self.bt, self.c
-        lid = lead_anlegen(c, "Elektro E", "elektro")
-        with self.assertRaises(bt.BranchentestError):  # Erstkontakt per Mail ausgeschaltet
-            bt.kontakt(c, "oskar", lid, "email")
-        lid_mail = lead_anlegen(c, "Elektro M", "elektro")
-        bt.kontakt(c, "oskar", lid_mail, "email", mail_erlaubt=True)  # eingeschaltet (Standard seit 02.11.2026)
-        self.assertEqual(leaddb.get_lead(c, lid_mail)["stage"], "kontaktiert")
-        with self.assertRaises(bt.BranchentestError):
-            bt.kontakt(c, "oskar", lid, "fax")
-        bt.kontakt(c, "oskar", lid, "brief")
-        lead = leaddb.get_lead(c, lid)
-        self.assertEqual((lead["stage"], lead["owner"], lead["channel"]), ("kontaktiert", "oskar", "brief"))
-        self.assertTrue(lead["sent_at"])
-
-    def test_branche_und_regeln_speichern(self):
-        bt, c = self.bt, self.c
-        bt.branche_speichern(c, "oskar", "handwerk", "Handwerk", ["sanitaer", "elektro", "gibtsnicht"], self.omid, 40)
-        b = bt.branche(c, "handwerk")
-        self.assertEqual((b["person"], b["ziel"], b["nischen"]), (self.omid, 40, ["sanitaer", "elektro"]))
-        key = bt.branche_speichern(c, "oskar", None, "Steuerbüros", [], None, 50)
-        self.assertEqual(key, "steuerbueros")
-        with self.assertRaises(bt.BranchentestError):
-            bt.branche_speichern(c, "oskar", None, "", [], None, 50)
-        with self.assertRaises(bt.BranchentestError):
-            bt.regeln_speichern(c, "oskar", {"stufe2": "0", "stufe3": "10", "stichprobe": "5", "preisgespraeche": "3"})
-        bt.regeln_speichern(c, "oskar", {"stufe2": "3", "stufe3": "10", "stichprobe": "5", "preisgespraeche": "4"})
-        self.assertEqual(bt.regeln(c)["preisgespraeche"], 4)
-        lid = lead_anlegen(c, "Kandidat", "elektro")
-        self.assertEqual([k["id"] for k in bt.kandidaten(c, "handwerk")], [lid])
-
-
-class BranchentestWebTest(WebBasis):
-    def test_seiten_rendern(self):
-        from app import branchentest as bt
-        c = self.c
-        lid = lead_anlegen(c, "Webtest Sanitär", "sanitaer")
-        self.addCleanup(lambda: (c.execute("DELETE FROM leads WHERE id=?", (lid,)),
-                                 c.execute("DELETE FROM freigaben WHERE objekt_id=?", (lid,)), c.commit()))
-        c.execute("UPDATE team SET lernstufe=1 WHERE key='hamza'")
-        c.commit()
-        self.addCleanup(lambda: (c.execute("UPDATE team SET lernstufe=1 WHERE key='hamza'"), c.commit()))
-        bt.eingang(c, lid, "hamza")  # Hamza auf Lernstufe 1: Oskar prüft
-        for url in ("/branchentest", "/branchentest/handwerk", "/branchentest/pruefen", f"/leads/{lid}", "/mein-tag",
-                    "/leads"):
-            self.assertEqual(self.client.get(url).status_code, 200, url)
-        self.assertIn("Webtest Sanitär", self.client.get("/branchentest/pruefen").get_data(as_text=True))
-        self.assertIn("Leads prüfen", self.client.get("/mein-tag").get_data(as_text=True))
-        self.assertEqual(self.post(f"/leads/{lid}/mark-sent", {"channel": "telefon"}).status_code, 409)
-        fid = bt.offene_pruefung(c, lid)["id"]
-        self.als("hamza")
-        self.assertEqual(self.post(f"/branchentest/pruefung/{fid}", {"angenommen": "1"}).status_code, 403)
-        self.assertEqual(self.post("/branchentest/regeln", {"stufe2": "5"}).status_code, 403)  # nur Verwalten
-        self.als("oskar")
-        r = self.post(f"/branchentest/pruefung/{fid}", {"angenommen": "1"}, headers={"X-Requested-With": "fetch"})
-        self.assertTrue(r.get_json()["ok"])
-        r = self.post(f"/leads/{lid}/kontakt", {"kanal": "telefon", "notiz": "erreicht"},
-                      headers={"X-Requested-With": "fetch"})
-        self.assertTrue(r.get_json()["ok"], r.get_data(as_text=True))
-        self.post(f"/leads/{lid}/preisgespraech", {"an": "1"})
-        self.assertTrue(leaddb.get_lead(c, lid)["preisgespraech_am"])
 
 
 # ---------------------------------------------------------------- Stufe 3: Kalender und Termine
@@ -695,11 +544,6 @@ class KalenderTest(unittest.TestCase):
         self.assertEqual(k.konto(c, "finn")["status"], "abgelaufen")
         self.assertIn("Google-Kalender neu verbinden", [r["title"] for r in leaddb.notices(c, "f", 9, "finn")[0]])
         self.assertFalse(k.verbunden(c, "finn"))
-
-    def test_lead_in_pruefung_bekommt_keinen_termin(self):
-        lid = lead_anlegen(self.c, "Wartet", pruef_status="wartet")
-        with self.assertRaises(self.k.KalenderError):
-            self.k.anlegen(self.c, "oskar", "Zu früh", self.morgen10, lead_id=lid)
 
     def test_vorschlaege_um_alle_herum(self):
         k, c = self.k, self.c
@@ -855,7 +699,7 @@ class KalenderWebTest(WebBasis):
                                  self.c.execute("DELETE FROM termin_teilnehmer WHERE termin_id=?", (tid,)),
                                  self.c.commit()))
         for url in ("/kalender", "/kalender?ansicht=alle", f"/kalender/{tid}", "/kalender/mein",
-                    "/einstellungen/kalender", "/mein-tag", "/kalender/vorschlaege.json?personen=oskar&dauer=30"):
+                    "/einstellungen/kalender", "/aufgaben", "/kalender/vorschlaege.json?personen=oskar&dauer=30"):
             self.assertEqual(self.client.get(url).status_code, 200, url)
         self.assertIn("Webtest Termin", self.client.get("/kalender").get_data(as_text=True))
         self.post("/kalender/abo/neu")
@@ -920,8 +764,7 @@ class KpiTest(unittest.TestCase):
         tid = c.execute("SELECT MAX(id) FROM termine").fetchone()[0]
         kalender.ergebnis(c, "oskar", tid, "stattgefunden")
         crm.set_stage(c, lid, "kunde", author="Oskar Jacobsen")
-        from app import branchentest
-        branchentest.kontakt(c, self.omid, lead_anlegen(c, "Kontakt K"), "telefon")
+        leaddb.add_event(c, lead_anlegen(c, "Kontakt K"), "kontakt", "Angerufen.", author=self.omid)
         aid = aufgaben.anlegen(c, "oskar", "X", "markt", HEUTE, person="oskar")
         aufgaben.erledigen(c, "oskar", aid)
         leaddb.record_usage(c, "entwurf", "m", {"input": 0, "output": 0, "cache_write": 0, "cache_read": 0}, 1.0, person="oskar")
@@ -1062,7 +905,7 @@ class CockpitWebTest(WebBasis):
                                  c.execute("DELETE FROM person_bereiche WHERE person=?", (omid,)),
                                  c.execute("DELETE FROM ziele"), c.commit()))
         for url in ("/cockpit", f"/cockpit?person={omid}", "/cockpit?woche=2026-W01", "/wochengespraech",
-                    "/mein-tag"):
+                    "/aufgaben"):
             self.assertEqual(self.client.get(url).status_code, 200, url)
         r = self.post("/ziele/neu", {"person": omid, "text": "Zehn Leads", "kpi": "qualifizierte_leads",
                                      "zielwert": "10"}, headers={"X-Requested-With": "fetch"})
@@ -1077,7 +920,7 @@ class CockpitWebTest(WebBasis):
         self.assertEqual(self.post("/cockpit/lernstufen", {"wochen": "1"}).status_code, 403)
         r = self.post("/ziele/neu", {"person": "finn", "text": "Fremdes Ziel"})
         self.assertEqual(r.status_code, 403)
-        self.assertIn("Meine Wochenziele", self.client.get("/mein-tag").get_data(as_text=True))
+        self.assertIn("Meine Wochenziele", self.client.get("/aufgaben").get_data(as_text=True))
         self.assertEqual(kpis.woche_von(date(2026, 11, 1)), "2026-W44")
 
 
@@ -1242,7 +1085,7 @@ class ProjektWebTest(WebBasis):
         crm.set_stage(c, lid, "kunde", author="oskar")
         pid = projekte.zum_lead(c, lid)["id"]
         self.addCleanup(lambda: (c.execute("DELETE FROM projekte WHERE id=?", (pid,)), c.commit()))
-        for url in ("/kunden", f"/kunden/{pid}", "/einstellungen/projekte", f"/leads/{lid}", "/mein-tag", "/cockpit"):
+        for url in ("/kunden", f"/kunden/{pid}", "/einstellungen/projekte", f"/leads/{lid}", "/aufgaben", "/cockpit"):
             self.assertEqual(self.client.get(url).status_code, 200, url)
         r = self.post(f"/kunden/{pid}/aktion", {"was": "aenderung", "text": "Bitte Farbe ändern"},
                       headers={"X-Requested-With": "fetch"})
@@ -1252,7 +1095,7 @@ class ProjektWebTest(WebBasis):
                       headers={"X-Requested-With": "fetch"})
         self.assertTrue(r.get_json()["ok"], r.get_data(as_text=True))
         self.post("/zeit/start", {"typ": "projekt", "id": pid})
-        self.assertIn("Zeit läuft", self.client.get("/mein-tag").get_data(as_text=True))
+        self.assertIn("Zeit läuft", self.client.get("/aufgaben").get_data(as_text=True))
         self.post("/zeit/stopp")
         self.als("hamza")
         self.assertEqual(self.client.get("/kunden").status_code, 403)  # Recherche sieht keine Kunden
@@ -1281,12 +1124,9 @@ class FreigabeZentraleTest(unittest.TestCase):
                               gaeste="kunde@example.de", lead_id=lid)
 
     def test_alle_arten_an_einer_stelle(self):
-        from app import branchentest as bt, projekte, crm
+        from app import projekte, crm
         f, c = self.f, self.c
         tid = self.einladung()
-        omid = firma.person_anlegen(c, "oskar", "Omid Beispiel", "recherche", bereiche_neu=["akquise"], lernstufe=1)
-        lid = lead_anlegen(c, "Sanitär Zentrale", "sanitaer")
-        bt.eingang(c, lid, omid)
         # Anforderung im Projekt: wartet auf beide Freigaben (Verantwortlich und Technik)
         kid = lead_anlegen(c, "Projekt Zentrale", stage="angebot", owner="oskar")
         crm.set_stage(c, kid, "kunde", author="Oskar")
@@ -1303,7 +1143,7 @@ class FreigabeZentraleTest(unittest.TestCase):
         self.assertIn(("termin_einladung", f.offen(c, "oskar")[0]["oid"]), oskar)
         self.assertEqual({a for a, _ in oskar}, {"termin_einladung", "anforderung", "erstkontakt"})
         self.assertIn(("anforderung", pid), oskar)
-        self.assertEqual({x["art"] for x in f.offen(c, "hamza")}, {"lead_pruefung"})
+        self.assertEqual(f.offen(c, "hamza"), [])  # Lead-Prüfung gibt es nicht mehr
         self.assertEqual({x["art"] for x in f.offen(c, "finn")}, {"anforderung"})  # Technik gibt das Wie frei
         self.assertEqual(f.zaehlen(c, "oskar"), len(oskar))
         # Entscheiden aus der Zentrale: jede Art prüft selbst, wer darf
@@ -1319,15 +1159,10 @@ class FreigabeZentraleTest(unittest.TestCase):
         f.entscheiden(c, "oskar", "anforderung", pid, True)
         f.entscheiden(c, "finn", "anforderung", pid, True)
         self.assertEqual({x["art"] for x in f.offen(c, "oskar")}, {"erstkontakt"})
-        pf = f.offen(c, "hamza")[0]
-        with self.assertRaises(Exception):
-            f.entscheiden(c, omid, "lead_pruefung", pf["oid"], True)  # nicht die eigene Recherche
-        f.entscheiden(c, "hamza", "lead_pruefung", pf["oid"], False, "Keine Website")
-        self.assertEqual(leaddb.get_lead(c, lid)["pruef_status"], "abgelehnt")
         # „Alle offenen“: wer verwaltet, sieht auch, was bei anderen liegt
         alle = f.offen(c, "finn", alle=True)
         self.assertIn("erstkontakt", {x["art"] for x in alle})
-        self.assertEqual(f.offen(c, omid, alle=True), [])
+        self.assertEqual(f.offen(c, "hamza", alle=True), [])
 
     def test_stufen_je_aktion_und_frist_b(self):
         f, k, c = self.f, self.k, self.c
@@ -1502,7 +1337,7 @@ class FreigabenWebTest(WebBasis):
         from app import freigaben, notfall
         c = self.c
         for url in ("/freigaben", "/freigaben?alle=1", "/entscheidungen", "/notfall", "/einstellungen/freigaben",
-                    "/mein-tag", "/wochengespraech", "/einstellungen"):
+                    "/aufgaben", "/wochengespraech", "/einstellungen"):
             self.assertEqual(self.client.get(url).status_code, 200, url)
         r = self.post("/entscheidungen", {"titel": "Web-Entscheidung", "begruendung": "Weil es passt",
                                           "recht": "kundenversprechen", "quelle": "wochengespraech"},
@@ -1516,7 +1351,7 @@ class FreigabenWebTest(WebBasis):
         self.als("finn")
         html = self.client.get("/freigaben").get_data(as_text=True)
         self.assertIn("Web-Entscheidung", html)
-        self.assertIn("Freigaben", self.client.get("/mein-tag").get_data(as_text=True))
+        self.assertIn("Freigaben", self.client.get("/aufgaben").get_data(as_text=True))
         fid = next(x["oid"] for x in freigaben.offen(c, "finn") if x["art"] == "entscheidung")
         r = self.post(f"/freigaben/entscheidung/{fid}", {"ok": "1"}, headers={"X-Requested-With": "fetch"})
         self.assertTrue(r.get_json().get("ok"), r.get_json())
@@ -1936,7 +1771,7 @@ class FinanzenWebTest(WebBasis):
         self.assertEqual((r.status_code, r.mimetype), (200, "application/zip"))
         self.als("hamza")
         self.assertEqual(self.client.get("/finanzen").status_code, 403)
-        self.assertNotIn("/finanzen/rechnung/", self.client.get("/mein-tag").get_data(as_text=True))
+        self.assertNotIn("/finanzen/rechnung/", self.client.get("/aufgaben").get_data(as_text=True))
 
 
 # ---------------------------------------------------------------- Stufe 9: Ein Posteingang
@@ -2097,14 +1932,14 @@ class PosteingangWebTest(WebBasis):
                                  c.execute("DELETE FROM messages WHERE lead_id=?", (lid,)), c.commit()))
         r = self.post(f"/crm/postfach/{lid}/festhalten", {"kanal": "brief", "richtung": "in", "text": "Brief mit Wunsch"})
         self.assertTrue(r.get_json()["ok"], r.get_data(as_text=True))
-        html = self.client.get(f"/crm/postfach/{lid}").get_data(as_text=True)
+        html = self.client.get(f"/chat/{lid}").get_data(as_text=True)
         self.assertIn("Brief mit Wunsch", html)
         self.assertIn("Als Wunsch übernehmen", html)
-        self.assertIn("Wartet auf unsere Antwort seit", html)
+        self.assertIn("wartet seit", html)
         mid = c.execute("SELECT id FROM messages WHERE lead_id=? AND kanal='brief'", (lid,)).fetchone()[0]
         r = self.post(f"/crm/postfach/nachricht/{mid}/wunsch", {"ja": "1"})
         self.assertTrue(r.get_json()["ok"])
-        self.assertIn("wartet seit", self.client.get("/crm/postfach?wer=alle").get_data(as_text=True))
+        self.assertIn("Wartet auf euch", self.client.get("/chat?wer=alle").get_data(as_text=True))
         self.assertEqual(self.client.get("/einstellungen/postfaecher").status_code, 200)
         r = self.post("/einstellungen/postfaecher", {"name": "Kontakt", "adresse": "kontakt2@ylvalabs.de",
                                                      "passwort": "x", "imap_host": "imap.example.de",
@@ -2112,11 +1947,11 @@ class PosteingangWebTest(WebBasis):
                       headers={"X-Requested-With": "fetch"})
         self.assertTrue(r.get_json()["ok"], r.get_data(as_text=True))
         self.addCleanup(lambda: (c.execute("DELETE FROM postfaecher"), c.commit()))
-        self.assertIn("Kontakt (kontakt2@ylvalabs.de)", self.client.get(f"/crm/postfach/{lid}").get_data(as_text=True))
+        self.assertIn("Kontakt (kontakt2@ylvalabs.de)", self.client.get(f"/crm/postfach/{lid}?alt=1").get_data(as_text=True))
         self.als("hamza")
         self.assertEqual(self.client.get("/einstellungen/postfaecher").status_code, 403)
         # Ein Postfach des Teams steht allen beim Antworten zur Wahl
-        self.assertIn("Kontakt (kontakt2@ylvalabs.de)", self.client.get(f"/crm/postfach/{lid}").get_data(as_text=True))
+        self.assertIn("Kontakt (kontakt2@ylvalabs.de)", self.client.get(f"/crm/postfach/{lid}?alt=1").get_data(as_text=True))
 
 
 if __name__ == "__main__":
@@ -2340,10 +2175,10 @@ class AssistentWebTest(WebBasis):
     def test_seiten_und_rechte(self):
         aid0 = aufgaben.anlegen(self.c, "oskar", "Angebot vorbereiten", "markt", HEUTE, person="oskar")
         self.addCleanup(lambda: (self.c.execute("DELETE FROM aufgaben WHERE id=?", (aid0,)), self.c.commit()))
-        for url in ("/assistent", "/einstellungen/assistent", "/angebote", "/mein-tag"):
+        for url in ("/assistent", "/einstellungen/assistent", "/angebote", "/aufgaben"):
             r = self.client.get(url)
             self.assertEqual(r.status_code, 200, url)
-        self.assertIn("Was zuerst?", self.client.get("/mein-tag").get_data(as_text=True))
+        self.assertIn("Angebot vorbereiten", self.client.get("/aufgaben").get_data(as_text=True))  # im Stapel
         lid = lead_anlegen(self.c, "Malerei Web", stage="gespraech", owner="oskar")
         r = self.post("/angebote/neu", {"lead_id": lid, "ki": "0"}, headers={"X-Requested-With": "fetch"})
         self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
@@ -2422,11 +2257,11 @@ class StartklarTest(WebBasis):
         self.assertIn("Für den Start", html)
         self.assertIn("Firmendaten für Rechnungen", html)
         self.assertIn("Startklar", self.client.get("/einstellungen").get_data(as_text=True))
-        self.assertIn("bis zum Start", self.client.get("/mein-tag").get_data(as_text=True))
+        self.assertIn("bis zum Start", self.client.get("/aufgaben").get_data(as_text=True))
         self.assertIn("osPush", self.client.get("/profil").get_data(as_text=True))
         self.als("hamza")
         self.assertEqual(self.client.get("/einstellungen/startklar").status_code, 403)
-        self.assertNotIn("bis zum Start", self.client.get("/mein-tag").get_data(as_text=True))
+        self.assertNotIn("bis zum Start", self.client.get("/aufgaben").get_data(as_text=True))
 
 
 class GoogleDateiTest(WebBasis):
@@ -2793,7 +2628,7 @@ class ArbeitsbereicheTest(unittest.TestCase):
             self.assertEqual(agent.S("ORG_NAME"), "Kunde A")
             self.assertEqual(agent.S("LEADS_SENDER_NAME"), "Maria Muster")
             self.assertFalse(agent.S("OUTREACH_EMAIL"))  # Standard aus, bis der Kunde es bestätigt
-            self.assertEqual(agent.S("LEADS_RULE_MIN"), agent.CFG["settings"]["LEADS_RULE_MIN"])  # Rückfall
+            self.assertEqual(agent.S("LEADS_FOLLOWUP_DAYS"), agent.CFG["settings"]["LEADS_FOLLOWUP_DAYS"])  # Rückfall
         ohne = kunde_anlegen(self.c, "Kunde ohne Postfach", postfach=False)
         with self.ab.im(ohne):
             self.assertEqual(agent.S("OUTREACH_USER"), "")  # nie das Postfach von Ylva Labs
@@ -2875,7 +2710,7 @@ class ArbeitsbereicheWebTest(WebBasis):
         self.addCleanup(aufraeumen)
 
     def test_auswahl_und_wechsel(self):
-        html = self.client.get("/leads").get_data(as_text=True)
+        html = self.client.get("/crm").get_data(as_text=True)
         self.assertIn("ab-pick", html)
         self.assertIn("Kunde Web", html)
         self.assertNotIn("Gärtnerei Kunde Web", self.client.get("/crm?wer=alle").get_data(as_text=True))
@@ -2903,7 +2738,7 @@ class ArbeitsbereicheWebTest(WebBasis):
         html = self.client.get(f"/einstellungen/arbeitsbereiche/{self.kunde}").get_data(as_text=True)
         self.assertIn("Akquise-Postfach des Kunden", html)
         r = self.post(f"/einstellungen/arbeitsbereiche/{self.kunde}", {"name": "Kunde Web", "aktiv": "1",
-                                                                         "LEADS_RULE_MIN": "abc"},
+                                                                         "LEADS_FOLLOWUP_DAYS": "abc"},
                       headers={"X-Requested-With": "fetch"})
         self.assertEqual(r.status_code, 400)
 
@@ -3433,13 +3268,13 @@ class AgentenWebTest(WebBasis):
                     "/einstellungen/protokoll?wer=agent:*", "/einstellungen"):
             self.assertEqual(self.client.get(url).status_code, 200, url)
         self.assertIn("/mcp/outreach", self.client.get("/einstellungen/agenten/einrichten").get_data(as_text=True))
-        self.assertIn("In 5 Schritten einrichten", self.client.get("/mein-tag").get_data(as_text=True))
+        self.assertIn("Agents einrichten", self.client.get("/aufgaben").get_data(as_text=True))
         fid = _agent_freigabe(c, "ops", art="entscheidung", titel="Rechnungs-Erinnerung schicken")[0]
         agenten.info(c, "ops", "Rechnungen geprüft", "Nichts überfällig.")
         html = self.client.get("/freigaben").get_data(as_text=True)
         self.assertIn("Rechnungs-Erinnerung schicken", html)
         self.assertIn("Empfohlen", html)
-        tag = self.client.get("/mein-tag").get_data(as_text=True)
+        tag = self.client.get("/aufgaben").get_data(as_text=True)
         self.assertIn("Rechnungen geprüft", tag)
         self.assertIn("Rechnungs-Erinnerung schicken", tag)
         r = self.post(f"/freigaben/agent/{fid}", {"aktion": "option", "option": "B"}, headers={"X-Requested-With": "fetch"})
@@ -3462,3 +3297,103 @@ class AgentenWebTest(WebBasis):
         self.assertNotIn("Nur für Oskar", self.client.get("/freigaben").get_data(as_text=True))
         r = self.post(f"/freigaben/agent/{fid}", {"aktion": "option", "option": "A"}, headers={"X-Requested-With": "fetch"})
         self.assertEqual(r.status_code, 400)
+
+
+class SlackUeberAgentsTest(unittest.TestCase):
+    """Stufe 13: Slack (und WhatsApp, LinkedIn) laufen über die Agents. Sie tragen ein, was reinkommt, und
+    verschicken, was im Chat beantwortet wurde."""
+
+    def setUp(self):
+        self.c = frische_db()
+
+    def test_eintragen_senden_melden(self):
+        from app import mcp_server
+        c = self.c
+        lid = lead_anlegen(c, "Slack Kunde", stage="gespraech")
+        d, f = mcp_server.aufrufen(c, "agent:outreach", "nachricht_eintragen",
+                                   {"lead_id": lid, "kanal": "slack", "richtung": "in", "text": "Moin, kurze Frage",
+                                    "extern_id": "T1", "zeitpunkt": "2026-11-25T09:30"})
+        self.assertFalse(f, d)
+        self.assertTrue(d["eingetragen"])
+        d2, _ = mcp_server.aufrufen(c, "agent:outreach", "nachricht_eintragen",
+                                    {"lead_id": lid, "kanal": "slack", "text": "Moin, kurze Frage", "extern_id": "T1"})
+        self.assertFalse(d2["eingetragen"])  # dieselbe Nachricht nur einmal
+        row = c.execute("SELECT direction, kanal, read, at FROM messages WHERE lead_id=?", (lid,)).fetchone()
+        self.assertEqual(tuple(row), ("in", "slack", 0, "2026-11-25T09:30:00"))  # ungelesen: wartet im Chat
+        _, f = mcp_server.aufrufen(c, "agent:outreach", "nachricht_eintragen",
+                                   {"lead_id": lid, "kanal": "telefon", "text": "x"})
+        self.assertTrue(f)  # Telefon trägt man von Hand ein, nicht über Agents
+        # Antwort aus dem Chat wartet, bis ein Agent sie verschickt
+        from app import posteingang
+        mid = posteingang.zum_senden(c, "oskar", lid, "slack", "Ja, morgen 10 Uhr.")
+        d, _ = mcp_server.aufrufen(c, "agent:outreach", "nachrichten_zu_senden", {})
+        self.assertEqual([x["id"] for x in d["zu_senden"]], [mid])
+        self.assertEqual(mcp_server.aufrufen(c, "agent:outreach", "nachrichten_zu_senden", {"kanal": "whatsapp"})[0]
+                         ["zu_senden"], [])
+        d, f = mcp_server.aufrufen(c, "agent:outreach", "nachricht_gesendet_melden", {"nachricht_id": mid})
+        self.assertFalse(f, d)
+        self.assertEqual(c.execute("SELECT versand FROM messages WHERE id=?", (mid,)).fetchone()[0], "gesendet")
+        _, f = mcp_server.aufrufen(c, "agent:outreach", "nachricht_gesendet_melden", {"nachricht_id": mid})
+        self.assertTrue(f)  # nicht zweimal
+        with self.assertRaises(posteingang.PosteingangError):
+            posteingang.zum_senden(c, "oskar", lid, "mail", "Über Mail schickt das OS selbst")
+
+
+class AufgabenstapelWebTest(WebBasis):
+    """Stufe 13: Aufgaben wie im Cockpit: eine Zahl, Starten, eine Karte pro Bildschirm."""
+
+    def test_stapel_fokus_und_entscheiden(self):
+        from app import stapel
+        c = self.c
+        fid = _agent_freigabe(c, "ops", titel="Stapel-Test entscheiden")[0]
+        self.addCleanup(lambda: (c.execute("DELETE FROM freigaben WHERE id=?", (fid,)),
+                                 c.execute("DELETE FROM entscheidungen WHERE titel LIKE 'Stapel-Test%'"), c.commit()))
+        items = stapel.stapel(c, "oskar")
+        self.assertIn(f"agent:{fid}", [x["key"] for x in items])
+        self.assertEqual(items[0]["typ"], "agent")  # Freigaben vor allem anderen
+        html = self.client.get("/aufgaben").get_data(as_text=True)
+        self.assertIn("Starten", html)
+        self.assertIn("Stapel-Test entscheiden", html)
+        r = self.client.get("/aufgaben/fokus?neu=1")
+        self.assertEqual(r.headers["Location"], "/aufgaben/fokus")
+        karte = self.client.get("/aufgaben/fokus").get_data(as_text=True)
+        self.assertIn("Stapel-Test entscheiden", karte)
+        self.assertIn('data-taste="1"', karte)  # Optionen per Taste 1–3
+        # Jetzt nicht: die nächste Karte kommt, die übersprungene bleibt offen
+        self.post("/aufgaben/fokus/weiter", {"key": f"agent:{fid}"})
+        self.assertNotIn("Stapel-Test entscheiden", self.client.get("/aufgaben/fokus").get_data(as_text=True))
+        self.assertEqual(c.execute("SELECT status FROM freigaben WHERE id=?", (fid,)).fetchone()[0], "offen")
+        # neu starten: wieder vorne, dann entscheiden
+        self.client.get("/aufgaben/fokus?neu=1")
+        r = self.post(f"/freigaben/agent/{fid}", {"aktion": "option", "option": "A", "next": "/aufgaben/fokus"},
+                      headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"], r.get_json())
+        self.assertNotIn(f"agent:{fid}", [x["key"] for x in stapel.stapel(c, "oskar")])
+        # alte Links auf die Liste führen weiter
+        self.assertEqual(self.client.get("/aufgaben?ansicht=alle").headers["Location"], "/aufgaben/alle?ansicht=alle")
+        self.assertEqual(self.client.get("/mein-tag").headers["Location"], "/aufgaben")
+
+    def test_pipeline_und_chat(self):
+        from app import posteingang
+        c = self.c
+        html = self.client.get("/pipeline").get_data(as_text=True)
+        for text in ("Agents heute", "Ops", "Outreach", "Freigaben offen"):
+            self.assertIn(text, html)
+        lid = lead_anlegen(c, "Chat Kunde", stage="gespraech", owner="oskar", email="chat@kunde.example")
+        self.addCleanup(lambda: (c.execute("DELETE FROM messages WHERE lead_id=?", (lid,)),
+                                 c.execute("DELETE FROM leads WHERE id=?", (lid,)), c.commit()))
+        posteingang.agent_nachricht(c, "agent:outreach", lid, "slack", "in", "Moin aus Slack", extern_id="S9")
+        liste = self.client.get("/chat").get_data(as_text=True)
+        self.assertIn("Wartet auf euch", liste)
+        self.assertIn("Chat Kunde", liste)
+        verlauf = self.client.get(f"/chat/{lid}").get_data(as_text=True)
+        self.assertIn("Moin aus Slack", verlauf)
+        self.assertIn('data-ch-kanal="slack" class="on"', verlauf)  # Antwort auf dem Kanal der letzten Nachricht
+        r = self.post(f"/chat/{lid}/senden", {"kanal": "slack", "text": "Gern, bis gleich."},
+                      headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"], r.get_data(as_text=True))
+        self.assertIn("wartet auf Versand durch einen Agent", self.client.get(f"/chat/{lid}").get_data(as_text=True))
+        self.assertEqual([x["lead_id"] for x in posteingang.offene_sendungen(c, "slack")], [lid])
+        c.execute("UPDATE messages SET versand=NULL WHERE lead_id=?", (lid,))
+        c.commit()
+        self.assertEqual(self.client.get(f"/crm/postfach/{lid}").headers["Location"], f"/chat/{lid}")

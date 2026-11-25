@@ -90,7 +90,7 @@ def frage():
 @bp.post("/assistent/was-zuerst")
 @login_required
 def was_zuerst():
-    nxt = safe_next(request.form.get("next", "")) or url_for("aufgaben.mein_tag")
+    nxt = safe_next(request.form.get("next", "")) or url_for("stapel.start")
     try:
         assistent.prioritaeten_ki(db(), me())
     except assistent.AssistentError as exc:

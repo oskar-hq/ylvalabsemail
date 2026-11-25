@@ -46,7 +46,7 @@ Markt und Kunden → oskar), keine Slack-Liste mehr. Nachhalten mit aufgaben_suc
 4. Rechnungs-Check: Rechnungen lesen, überfällige als Aufgabe für Oskar oder als Mail-Entwurf zur Freigabe \
 (art=mail). „Nichts überfällig“ nur als info_melden.
 5. Termin-Briefings: termine (heute, morgen) und lead_akte lesen, Briefing als notiz_anlegen am Lead.
-6. Tages-Digest: statt Slack-Digest ein info_melden mit 3–5 Zeilen (erscheint auf Mein Tag).""",
+6. Tages-Digest: statt Slack-Digest ein info_melden mit 3–5 Zeilen (erscheint bei den Aufgaben unter „Von den Agents“).""",
     "delivery": """1. freigaben_status: Entschiedenes umsetzen.
 2. kunden_und_projekte: je Projekt Phase, offene Änderungswünsche und Abnahme-Punkte prüfen.
 3. Status-Updates an Kunden als entwurf_anlegen (art=mail, antwort=true im bestehenden Verlauf) und \

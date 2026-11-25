@@ -268,9 +268,9 @@ def _einsortieren(c, p, msg, mid, start):
     if mailbox.ist_sonstige(c, lead_id):
         pass  # Unbekannte, die wir nie angeschrieben haben: still unter „Sonstige“, keine Meldung
     elif fuer:
-        aufgaben.melden(c, fuer, titel, (text or subject)[:200], f"/crm/postfach/{lead_id}")
+        aufgaben.melden(c, fuer, titel, (text or subject)[:200], f"/chat/{lead_id}")
     else:
-        leaddb.add_notice(c, titel, (text or subject)[:200], f"/crm/postfach/{lead_id}")
+        leaddb.add_notice(c, titel, (text or subject)[:200], f"/chat/{lead_id}")
     nach_eingang(c, lead_id, mid_db)
     return True
 
@@ -408,7 +408,7 @@ def nach_eingang(c, lead_id, message_db_id):
     p = projekte.get(c, pid)
     if p and p["verantwortlich"]:
         aufgaben.melden(c, p["verantwortlich"], f"Möglicher Änderungswunsch: {p['kunde']}", (m["text"] or "")[:160],
-                        f"/crm/postfach/{lead_id}#m{message_db_id}")
+                        f"/chat/{lead_id}")
 
 
 def wunsch_entscheiden(c, wer, message_db_id, ja):

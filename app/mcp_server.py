@@ -541,7 +541,7 @@ def w_info(c, wer, a):
                            lead_id=a.get("lead_id"), projekt_id=a.get("projekt_id"))
     except agenten.AgentError as exc:
         raise Werkzeugfehler(str(exc)) from exc
-    return {"ok": True, "info_id": iid, "hinweis": "Steht im Tagesüberblick auf Mein Tag."}
+    return {"ok": True, "info_id": iid, "hinweis": "Steht bei den Aufgaben unter „Von den Agents“."}
 
 
 def w_nachricht(c, wer, a):
@@ -738,7 +738,7 @@ WERKZEUGE = {
     "info_melden": (
         "Info melden",
         "Reine Info ohne Entscheidung (z. B. „Markt-Scan fertig“, „Rechnungen geprüft, nichts offen“). Landet im "
-        "Tagesüberblick auf Mein Tag, nicht als Freigabe. fuer = Person, leer = alle.",
+        "Aufgaben-Seite unter „Von den Agents“, nicht als Freigabe. fuer = Person, leer = alle.",
         _obj({"titel": S, "text": S, "fuer": S, **BEZUG}, ["titel"]), w_info, None, 0, True),
 }
 

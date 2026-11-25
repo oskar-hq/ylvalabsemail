@@ -32,6 +32,7 @@
       <a class="ch-zurueck" href="{{ url_for('crm.chat', wer=wer if wer == 'alle' else None) }}" aria-label="Zurück zur Liste">{{ i('back') }}</a>
       {{ avatar(lead.contact_name or lead.name) }}
       <span class="ch-kopf-txt"><b>{{ lead.contact_name or lead.name }}</b><span>{{ lead.name if lead.contact_name else '' }}{% if lead.email %} · {{ lead.email }}{% endif %}{% if wartet_seit %} · wartet seit {{ wartet_seit|kurzdatum }}{% endif %}</span></span>
+      <a class="os-link leise" href="{{ url_for('crm.conversation', lead_id=lead.id, alt=1) }}" title="Postfach wählen, Stimmung, Notizen">Mehr</a>
       <a class="os-btn small quiet" href="{{ url_for('leads.detail', lead_id=lead.id) }}">Akte {{ i('pfeil') }}</a>
     </header>
     <div class="ch-verlauf" data-ch-verlauf>
@@ -42,6 +43,11 @@
         <span class="ch-meta">{{ m.who }} · {{ m.at[11:16] }}{% if (m.kanal or 'mail') != 'mail' %} · {{ kanal_namen.get(m.kanal, m.kanal) }}{% endif %}{% if m.subject and (m.kanal or 'mail') == 'mail' %} · {{ m.subject|truncate(60) }}{% endif %}
           {% if m.versand == 'wartet' %} · <span class="ch-warte">wartet auf Versand durch einen Agent</span>{% elif m.versand == 'fehler' %} · <span class="os-late">nicht verschickt</span>{% endif %}</span>
         <p>{{ m.text }}</p>
+        {% if m.wunsch == 'vorschlag' %}<div class="ch-wunsch"><span class="os-caption">Möglicher Änderungswunsch für das laufende Projekt.</span>
+          {% if wunsch_darf %}<div class="os-btns">{% for ja, label in [('1', 'Als Wunsch übernehmen'), ('0', 'Kein Wunsch')] %}
+            <form method="post" action="{{ url_for('crm.wunsch', mid=m.id) }}" data-os-fetch="reload"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="ja" value="{{ ja }}"><button class="os-btn small {{ 'quiet' if ja == '0' }}">{{ label }}</button></form>{% endfor %}</div>
+          {% else %}<span class="os-caption">Entscheidet die verantwortliche Person.</span>{% endif %}</div>
+        {% elif m.wunsch == 'uebernommen' %}<span class="ch-meta">Als Änderungswunsch übernommen.</span>{% endif %}
       </div>
       {% endfor %}
     </div>

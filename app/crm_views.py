@@ -199,6 +199,9 @@ def chat(lead_id=None):
                    "subject": mailbox.reply_subject((last_in or {}).get("subject") or lead["subject"] or lead["name"]),
                    "wartet_seit": posteingang.wartet_seit(c, lead_id), "von_hand": posteingang.VON_HAND,
                    "senders": team.members(c), "sender": _default_sender(lead)}
+        projekt = c.execute("SELECT verantwortlich FROM projekte WHERE lead_id=? AND status != 'beendet' ORDER BY id "
+                            "DESC LIMIT 1", (lead_id,)).fetchone()
+        kontext["wunsch_darf"] = bool(projekt) and (projekt["verantwortlich"] == me() or darf("kunden", 4))
     return render_template("chat.html", account=g.account, wartet=wartet, rest=rest, wer=wer, lead=lead, items=items,
                            **kontext)
 
@@ -349,7 +352,7 @@ def compose_mail():
         agent.send_new(c, lead, to, subject, text, who(), sender=sender)
     except Exception as exc:
         return jsonify(error=str(exc)), 502
-    return jsonify(ok=True, url=f"/crm/postfach/{lead['id']}")
+    return jsonify(ok=True, url=f"/chat/{lead['id']}")
 
 
 @bp.get("/crm/postfach/<int:lead_id>")
