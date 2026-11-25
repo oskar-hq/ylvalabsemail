@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Alte Daten entfernen · Ylva Labs{% endblock %}
+{% block content %}
+{% set stufen = {'neu': 'Neu', 'kontaktiert': 'Kontaktiert', 'antwort': 'Antwort', 'gespraech': 'Gespräch', 'angebot': 'Angebot', 'kunde': 'Kunde', 'verloren': 'Verloren'} %}
+<main class="os-page">
+  {{ toasts() }}
+  <a class="os-link leise" href="{{ url_for('settings.settings') }}">‹ Einstellungen</a>
+  <h1 class="os-title-l" style="margin-top:12px">Alte Daten entfernen</h1>
+  {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note small">{{ m }}</p>{% endfor %}{% endwith %}
+  <p class="os-sub">Neustart: Alles, was nicht angehakt ist, wird gelöscht, samt Nachrichten, Terminen, Projekten und Aufgaben.
+    Leads mit Rechnungen oder erfasster Zeit bleiben immer. Vorher legt das OS eine Sicherung im Datenordner ab.</p>
+
+  <div class="os-tiles" style="margin-top:16px">
+    <div class="os-tile alert"><span>Wird entfernt</span><b>{{ plan.leads_weg|length }}</b></div>
+    <div class="os-tile"><span>Bleibt</span><b>{{ plan.leads_bleiben|length }}</b></div>
+    <div class="os-tile zero"><span>Ohne Stufe (alte Suche)</span><b>{{ ohne_stufe }}</b></div>
+  </div>
+  <p class="os-caption">{{ plan.projekte_weg|length }} Projekte fallen mit weg.{% if plan.geschuetzt %} {{ plan.geschuetzt|length }} Leads bleiben wegen Rechnungen oder Zeiten.{% endif %}</p>
+
+  {% if admin %}
+  <form method="post" action="{{ url_for('settings.aufraeumen_los') }}" data-confirm="Wirklich alles nicht Angehakte löschen? Das lässt sich nur über die Sicherung zurückholen.">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <section class="os-section">
+      <h2 class="os-headline">Behalten</h2>
+      <ul class="os-list">{% for r in rows %}
+        <li><label class="os-row" style="gap:14px;cursor:pointer">
+          <input type="checkbox" name="behalten" value="{{ r.id }}" {{ 'checked' if r.id in behalten }} style="width:20px;height:20px">
+          <span class="os-txt"><b>{{ r.name }}</b><span>{{ stufen.get(r.stage, 'ohne Stufe') }}{% if r.city %} · {{ r.city }}{% endif %}{% if r.owner %} · {{ r.owner }}{% endif %} · #{{ r.id }}</span></span>
+        </label></li>{% endfor %}
+      </ul>
+    </section>
+    <div class="os-btns" style="margin-top:24px"><button class="os-btn ink">Alles andere entfernen {{ i('check') }}</button></div>
+  </form>
+  {% else %}
+  <p class="note warn small">Aufräumen darf nur, wer „Einstellungen: Verwalten“ hat.</p>
+  {% endif %}
+</main>
+{% endblock %}

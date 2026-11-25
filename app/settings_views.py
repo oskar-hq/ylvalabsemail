@@ -229,6 +229,52 @@ def software_request(kind):
 # ---------------------------------------------------------------- Sicherung
 
 
+def _aufraeumen_behalten(c):
+    """Vorauswahl „behalten“: aus dem Link (?behalten=1,2,3), sonst Kunden und von Agents angelegte Leads."""
+    roh = request.values.get("behalten")
+    if roh is not None:
+        return {int(x) for x in roh.replace(" ", "").split(",") if x.isdigit()}
+    return {r[0] for r in c.execute("SELECT id FROM leads WHERE arbeitsbereich=ab() AND (stage='kunde' OR "
+                                    "source_id LIKE 'agent:%')")}
+
+
+@bp.get("/einstellungen/aufraeumen")
+@login_required
+def aufraeumen_seite():
+    """Neustart: alte Leads aus der Anfangszeit entfernen. Wer Einstellungen verwaltet, wählt, was bleibt, und löscht
+    mit einem Klick (vorher wird eine Sicherung im Datenordner abgelegt)."""
+    from . import aufraeumen
+    from .leads_views import db
+    c = db()
+    behalten = _aufraeumen_behalten(c)
+    rows = [dict(r) for r in c.execute("SELECT id, name, city, stage, owner, updated_at FROM leads WHERE "
+                                       "arbeitsbereich=ab() AND (stage IS NOT NULL OR id IN (%s)) ORDER BY "
+                                       "stage='kunde' DESC, updated_at DESC" % ",".join(str(i) for i in behalten or {0}))]
+    p = aufraeumen.plan(c, behalten)
+    return render_template("aufraeumen.html", account=g.account, admin=is_admin(g.account), rows=rows,
+                           behalten=behalten, plan=p, ohne_stufe=c.execute(
+                               "SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND stage IS NULL").fetchone()[0])
+
+
+@bp.post("/einstellungen/aufraeumen")
+@login_required
+def aufraeumen_los():
+    require_admin()
+    from . import aufraeumen
+    from .leads_views import db
+    behalten = [int(x) for x in request.form.getlist("behalten") if x.isdigit()]
+    if not behalten:
+        flash("Nichts zum Behalten gewählt. Zur Sicherheit wird so nicht aufgeräumt.")
+        return redirect(url_for("settings.aufraeumen_seite"))
+    data_dir = SETTINGS["DATA_DIR"]
+    name = f"vor-aufraeumen-{datetime.now():%Y%m%d-%H%M%S}.tar.gz"
+    (data_dir / name).write_bytes(backups.create(data_dir))  # Stand vorher, falls doch etwas fehlt
+    erg = aufraeumen.ausfuehren(db(), g.account.get("team") or who(), behalten)
+    flash(f"Aufgeräumt: {erg['leads']} Leads, {erg['projekte']} Projekte, {erg['aufgaben']} Aufgaben entfernt; "
+          f"{erg['bleiben']} Leads bleiben. Sicherung vorher: {name} im Datenordner.")
+    return redirect(url_for("crm.board"))
+
+
 @bp.get("/einstellungen/sicherung")
 @login_required
 def backup_page():

@@ -950,6 +950,9 @@ Die Reihenfolge 2 und 3 kann getauscht werden, je nachdem, was im Alltag zuerst 
   Ja löscht das OS alle Leads außer der Behalten-Liste samt Nachrichten, Terminen, Projekten und Aufgaben.
   Immer erhalten: Leads mit Rechnungen, erfasster Zeit oder Arbeitsbereich, Firmen-Protokoll, Entscheidungs-Log,
   KI-Kosten und die „schon kontaktiert“-Liste.
+  Dazu für Menschen: Einstellungen → System → **Alte Daten entfernen** (nur mit „Einstellungen: Verwalten“): Liste der
+  Leads zum Anhaken, Vorauswahl per Link `?behalten=1,2,3` (z. B. von einem Agent vorbereitet), vor dem Löschen
+  eine Sicherung `vor-aufraeumen-*.tar.gz` im Datenordner. Kein zweites Ja vom Gründerteam nötig.
 
 ## 9. Was das OS ausdrücklich nicht sein soll
 
