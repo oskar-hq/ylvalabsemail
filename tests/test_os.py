@@ -3341,6 +3341,8 @@ class AgentenWebTest(WebBasis):
         r = self.client.get("/oauth/authorize", query_string=q)
         self.assertEqual(r.status_code, 200)
         self.assertIn("verbinden", r.get_data(as_text=True))
+        # Der Browser muss nach „Verbinden“ zur Rücksprung-Adresse weiterleiten dürfen (form-action)
+        self.assertIn("form-action 'self' https://grok.com", r.headers["Content-Security-Policy"])
         r = self.post("/oauth/authorize", {**q, "agent": agent})
         self.assertEqual(r.status_code, 302, r.get_data(as_text=True))
         ziel = urlparse(r.headers["Location"])

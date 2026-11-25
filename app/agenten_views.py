@@ -143,10 +143,24 @@ def authorize():
             return render_template("agent_verbinden.html", account=None, fehler=str(exc)), 400
         return redirect(_mit_query(redirect_uri, {"code": code, "state": p.get("state"), "iss": _basis()}))
     agents = [a for a in agenten.liste(c) if a["status"] == "aktiv" and (not vorwahl or a["key"] == vorwahl)]
-    return render_template("agent_verbinden.html", account=None, client=k, agents=agents, vorwahl=vorwahl,
+    html = render_template("agent_verbinden.html", account=None, client=k, agents=agents, vorwahl=vorwahl,
                            werte={n: p.get(n, "") for n in ("client_id", "redirect_uri", "response_type", "state",
                                                             "code_challenge", "code_challenge_method", "resource",
                                                             "scope")}, fehler=None)
+    return _mit_ruecksprung_csp(html, redirect_uri)
+
+
+def _mit_ruecksprung_csp(html, redirect_uri):
+    """Nach „Verbinden“ leitet das OS zu Grok oder Claude weiter. Browser prüfen auch diese Weiterleitung gegen
+    „form-action“ der Seite mit dem Formular; ohne die Adresse dort passiert beim Tippen einfach nichts. Erlaubt wird
+    nur der Ursprung der (schon geprüften, in den Einstellungen erlaubten) Rücksprung-Adresse."""
+    from urllib.parse import urlsplit
+    from .main import CSP
+    teile = urlsplit(redirect_uri)
+    ursprung = f"{teile.scheme}://{teile.netloc}"
+    resp = Response(html, mimetype="text/html")
+    resp.headers["Content-Security-Policy"] = CSP.replace("form-action 'self'", f"form-action 'self' {ursprung}")
+    return resp
 
 
 def _mit_query(url, werte):
