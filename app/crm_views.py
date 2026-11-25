@@ -208,8 +208,14 @@ def load_borders():
 @login_required
 def inbox():
     wer = "alle" if request.args.get("wer") == "alle" or not me() else "meine"
+    ordner = request.args.get("ordner") if request.args.get("ordner") in mailbox.ORDNER else "haupt"
     from . import posteingang
-    return render_template("inbox.html", account=g.account, groups=mailbox.grouped(db(), me() if wer == "meine" else None),
+    person = me() if wer == "meine" else None
+    return render_template("inbox.html", account=g.account, ordner=ordner, ordner_namen=mailbox.ORDNER,
+                           ordner_zahlen=mailbox.ordner_zahlen(db(), person),
+                           fehler=mailbox.fehler_liste(db()) if ordner == "fehler" else [],
+                           fehler_ordner=agent.S("FEHLER_ORDNER"),
+                           groups=mailbox.grouped(db(), person, ordner if ordner != "fehler" else "haupt"),
                            weitere=posteingang.postfaecher(db(), nur_aktive=True),
                            moods=mailbox.MOODS, wer=wer, people=team.names(db()),
                            inbox_status=leaddb.kv_get(db(), "inbox_status"), ready=_mail_ready(),
@@ -220,7 +226,7 @@ def _mail_ready():
     """Kann die App Mails schicken und abrufen? None = ja, sonst was fehlt."""
     if not agent.outreach_configured():
         return "Das Akquise-Postfach ist noch nicht eingetragen."
-    if not SETTINGS["IMAP_HOST"]:
+    if not agent.S("IMAP_HOST"):
         return "Der Posteingang (IMAP) fehlt, Antworten kommen dann nicht in die App."
     return None
 

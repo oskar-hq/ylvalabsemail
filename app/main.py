@@ -47,6 +47,8 @@ SETTINGS = {
     "IMAP_HOST": env("IMAP_HOST"),
     "IMAP_PORT": int(env("IMAP_PORT", "993")),
     "IMAP_SENT_FOLDER": env("IMAP_SENT_FOLDER"),
+    # Zustellfehler und Abwesenheitsnotizen im Postfach in diesen Ordner verschieben (leer = nicht verschieben)
+    "FEHLER_ORDNER": env("FEHLER_ORDNER", "Fehler"),
     "FROM_ADDRESS": env("FROM_ADDRESS"),
     "ALLOWED_USERS": [u.lower() for u in re.split(r"[,\s]+", env("ALLOWED_USERS")) if u],
     "ALLOWED_DOMAINS": [d.lower().lstrip("@") for d in re.split(r"[,\s]+", env("ALLOWED_DOMAINS")) if d],

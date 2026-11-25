@@ -34,6 +34,8 @@ GROUPS = [
         ("MAX_RECIPIENTS", "Höchstens Empfänger pro Versand", "int", "200", ""),
         ("FROM_ADDRESS", "Absenderadresse", "emails", "", "Nur nötig, wenn der Login-Name keine E-Mail-Adresse ist"),
         ("IMAP_SENT_FOLDER", "Ordner „Gesendet“", "text", "", "Leer = automatisch erkennen"),
+        ("FEHLER_ORDNER", "Ordner für Fehler-Mails", "text", "Fehler",
+         "Zustellfehler und Abwesenheitsnotizen wandern im Postfach in diesen Ordner. Leer = im Posteingang lassen"),
     ]),
     ("absender", "Absender und Texte", [
         ("ORG_NAME", "Firmenname", "text", "Ylva Labs", ""),
@@ -82,7 +84,7 @@ GROUPS = [
 # Einstellungen wie in einer App: Bereich → Unterseite mit höchstens vier Werten (siehe DESIGN.md im Scraper)
 PAGES = {
     "postfach": [("ausgang", "Postausgang", ["SMTP_HOST", "SMTP_PORT", "SMTP_SECURITY"]),
-                 ("eingang", "Posteingang", ["IMAP_HOST", "IMAP_PORT", "IMAP_SENT_FOLDER"]),
+                 ("eingang", "Posteingang", ["IMAP_HOST", "IMAP_PORT", "IMAP_SENT_FOLDER", "FEHLER_ORDNER"]),
                  ("zugang", "Akquise-Postfach", ["OUTREACH_USER", "OUTREACH_PASSWORD", "FROM_ADDRESS"]),
                  ("versand", "Versand", ["OUTREACH_EMAIL", "SEND_DELAY", "MAX_RECIPIENTS"])],
     "absender": [("name", "Name und Unterschrift", ["ORG_NAME", "LEADS_SENDER_NAME", "DEFAULT_SENDER_NAME"]),

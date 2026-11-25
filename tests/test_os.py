@@ -2939,3 +2939,108 @@ class OutreachKundeTest(unittest.TestCase):
         ki = [t for t in texte if t.startswith("KI-Kosten")]
         self.assertEqual(len(ki), 1)
         self.assertGreater(texte[ki[0]], 0)
+
+
+class FehlerOrdnerTest(unittest.TestCase):
+    """Postfach: Zustellfehler und Abwesenheit im Ordner „Fehler“, Meldungen nur für Angeschriebene."""
+
+    def setUp(self):
+        from unittest import mock
+        from app import agent
+        self.agent = agent
+        self.c = frische_db()
+        self.lid = lead_anlegen(self.c, "Tischlerei Fehler", email="info@tischlerei-fehler.de", stage="kontaktiert",
+                                status="versendet", message_id="<outreach-1@ylvalabs.de>", sent_at=HEUTE)
+        self.verschoben = []
+        settings = dict(agent.CFG["settings"], OUTREACH_USER="k@ylvalabs.de", OUTREACH_PASSWORD="x", IMAP_HOST="imap.x",
+                        FEHLER_ORDNER="Fehler")
+        p = mock.patch.dict(agent.CFG, {"settings": settings})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _mail(self, frm, subject, text, mid, ctype=None, **headers):
+        from email.message import EmailMessage
+        from email.utils import format_datetime
+        from datetime import datetime
+        m = EmailMessage()
+        m["From"], m["Subject"], m["Message-ID"] = frm, subject, mid
+        m["Date"] = format_datetime(datetime.now().astimezone())
+        for k, v in headers.items():
+            m[k.replace("_", "-")] = v
+        m.set_content(text)
+        return m.as_bytes()
+
+    def _abrufen(self, mails):
+        from unittest import mock
+        test = self
+
+        class Imap(FakeImap):
+            def __init__(self):
+                super().__init__(mails)
+                self.readonly = None
+
+            def select(self, *a, **kw):
+                self.readonly = kw.get("readonly")
+                return "OK", [b"1"]
+
+            def fetch(self, num, spec):
+                raw = mails[int(num) - 1]
+                if "HEADER" in spec:
+                    import email as em
+                    return "OK", [(b"x", f"Message-ID: {em.message_from_bytes(raw)['Message-ID']}\r\n\r\n".encode())]
+                return "OK", [(b"x", raw)]
+
+            def create(self, name):
+                return "OK", []
+
+            def copy(self, num, name):
+                test.verschoben.append((num, name))
+                return "OK", []
+
+            def store(self, *a):
+                return "OK", []
+
+            def expunge(self):
+                return "OK", []
+        self.imap = Imap()
+        with mock.patch.object(self.agent, "_imap", return_value=self.imap):
+            return self.agent.check_inbox(self.c)
+
+    def test_zustellfehler_und_abwesenheit_in_den_ordner_fehler(self):
+        from app import mailbox
+        bounce = self._mail("Mail Delivery System <MAILER-DAEMON@strato.de>", "Undelivered Mail Returned to Sender",
+                            "Die Mail an info@tischlerei-fehler.de konnte nicht zugestellt werden.\n"
+                            "Final-Recipient: rfc822; info@tischlerei-fehler.de\n"
+                            "Message-ID: <outreach-1@ylvalabs.de>", "<bounce@strato>")
+        abwesend = self._mail("info@tischlerei-fehler.de", "Abwesenheitsnotiz: Ein Gedanke", "Ich bin bis Montag nicht "
+                              "im Büro.", "<ooo@x>", In_Reply_To="<outreach-1@ylvalabs.de>", Auto_Submitted="auto-replied")
+        echt = self._mail("info@tischlerei-fehler.de", "Re: Ein Gedanke", "Klingt gut, rufen Sie an.", "<echt@x>",
+                          In_Reply_To="<outreach-1@ylvalabs.de>")
+        self.assertEqual(self._abrufen([bounce, abwesend, echt]), 1)  # nur die echte Antwort zählt
+        self.assertFalse(self.imap.readonly)
+        self.assertEqual([n for n, _ in self.verschoben], [b"1", b"2"])
+        self.assertTrue(all(o == '"Fehler"' for _, o in self.verschoben))
+        fehler = mailbox.fehler_liste(self.c)
+        self.assertEqual(len(fehler), 2)
+        self.assertTrue(all(f["lead_id"] == self.lid for f in fehler))
+        self.assertEqual(mailbox.ordner_zahlen(self.c)["fehler"], 2)
+        self.assertEqual(mailbox.unread_count(self.c), 1)
+        self.assertEqual(mailbox.last_incoming(self.c, self.lid)["subject"], "Re: Ein Gedanke")
+        titel = [r["title"] for r in self.c.execute("SELECT title FROM notices")]
+        self.assertFalse(any("Undelivered" in t or "Abwesen" in t for t in titel))
+        lead = leaddb.get_lead(self.c, self.lid)
+        self.assertEqual(lead["interest"], "qualified")  # die echte Antwort wurde eingeordnet
+
+    def test_ohne_ordner_bleibt_der_posteingang_unberuehrt(self):
+        from unittest import mock
+        with mock.patch.dict(self.agent.CFG["settings"], {"FEHLER_ORDNER": ""}):
+            self._abrufen([self._mail("MAILER-DAEMON@strato.de", "Undelivered Mail", "x", "<b2@strato>")])
+        self.assertTrue(self.imap.readonly)
+        self.assertEqual(self.verschoben, [])
+
+    def test_unbekannte_ohne_meldung(self):
+        from app import mailbox
+        self._abrufen([self._mail("Fremd <fremd@irgendwo.de>", "Frage", "Hallo, kurze Frage.", "<f@x>")])
+        self.assertEqual(self.c.execute("SELECT COUNT(*) FROM notices").fetchone()[0], 0)
+        self.assertEqual(len(mailbox.conversations(self.c, ordner="sonstige")), 1)
+        self.assertEqual(mailbox.conversations(self.c), [])

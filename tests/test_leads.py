@@ -505,11 +505,12 @@ class AgentTest(unittest.TestCase):
             self.assertEqual(agent.check_inbox(self.c), 0)  # schon gesehen
         contact = leaddb.get_lead(self.c, self.c.execute("SELECT id FROM leads WHERE email='lisa@partner.de'").fetchone()[0])
         self.assertEqual((contact["status"], contact["name"], contact["stage"]), ("kontakt", "Lisa Meier", None))
-        self.assertEqual(mailbox.unread_count(self.c), 1)
+        # Unbekannte, die wir nie angeschrieben haben: still unter „Sonstige“, nicht im Zähler der Glocke
+        self.assertEqual(mailbox.unread_count(self.c), 0)
+        self.assertEqual([x["id"] for x in mailbox.conversations(self.c, ordner="sonstige")], [contact["id"]])
         in_tabs = {r["id"] for k, _, _ in leaddb.TABS for r in leaddb.tab_leads(self.c, k)}
         self.assertNotIn(contact["id"], in_tabs)  # Kontakte stehen im Postfach, nicht bei den Leads
-        self.notify.assert_called()
-        self.assertIn("Neue Mail von Lisa Meier", self.notify.call_args[0][1])
+        self.notify.assert_not_called()  # keine Meldung für Unbekannte
         # Antwort von uns auf den Kontakt (kein Erstkontakt, die Person hat geschrieben)
         sent = []
         smtp = mock.Mock(send_message=lambda m: sent.append(m))

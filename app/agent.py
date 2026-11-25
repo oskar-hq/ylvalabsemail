@@ -1047,6 +1047,31 @@ def _match_lead(c, msg):
     return None
 
 
+def match_fehler(c, msg):
+    """Zu welchem Lead gehört ein Zustellfehler? Erst wie eine Antwort, dann über die Message-ID unserer Mail oder
+    den Empfänger, die im Bericht des Mailservers stehen."""
+    lead_id = _match_lead(c, msg) if not mailbox.FEHLER_ABSENDER.match(parseaddr(msg.get("From", ""))[1]) else None
+    if lead_id:
+        return lead_id
+    try:
+        raw = msg.as_string()[:200000]
+    except Exception:
+        return None
+    for mid in re.findall(r"<[^<>\s]+@[^<>\s]+>", raw):
+        row = c.execute("SELECT id FROM leads WHERE arbeitsbereich=ab() AND (message_id=? OR followup_message_id=?)",
+                        (mid, mid)).fetchone() \
+            or c.execute("SELECT m.lead_id AS id FROM messages m JOIN leads l ON l.id = m.lead_id WHERE "
+                         "l.arbeitsbereich=ab() AND m.direction='out' AND m.message_id=?", (mid,)).fetchone()
+        if row:
+            return row["id"]
+    for addr in re.findall(r"(?im)^(?:final|original)-recipient:\s*rfc822;\s*<?([^\s>]+)", raw):
+        row = c.execute("SELECT id FROM leads WHERE arbeitsbereich=ab() AND lower(email)=? ORDER BY sent_at DESC LIMIT 1",
+                        (addr.lower(),)).fetchone()
+        if row:
+            return row["id"]
+    return None
+
+
 INTEREST_MAP = {"qualified": "qualified", "mittel": "mittel", "kein_interesse": "kein_interesse",
                 "abmeldung": "kein_interesse"}
 INTEREST_TITLES = {"qualified": "Interesse!", "mittel": "Antwort (mittel)", "kein_interesse": "Absage",
@@ -1113,8 +1138,10 @@ def _check_inbox(c):
     set_activity("Liest das Postfach …")
     imap = _imap()
     handled = 0
+    ordner = S("FEHLER_ORDNER")
+    fehler_nums = []
     try:
-        imap.select("INBOX", readonly=True)
+        imap.select("INBOX", readonly=not ordner)
         _, data = imap.search(None, f"(SINCE {since.day:02d}-{MONTHS[since.month - 1]}-{since.year})")
         for num in (data[0] or b"").split()[-300:]:
             _, header = imap.fetch(num, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
@@ -1126,10 +1153,14 @@ def _check_inbox(c):
             _, parts = imap.fetch(num, "(BODY.PEEK[])")
             raw = next((p[1] for p in parts if isinstance(p, tuple)), b"")
             msg = email.message_from_bytes(raw, policy=email.policy.default)
-            if _take(c, msg, mid, start, own):
+            taken = _take(c, msg, mid, start, own)
+            if taken == "fehler":
+                fehler_nums.append(num)
+            elif taken:
                 handled += 1
             c.execute("INSERT OR IGNORE INTO inbox_seen (message_id, at) VALUES (?,?)", (mid, leaddb.now()))
             c.commit()
+        mailbox.im_ordner_verschieben(imap, fehler_nums, ordner)
     finally:
         try:
             imap.logout()
@@ -1149,6 +1180,13 @@ def _take(c, msg, mid, start, own):
         sent = None
     if sent and sent < start:
         return False  # älter als der erste Abruf: steht schon in eurem Mailprogramm
+    text = _message_text(msg)
+    art = mailbox.fehler_art(msg, text)
+    if art:  # Zustellfehler und Abwesenheit: Ordner „Fehler“, keine Meldung, keine Einordnung
+        lead_id = match_fehler(c, msg)
+        if lead_id:
+            mailbox.fehler_ablegen(c, lead_id, msg, text, art, message_id=mid)
+        return "fehler"
     lead_id = _match_lead(c, msg)
     if not lead_id:
         if _is_bulk(msg):
@@ -1176,8 +1214,9 @@ def handle_reply(c, lead_id, msg, message_id=None):
         leaddb.update_lead(c, lead_id, unread=1)
         leaddb.add_event(c, lead_id, "reply", text or "(leere Nachricht)", author=name or addr,
                          meta={"from": addr, "subject": subject, "date": str(msg.get("Date", ""))})
-        notify(c, f"Neue Mail von {lead['name']}" if lead["status"] == "kontakt" else f"Neue Antwort von {lead['name']}",
-               (text or subject)[:220], f"/crm/postfach/{lead_id}")
+        if not mailbox.ist_sonstige(c, lead_id):  # Unbekannte landen still unter „Sonstige“
+            notify(c, f"Neue Mail von {lead['name']}" if lead["status"] == "kontakt" else f"Neue Antwort von {lead['name']}",
+                   (text or subject)[:220], f"/crm/postfach/{lead_id}")
         return True
     leaddb.add_event(c, lead_id, "reply", text or "(leere Nachricht)", author=name or addr,
                      meta={"from": addr, "subject": subject, "date": str(msg.get("Date", ""))})

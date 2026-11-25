@@ -179,10 +179,13 @@ def abrufen(c, pid):
     start = datetime.fromisoformat(p["start"] or now())
     since = max(start, datetime.now() - timedelta(days=30)) - timedelta(days=1)
     neu = 0
+    from . import mailbox
+    ordner = agent.S("FEHLER_ORDNER")
+    fehler_nums = []
     try:
         imap = IMAP(p)
         try:
-            imap.select("INBOX", readonly=True)
+            imap.select("INBOX", readonly=not ordner)
             _, data = imap.search(None, f"(SINCE {since.day:02d}-{agent.MONTHS[since.month - 1]}-{since.year})")
             for num in (data[0] or b"").split()[-300:]:
                 _, parts = imap.fetch(num, "(BODY.PEEK[])")
@@ -191,11 +194,15 @@ def abrufen(c, pid):
                 mid = (msg.get("Message-ID") or "").strip() or f"num:{num.decode()}:{p['start']}"
                 if c.execute("SELECT 1 FROM postfach_gesehen WHERE postfach_id=? AND message_id=?", (pid, mid)).fetchone():
                     continue
-                if _einsortieren(c, p, msg, mid, start):
+                ergebnis = _einsortieren(c, p, msg, mid, start)
+                if ergebnis == "fehler":
+                    fehler_nums.append(num)
+                elif ergebnis:
                     neu += 1
                 c.execute("INSERT OR IGNORE INTO postfach_gesehen (postfach_id, message_id, at) VALUES (?,?,?)",
                           (pid, mid, now()))
                 c.commit()
+            mailbox.im_ordner_verschieben(imap, fehler_nums, ordner)
         finally:
             try:
                 imap.logout()
@@ -232,12 +239,19 @@ def _einsortieren(c, p, msg, mid, start):
         return False
     if c.execute("SELECT 1 FROM messages WHERE message_id=?", (mid,)).fetchone():
         return False  # schon über ein anderes Postfach da (z. B. an zwei Adressen geschickt)
+    text = agent._message_text(msg)
+    art = mailbox.fehler_art(msg, text)
+    if art:  # Zustellfehler und Abwesenheit: Ordner „Fehler“, keine Meldung
+        lead_id = agent.match_fehler(c, msg)
+        if lead_id:
+            mailbox.fehler_ablegen(c, lead_id, msg, text, art, message_id=mid, to_addr=p["adresse"], postfach_id=p["id"])
+        return "fehler"
     lead_id = agent._match_lead(c, msg)
     if not lead_id:
         if agent._is_bulk(msg):
             return False
         lead_id = agent._contact_for(c, msg)
-    text = agent._message_text(msg) or "(leere Nachricht)"
+    text = text or "(leere Nachricht)"
     subject = str(msg.get("Subject", ""))
     mid_db = mailbox.add(c, lead_id, "in", text, subject=subject, from_addr=sender, from_name=name, to_addr=p["adresse"],
                          message_id=mid, in_reply_to=(msg.get("In-Reply-To") or "").strip() or None, read=False,
@@ -248,7 +262,9 @@ def _einsortieren(c, p, msg, mid, start):
                      meta={"from": sender, "subject": subject, "postfach": p["name"]})
     fuer = p["besitzer"] or lead.get("owner")
     titel = f"Neue Mail von {lead['name']}"
-    if fuer:
+    if mailbox.ist_sonstige(c, lead_id):
+        pass  # Unbekannte, die wir nie angeschrieben haben: still unter „Sonstige“, keine Meldung
+    elif fuer:
         aufgaben.melden(c, fuer, titel, (text or subject)[:200], f"/crm/postfach/{lead_id}")
     else:
         leaddb.add_notice(c, titel, (text or subject)[:200], f"/crm/postfach/{lead_id}")

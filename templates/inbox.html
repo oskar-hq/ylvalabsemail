@@ -22,9 +22,12 @@
     <p class="os-sub os-lead">Alle Nachrichten an einer Stelle: Akquise-Postfach, weitere Postfächer, Kunden-Bereich und von Hand festgehaltene Telefonate, Briefe und Nachrichten. Newsletter und automatische Mails bleiben draußen.</p>
   </header>
 
-  {% if account.team %}<div class="os-chips" aria-label="Wessen Gespräche">
-    <a href="{{ url_for('crm.inbox') }}" class="{{ 'on' if wer == 'meine' }}">Meine</a>
-    <a href="{{ url_for('crm.inbox', wer='alle') }}" class="{{ 'on' if wer == 'alle' }}">Alle</a></div>{% endif %}
+  <nav class="segmented os-ordner" aria-label="Ordner" style="margin:0 0 12px">{% for k, label in ordner_namen.items() %}
+    <a href="{{ url_for('crm.inbox', ordner=k if k != 'haupt' else None, wer='alle' if wer == 'alle' else None) }}" class="{{ 'on' if ordner == k }}" {{ 'aria-current=page' if ordner == k }}>{{ label }}{% if ordner_zahlen.get(k) %} <span class="muted">{{ ordner_zahlen[k] }}</span>{% endif %}</a>{% endfor %}</nav>
+  {% if account.team and ordner != 'fehler' %}<div class="os-chips" aria-label="Wessen Gespräche">
+    <a href="{{ url_for('crm.inbox', ordner=ordner if ordner != 'haupt' else None) }}" class="{{ 'on' if wer == 'meine' }}">Meine</a>
+    <a href="{{ url_for('crm.inbox', wer='alle', ordner=ordner if ordner != 'haupt' else None) }}" class="{{ 'on' if wer == 'alle' }}">Alle</a></div>{% endif %}
+  {% if ordner == 'sonstige' %}<p class="os-caption">Mails von Absendern, die wir nicht angeschrieben haben. Sie lösen keine Meldung aus. Sobald ihr antwortet, steht das Gespräch unter „Gespräche“.</p>{% endif %}
 
   {% if ready and not weitere %}<p class="os-hinweis err">{{ ready }} Senden und Empfangen gehen erst danach: <a href="{{ url_for('settings.page', gid='postfach', pid='zugang') }}">Einstellungen → Akquise-Postfach</a></p>
   {% elif inbox_status and not inbox_status.ok %}<p class="os-hinweis err">Das Postfach konnte zuletzt nicht abgerufen werden ({{ inbox_status.at|kurzdatum }}): {{ inbox_status.error }} <a href="{{ url_for('leads.system') }}">Systemcheck</a></p>
@@ -33,6 +36,12 @@
   <p class="os-caption" id="inboxMsg" hidden style="margin-top:8px"></p>
   <p class="os-caption os-mood-legende" style="margin-top:8px">Der Punkt zeigt, wie es läuft: <i class="os-mood gut"></i> gut <i class="os-mood mittel"></i> mittel <i class="os-mood schlecht"></i> eher schlecht <i class="os-mood neutral"></i> neutral</p>
 
+  {% if ordner == 'fehler' %}
+  <p class="os-caption">Zustellfehler und automatische Antworten (Abwesenheit). Sie lösen keine Meldung aus und stehen auch in der Akte.{% if fehler_ordner %} Im Mailprogramm liegen sie im Ordner „{{ fehler_ordner }}“.{% endif %}</p>
+  <ul class="os-list">{% for m in fehler %}<li><a class="os-row" href="{{ url_for('crm.conversation', lead_id=m.lead_id) }}">
+    <span class="os-txt"><b>{{ m.name }}</b><span>{{ when(m.at) }} · {{ m.from_name or m.from_addr }}{% if m.lead_email %} · an {{ m.lead_email }}{% endif %}</span><span class="os-snip">{{ m.subject }}</span></span>
+    <span class="os-chev">{{ i('chev') }}</span></a></li>{% else %}<li class="os-empty">Keine Fehler-Mails.</li>{% endfor %}</ul>
+  {% else %}
   {% if not groups.offen and not groups.gesendet %}
   <p class="os-hinweis">Noch keine Nachrichten. Sobald jemand an ein Postfach schreibt oder auf eine Mail antwortet, steht es hier.</p>
   {% endif %}
@@ -47,6 +56,7 @@
     {% if groups.gesendet %}<ul class="os-list">{% for cv in groups.gesendet %}{{ row(cv) }}{% endfor %}</ul>
     {% else %}<p class="os-empty">Noch nichts.</p>{% endif %}
   </section>
+  {% endif %}
 </main>
 <div class="os-float bar">
   <button class="os-btn ink" type="button" id="inboxFetch" {{ 'disabled' if ready and not weitere }}><span>Jetzt abrufen</span>{{ i('pfeil') }}</button>
