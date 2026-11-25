@@ -772,6 +772,19 @@ Die Reihenfolge 2 und 3 kann getauscht werden, je nachdem, was im Alltag zuerst 
 
 ---
 
+- [ ] **Stufe 11 – Outreach für Kunden (Arbeitsbereiche)** (geplant 25.11.2026 mit Oskar und Finn)
+  Ziel: Auf einem Server machen wir Outreach für uns **und** für mehrere zahlende Kunden gleichzeitig.
+  Entschieden:
+  - **Arbeitsbereich je Kunde** (eine App, eine Datenbank): Oben wählt man den Arbeitsbereich („Ylva Labs“,
+    „Kunde A“ …). Leads, CRM, Postfach, Gehirn, Suchgebiet und Nischen, Vorlagen, Läufe, Sperrliste und KI-Kosten
+    gehören immer zu genau einem Arbeitsbereich und mischen sich nie. Firmen-OS (Personen, Aufgaben, Kalender,
+    Finanzen, Freigaben) bleibt gemeinsam.
+  - **Absender ist das Postfach des Kunden** (z. B. vertrieb@kunde.de): je Arbeitsbereich ein eigenes
+    Akquise-Postfach; Antworten landen dort. Erstkontakt-Schalter (§ 7 UWG) und Sperrliste gelten je Arbeitsbereich.
+  - **Kunden sehen ihre Ergebnisse im Kunden-Bereich** (angeschrieben, Antworten, Termine, interessierte Kontakte);
+    Freigaben bleiben bei uns.
+  - Abrechnung über das Projekt des Kunden (Pauschale, Finanzen aus Stufe 8). Bauplan: docs/BAU-UEBERGABE.md.
+
 ## 9. Was das OS ausdrücklich nicht sein soll
 
 - Kein Ersatz für Steuerberater, Anwalt oder Buchhaltung (nur sauber zuarbeiten).
