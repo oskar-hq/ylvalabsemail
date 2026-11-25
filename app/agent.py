@@ -1433,7 +1433,6 @@ def tick():
                         if a["key"] == arbeitsbereiche.YLVA:
                             raise
                         log.exception("Fehler im Arbeitsbereich %s", a["key"])
-            notify_tasks(c)
             try:  # Kalender: Erinnerungen, Ergebnis nachfragen, frei/belegt abgleichen, Serien (Firmen-OS Stufe 3)
                 from . import kalender
                 kalender.takt(c)
@@ -1494,6 +1493,7 @@ def akquise_takt(c):
             leaddb.kv_set(c, "request:inbox", False)
             fetch_inbox(c)
     notify_due(c)
+    notify_tasks(c)
     reports.notify_released(c, notify)
     start_scheduled(c)
     if leaddb.kv_get(c, "request:reflect") and ai.available():

@@ -4,7 +4,7 @@ from datetime import date
 
 from flask import Blueprint, Response, abort, g, jsonify, render_template, request
 
-from . import agent, branchentest, crm, leaddb, mailbox, team
+from . import agent, arbeitsbereiche, branchentest, crm, leaddb, mailbox, team
 from .leads_views import db, lead_or_404, me, status_payload, who
 from .main import SETTINGS, darf, login_required
 
@@ -166,7 +166,7 @@ def inbox():
                            fehler=mailbox.fehler_liste(db()) if ordner == "fehler" else [],
                            fehler_ordner=agent.S("FEHLER_ORDNER"),
                            groups=mailbox.grouped(db(), person, ordner if ordner != "fehler" else "haupt"),
-                           weitere=posteingang.postfaecher(db(), nur_aktive=True),
+                           weitere=posteingang.fuer_person(db(), me()) if me() and not arbeitsbereiche.ist_kunde() else [],
                            moods=mailbox.MOODS, wer=wer, people=team.names(db()),
                            inbox_status=leaddb.kv_get(db(), "inbox_status"), ready=_mail_ready(),
                            st=status_payload())

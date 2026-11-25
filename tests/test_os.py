@@ -3044,3 +3044,18 @@ class FehlerOrdnerTest(unittest.TestCase):
         self.assertEqual(self.c.execute("SELECT COUNT(*) FROM notices").fetchone()[0], 0)
         self.assertEqual(len(mailbox.conversations(self.c, ordner="sonstige")), 1)
         self.assertEqual(mailbox.conversations(self.c), [])
+
+
+class WiedervorlageJeArbeitsbereichTest(unittest.TestCase):
+    def test_heute_dran_nur_im_eigenen_arbeitsbereich(self):
+        from app import arbeitsbereiche
+        c = frische_db()
+        self.addCleanup(arbeitsbereiche.cache_leeren)
+        kunde = kunde_anlegen(c, "Kunde WV", postfach=False)
+        lid = lead_anlegen(c, "Ylva-Lead", stage="neu")
+        crm.add_task(c, lid, HEUTE, "Anrufen", "Oskar", person="oskar")
+        self.assertEqual(len(crm.open_tasks(c)), 1)
+        self.assertEqual(crm.due_count(c), 1)
+        with arbeitsbereiche.im(kunde):
+            self.assertEqual(crm.open_tasks(c), [])
+            self.assertEqual(crm.due_count(c), 0)

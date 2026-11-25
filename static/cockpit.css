@@ -92,6 +92,12 @@ code{background:var(--s3);border-radius:5px;color:var(--body)}
 .ab-menu{left:0;right:auto;top:42px;min-width:250px}
 .ab-menu button.on{background:var(--s4);font-weight:700}
 @media (max-width:600px){.ab-pick summary{max-width:120px}}
+/* Mit Auswahl wird es oben eng: Navigation etwas dichter, Suche nur als Symbol */
+@media (min-width:640px) and (max-width:1439px){
+  .top:has(.ab-pick) nav a{padding:8px 6px}
+  .top:has(.ab-pick) .find-btn span,.top:has(.ab-pick) .find-btn kbd{display:none}
+  .ab-pick summary{max-width:150px}
+}
 
 /* Tab-Leiste unten (Handy) */
 .tabbar{display:none}

@@ -170,7 +170,7 @@ def complete_task(conn, task_id, author, wer=None):
 TASKS_SQL = """SELECT a.id, a.objekt_id AS lead_id, a.faellig AS due, a.titel AS text, a.person, a.erstellt_von AS created_by,
                       a.erstellt_am AS created_at, l.name, l.stage
                FROM aufgaben a JOIN leads l ON l.id = a.objekt_id
-               WHERE a.objekt_typ = 'lead' AND a.status = 'offen'"""
+               WHERE a.objekt_typ = 'lead' AND a.status = 'offen' AND l.arbeitsbereich = ab()"""
 OPEN_TASK_SUB = "FROM aufgaben t WHERE t.objekt_typ = 'lead' AND t.objekt_id = l.id AND t.status = 'offen'"
 
 
