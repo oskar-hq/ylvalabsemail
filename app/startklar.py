@@ -56,8 +56,10 @@ def punkte(c, url_for, host_backups=False):
                       url_for("personen.bereiche"), "Bereiche"))
 
     # Postfach für Antworten, Angebote, Rechnungen und den Kunden-Bereich
+    abrufen = _env("POSTFACH_ABRUFEN").lower() in ("1", "true", "yes", "on")  # Standard aus: die Agents lesen Mails
     fehlt = [label for key, label in (("SMTP_HOST", "Postausgang"), ("IMAP_HOST", "Posteingang"),
-                                      ("OUTREACH_USER", "Adresse"), ("OUTREACH_PASSWORD", "Passwort")) if not _env(key)]
+                                      ("OUTREACH_USER", "Adresse"), ("OUTREACH_PASSWORD", "Passwort"))
+             if not _env(key) and (key != "IMAP_HOST" or abrufen)]
     out.append(_punkt("postfach", "Postfach verbunden", not fehlt,
                       f"Es fehlt noch: {_liste(fehlt)}. Ohne Postfach gehen keine Antworten, Angebote und Rechnungen "
                       "raus." if fehlt else f"{_env('OUTREACH_USER')}. Verbindung testen: Systemcheck.",

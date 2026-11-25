@@ -701,7 +701,7 @@ def _is_bulk(msg):
     if (msg.get("Auto-Submitted") or "no").strip().lower() != "no":
         return True
     local = parseaddr(msg.get("From", ""))[1].split("@")[0]
-    return bool(BULK_SENDER.match(local))
+    return bool(BULK_SENDER.match(local)) or mailbox.ist_automatisch(local)
 
 
 def _contact_for(c, msg):
@@ -1093,7 +1093,7 @@ def tick():
 def akquise_takt(c):
     """Was der Arbeiter je Arbeitsbereich tut: Postfach lesen, Nachfassen melden, Berichte, Zeitplan, Lernen."""
     # Antworten lesen ist kostenlos, nur das Einordnen einer echten Antwort kostet ein paar Cent
-    if outreach_configured() and S("IMAP_HOST"):
+    if S("POSTFACH_ABRUFEN") and outreach_configured() and S("IMAP_HOST"):  # Standard aus: die Agents lesen Mails
         last = leaddb.kv_get(c, "last_inbox", 0)
         if time.time() - last > S("INBOX_MINUTES") * 60 or leaddb.kv_get(c, "request:inbox"):
             leaddb.kv_set(c, "last_inbox", time.time())

@@ -61,7 +61,7 @@ Mails stehen in der Akte, der Betrieb rückt auf „Kontaktiert“.
   Webseite, Ansprechpartner, Ort, Adresse, Branche, Notiz; Dubletten werden übersprungen).
   **CSV exportieren** für Excel.
 
-**Antworten** liest die App aus dem Akquise-Postfach und ordnet sie **nach Stichworten** ein: Abwesenheitsnotiz,
+**Antworten** (nur mit „Postfach vom Server abrufen“, seit Stufe 14 Standard aus: sonst tragen die Agents Gespräche ein) liest die App aus dem Akquise-Postfach und ordnet sie **nach Stichworten** ein: Abwesenheitsnotiz,
 Abmeldung (Adresse kommt auf die Sperrliste), Absage, „später“, Interesse. Bei Interesse gibt es eine
 Wiedervorlage für heute, bei „später“ eine in einem Monat. Jede Einordnung könnt ihr in der Akte ändern.
 **Nachfassen:** Kommt nach 7 Tagen keine Antwort, landet der Betrieb im Reiter „Nachfassen“
@@ -97,7 +97,8 @@ kein Apple-Entwicklerkonto.
    Verbrauch. Ein Entwurf kostet etwa 5 Cent. Tipp: In der
    Anthropic Console zusätzlich ein Ausgabenlimit setzen.
 3. Ein eigenes Postfach für die Akquise anlegen (z. B. `kontakt@ylvalabs.de`) und als `OUTREACH_USER` /
-   `OUTREACH_PASSWORD` eintragen. `IMAP_HOST` muss gesetzt sein, damit Antworten gelesen werden.
+   `OUTREACH_PASSWORD` eintragen (für Rechnungen, Angebote und Wochenberichte). Mails lesen seit Stufe 14 die Agents;
+   der Server ruft nur ab, wenn „Postfach vom Server abrufen“ an ist.
 4. `NOTIFY_EMAILS` und `BASE_URL` setzen, Dienst neu starten.
 5. Unter **Gehirn und Vorlage** (Schnellsuche) die Texte und die Vorlage prüfen und anpassen. Danach die Agents
    verbinden (Einstellungen → Agents → Einrichten); sie tragen Leads ein und legen Entwürfe zur Freigabe vor.

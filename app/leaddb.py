@@ -203,6 +203,7 @@ MIGRATIONS = [
     "ALTER TABLE freigaben ADD COLUMN ausfuehrung TEXT",
     # Stufe 13: Antworten über Slack, WhatsApp, LinkedIn warten auf den Versand durch einen Agent
     "ALTER TABLE messages ADD COLUMN versand TEXT",
+    "ALTER TABLE leads ADD COLUMN chat_aus TEXT",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.
@@ -314,6 +315,11 @@ def now():
     return datetime.now().isoformat(timespec="seconds")
 
 
+def _automatisch(adresse):
+    from . import mailbox
+    return 1 if mailbox.ist_automatisch(adresse) else 0
+
+
 def connect(path):
     conn = sqlite3.connect(path, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -336,6 +342,7 @@ def connect(path):
     conn.executescript(arbeitsbereiche.SCHEMA)
     # Stufe 11: aktiver Arbeitsbereich in SQL als ab(), je Thread und Anfrage (siehe app/arbeitsbereiche.py)
     conn.create_function("ab", 0, arbeitsbereiche.aktiv)
+    conn.create_function("automatisch", 1, _automatisch, deterministic=True)  # No-Reply, Newsletter, Rechnungen
     conn.executescript(agenten.SCHEMA)
     for stmt in MIGRATIONS:
         try:

@@ -922,6 +922,27 @@ Die Reihenfolge 2 und 3 kann getauscht werden, je nachdem, was im Alltag zuerst 
     selbst tun → Aufgabe für die Person.
   - Alte Adressen: `/aufgaben/fokus`, `/mein-tag`, `/heute`, `/leads` führen zu den Freigaben.
 
+- [x] **Stufe 14 – Das OS als reine Freigabe-Schnittstelle** (gebaut 25.11.2026)
+  Ziel (Oskar, 25.11.2026): Der Server soll keine Nachrichten mehr empfangen und einsortieren. Die Agents haben
+  Zugriff auf Mails, Slack und GitHub, arbeiten sie ab und behalten die Kontrolle; ins OS schreiben sie nur, was
+  Menschen entscheiden (Freigaben) oder tun müssen (Aufgaben). Sie schauen regelmäßig nach, was freigegeben wurde,
+  und führen es dann selbst aus. Agents sollen auch Zugriff auf alles bekommen können (lesen und bearbeiten).
+  *Umsetzung und Abweichungen:*
+  - Einstellungen → Postfach und Versand → **Mails und Agents**: `POSTFACH_ABRUFEN` (Standard aus; der Hintergrund-
+    Arbeiter und „Jetzt abrufen“ lesen dann kein Postfach) und `MAIL_VERSAND` (Standard „agent“). Freigegebene
+    Agent-Mails werden „bitte ausführen“ mit der freigegebenen Fassung; das OS prüft vorher Sperrliste und
+    Erstkontakt-Regel. Meldet der Agent sie als erledigt, stehen sie im Chat und in der Akte, neue Leads rücken auf
+    „Kontaktiert“. Mit „os“ verschickt das OS wie bisher selbst.
+  - `nachricht_eintragen` und `nachrichten_zu_senden` können jetzt auch Mail (mit Betreff und Adresse); Antworten im
+    Chat per Mail gehen an den Agent.
+  - Aufräumen für Altes: Absender wie noreply@, newsletter@, billing@ zählen nie als „wartet“ und erscheinen nicht
+    im Chat (`mailbox.ist_automatisch`, SQL-Funktion `automatisch()`); „Sonstige“ zählen nicht als wartend; Knopf
+    „Ausblenden“ im Chat (Spalte `leads.chat_aus`, eine neue Nachricht holt das Gespräch zurück).
+  - Agents anlegen: Bereich „Alle Bereiche“ und Zugriff „Alles lesen und bearbeiten“ (je Modul Bearbeiten), dazu
+    der Knopf „Alles lesen und bearbeiten erlauben“ beim Agent. Freigeben und Verwalten bleiben hart gesperrt.
+  - **Abweichung:** Rechnungen, Angebote, Wochenberichte und Termin-Einladungen verschickt das OS weiterhin selbst
+    über das Postfach (eigene Module mit eigener Freigabe); das kann später ebenfalls zu den Agents wandern.
+
 ## 9. Was das OS ausdrücklich nicht sein soll
 
 - Kein Ersatz für Steuerberater, Anwalt oder Buchhaltung (nur sauber zuarbeiten).

@@ -188,6 +188,14 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   - **Nach dem Update:** den Bots einmal den neuen Prompt geben (Einstellungen → Agents → Einrichten). Neu darin:
     Ja/Nein-Fragen als Freigabe, alles zum Selbermachen als Aufgabe für die Person.
 
+- **Das OS als reine Freigabe-Schnittstelle (25.11.2026, Stufe 14).** Der Server holt keine Mails mehr ab. Die
+  Agents lesen Mails, Slack und GitHub selbst und schreiben ins OS nur Freigaben (Ja/Nein) und Aufgaben (selbst
+  tun). Nach deinem Ja schickt der Agent die Mail selbst und meldet es; dann steht sie im Chat und in der Akte.
+  Alte Werbe- und No-Reply-Mails (z. B. Hostinger) zählen nicht mehr als „wartet auf Antwort“; Übriges im Chat mit
+  „Ausblenden“ wegräumen. Beim Agent-Anlegen gibt es „Alle Bereiche“ und „Alles lesen und bearbeiten“.
+  - **Nach dem Update:** den Bots den neuen Prompt geben (Einstellungen → Agents → Einrichten). Wer es anders will:
+    Einstellungen → Postfach und Versand → Mails und Agents.
+
 - Die automatischen Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.
 - Einrichtungs-Skript, Docker-Container, HTTPS über Caddy, Sicherung und Zurückspielen wurden
