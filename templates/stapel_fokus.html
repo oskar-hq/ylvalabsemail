@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_os.html" import i, toasts %}
-{% block title %}{{ item.titel }} · Aufgaben{% endblock %}
+{% block title %}{{ item.titel }} · Freigaben{% endblock %}
 {% block body_class %}st-fokus-body{% endblock %}
 {% block content %}
 {% set csrf = csrf_token() %}
@@ -14,7 +14,7 @@
     <div class="st-leiste-rechts">
       <form method="post" action="{{ url_for('stapel.weiter') }}"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="key" value="{{ item.key }}">
         <button class="os-link" data-taste="j">Jetzt nicht <kbd>J</kbd></button></form>
-      {% if item.typ in ('aufgabe', 'agent') %}<form method="post" action="{{ url_for('stapel.spaeter') }}"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="key" value="{{ item.key }}">
+      {% if item.typ == 'agent' %}<form method="post" action="{{ url_for('stapel.spaeter') }}"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="key" value="{{ item.key }}">
         {% if item.typ == 'agent' %}{% for e in item.gruppe.eintraege %}<input type="hidden" name="ids" value="{{ e.id }}">{% endfor %}{% endif %}
         <button class="os-link" data-taste="w">Später <kbd>W</kbd></button></form>{% endif %}
     </div>
@@ -98,40 +98,6 @@
         </form>
       {% endif %}
 
-    {# ---------------- Antwort im Chat ---------------- #}
-    {% elif item.typ == 'antwort' %}
-      <div class="ch-verlauf st-verlauf">{% for m in verlauf %}
-        <div class="ch-blase {{ 'raus' if m.direction == 'out' else 'rein' }}"><span class="ch-meta">{{ m.who }} · {{ m.at[8:10] }}.{{ m.at[5:7] }}. {{ m.at[11:16] }}{% if m.kanal and m.kanal != 'mail' %} · {{ m.kanal|capitalize }}{% endif %}</span>
-          <p>{{ m.text|truncate(700) }}</p></div>{% endfor %}
-      </div>
-      <div class="st-knoepfe einzeln"><a class="st-knopf haupt" href="{{ url_for('crm.chat', lead_id=item.lead_id) }}" data-taste="Enter">Im Chat antworten<kbd>↵</kbd></a></div>
-
-    {# ---------------- Anfrage an meinen Bereich ---------------- #}
-    {% elif item.typ == 'anfrage' %}
-      {% if item.a.notiz %}<p class="st-notiz">{{ item.a.notiz }}</p>{% endif %}
-      <form method="post" action="{{ url_for('aufgaben.ablehnen', aid=item.a.id) }}" id="st-nein" hidden>
-        <input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ hier }}">
-        <label class="os-field"><span>Warum nicht?</span><textarea name="grund" rows="3" required></textarea></label>
-        <button class="os-btn small quiet">Ablehnen</button>
-      </form>
-      <form method="post" action="{{ url_for('aufgaben.annehmen', aid=item.a.id) }}" class="st-knoepfe">
-        <input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ hier }}"><input type="hidden" name="faellig" value="{{ item.a.faellig }}">
-        <button type="button" class="st-knopf" data-zeigen="st-nein" data-taste="ArrowLeft"><kbd>←</kbd>Ablehnen</button>
-        <button class="st-knopf haupt" data-taste="Enter">Annehmen bis {{ item.a.tag }}<kbd>↵</kbd></button>
-      </form>
-
-    {# ---------------- Aufgabe ---------------- #}
-    {% elif item.typ == 'aufgabe' %}
-      {% if item.a.notiz %}<p class="st-notiz">{{ item.a.notiz }}</p>{% endif %}
-      <p class="os-caption st-bezug">{{ item.a.bereich_name }}{% if item.a.objekt_url %} · <a href="{{ item.a.objekt_url }}">{{ item.a.objekt_name }}</a>{% endif %}{% if item.a.erstellt_von_name and item.a.erstellt_von != account.team %} · von {{ item.a.erstellt_von_name }}{% endif %} · <a href="{{ url_for('aufgaben.detail', aid=item.a.id) }}">Öffnen</a></p>
-      <form method="post" action="{{ url_for('aufgaben.erledigt', aid=item.a.id) }}" class="st-knoepfe einzeln">
-        <input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ hier }}">
-        <button class="st-knopf haupt" data-taste="Enter">Erledigt {{ i('check') }}<kbd>↵</kbd></button>
-      </form>
-
-    {# ---------------- Termin-Ergebnis ---------------- #}
-    {% elif item.typ == 'ergebnis' %}
-      <div class="st-knoepfe einzeln"><a class="st-knopf haupt" href="{{ item.url }}" data-taste="Enter">Ergebnis eintragen<kbd>↵</kbd></a></div>
     {% endif %}
   </article>
   {% if items|length > 1 %}<p class="st-danach">Danach: {{ items[1].titel }}{% if items|length > 2 %} und {{ items|length - 2 }} weitere{% endif %}</p>{% endif %}

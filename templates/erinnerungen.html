@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, sheet_neu %}
+{% from "_ziele.html" import ziele_liste, ziel_sheet %}
+{% block title %}Aufgaben · Ylva Labs{% endblock %}
+{% block content %}
+{% set me = account.team %}
+{% set fuer_name = 'Alle' if fuer == 'alle' else ((personen|selectattr('key', 'equalto', fuer)|first).name if fuer != me else 'Meine') %}
+{% macro zeile(a, loop_index=0) -%}
+<li class="os-row er-zeile" style="--i:{{ loop_index }}">
+  <form method="post" action="{{ url_for('aufgaben.erledigt', aid=a.id) }}" data-os-check="remove">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}">
+    <button class="os-check" aria-label="Erledigt: {{ a.titel }}">{{ i('check') }}</button>
+  </form>
+  <a class="os-txt er-txt" href="{{ url_for('aufgaben.detail', aid=a.id) }}">
+    <b>{{ a.titel }}</b>
+    <span>{% if a.ueberfaellig %}<span class="os-late">{{ a.tag }}</span>{% else %}{{ a.tag }}{% endif %}
+      {%- if fuer != a.person %} · {{ (a.person_name or 'Bereich').split(' ')[0] }}{% endif %}
+      {%- if a.objekt_name %} · {{ a.objekt_name }}{% endif %}
+      {%- if a.erstellt_von and a.erstellt_von.startswith('agent:') %} · <span class="er-agent">von {{ a.erstellt_von_name }}</span>
+      {%- elif a.erstellt_von and a.erstellt_von != a.person and '@' not in (a.erstellt_von_name or '@') %} · von {{ a.erstellt_von_name.split(' ')[0] }}{% endif %}</span>
+    {% if a.notiz %}<span class="er-notiz">{{ a.notiz|truncate(140) }}</span>{% endif %}
+  </a>
+  {% if a.prio == 1 %}<span class="er-prio" title="Hohe Priorität" aria-label="Hohe Priorität">!</span>{% endif %}
+</li>
+{%- endmacro %}
+<main class="os-page er-seite">
+  {{ toasts() }}
+  <header class="er-kopf">
+    <h1 class="os-title-l">Aufgaben</h1>
+    <span class="er-zahl" aria-label="{{ offen }} offen">{{ offen }}</span>
+  </header>
+  <nav class="os-chips er-fuer" aria-label="Für wen">
+    <a href="{{ url_for('aufgaben.start') }}" class="{{ 'on' if fuer == me }}">Meine</a>
+    {% for p in personen if p.key != me %}<a href="{{ url_for('aufgaben.start', fuer=p.key) }}" class="{{ 'on' if fuer == p.key }}">{{ p.name.split(' ')[0] }}</a>{% endfor %}
+    <a href="{{ url_for('aufgaben.start', fuer='alle') }}" class="{{ 'on' if fuer == 'alle' }}">Alle</a>
+  </nav>
+
+  <form class="er-neu" method="post" action="{{ url_for('aufgaben.neu') }}" data-os-fetch="reload" autocomplete="off">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}">
+    <span class="er-plus" aria-hidden="true">{{ i('plus') }}</span>
+    <input class="er-eingabe" name="titel" maxlength="200" placeholder="Neue Aufgabe{{ ' für ' ~ fuer_name if fuer not in (me, 'alle') }} …" aria-label="Neue Aufgabe" required>
+    <div class="er-neu-mehr">
+      <select name="person" aria-label="Für wen">
+        {% for p in personen %}<option value="{{ p.key }}" {{ 'selected' if p.key == (fuer if fuer not in ('alle',) else me) }}>{{ p.name.split(' ')[0] }}{{ ' (ich)' if p.key == me }}</option>{% endfor %}
+      </select>
+      <select name="schnell" aria-label="Bis wann">
+        <option value="heute">Heute</option><option value="morgen">Morgen</option>
+        <option value="woche">Nächste Woche</option><option value="2w">In 2 Wochen</option>
+      </select>
+      <button class="os-btn small ink">Eintragen</button>
+    </div>
+  </form>
+
+  {% set zl = zeit_laeuft() %}
+  {% if zl and fuer == me %}<div class="os-zeit-chip er-gruppe"><span class="os-ico red">{{ i('kalender') }}</span>
+    <span class="os-txt"><b>Zeit läuft: {{ zl.titel }}</b><span class="os-caption">seit {{ zl.seit_min }} Minuten</span></span>
+    <form method="post" action="{{ url_for('kunden.zeit_stopp') }}" data-os-fetch="reload"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}"><button class="os-btn small ink">Stopp</button></form></div>{% endif %}
+
+  {% if termine %}
+  <section class="er-gruppe">
+    <h2 class="er-titel">Termine heute</h2>
+    <ul class="os-list">{% for k in termine %}<li class="os-meet"><a class="os-row" href="{{ url_for('kalender.detail', tid=k.id) }}" style="flex:1">
+      <span class="os-zeit">{{ k.start[11:16] }}<em>{{ k.ende[11:16] }}</em></span>
+      <span class="os-txt"><b>{{ k.titel }}</b><span>{{ k.lead_name or (k.personen|length ~ ' Personen') }}</span></span></a>
+      {% if k.meet_link %}<a class="os-btn small ink" href="{{ k.meet_link }}" target="_blank" rel="noopener">Meet</a>{% endif %}</li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+
+  {% if anfragen %}
+  <section class="er-gruppe">
+    <h2 class="er-titel">Anfragen an dich <span>{{ anfragen|length }}</span></h2>
+    <ul class="os-list">{% for a in anfragen %}
+      <li class="os-row"><span class="os-ico off" aria-hidden="true">{{ i('anfrage') }}</span>
+        <a class="os-txt er-txt" href="{{ url_for('aufgaben.detail', aid=a.id) }}"><b>{{ a.titel }}</b>
+          <span>von {{ a.anfrage_von_name or a.erstellt_von_name }} · Wunsch {{ a.tag }}</span></a>
+        <form method="post" action="{{ url_for('aufgaben.annehmen', aid=a.id) }}" data-os-fetch="reload">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}"><input type="hidden" name="faellig" value="{{ a.faellig }}">
+          <button class="os-btn small quiet">Annehmen</button></form></li>{% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
+  {% for key, label, liste in gruppen %}
+  <section class="er-gruppe er-{{ key }}" id="{{ key }}">
+    <h2 class="er-titel">{{ label }} <span>{{ liste|length }}</span></h2>
+    <ul class="os-list">{% for a in liste %}{{ zeile(a, loop.index0) }}{% endfor %}</ul>
+  </section>
+  {% else %}
+  {% if not anfragen %}<div class="er-leer"><span class="os-check done" aria-hidden="true">{{ i('check') }}</span>
+    <p>{{ 'Alles erledigt.' if fuer == me else 'Hier ist nichts offen.' }}</p>
+    <span class="os-caption">Agents tragen hier ein, was ein Mensch tun muss. Oben kannst du selbst etwas eintragen.</span></div>{% endif %}
+  {% endfor %}
+
+  {% if erledigt %}
+  <details class="er-gruppe er-erledigt">
+    <summary class="er-titel">Erledigt <span>{{ erledigt|length }}</span></summary>
+    <ul class="os-list">{% for a in erledigt %}
+      <li class="os-row er-zeile fertig">
+        <form method="post" action="{{ url_for('aufgaben.erledigt', aid=a.id) }}" data-os-fetch="reload">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}"><input type="hidden" name="zurueck" value="1">
+          <button class="os-check done" aria-label="Wieder öffnen: {{ a.titel }}" title="Wieder öffnen">{{ i('check') }}</button></form>
+        <a class="os-txt er-txt" href="{{ url_for('aufgaben.detail', aid=a.id) }}"><b>{{ a.titel }}</b>
+          <span>{{ (a.person_name or '').split(' ')[0] }} · erledigt {{ a.erledigt_am|kurzdatum }}</span></a></li>{% endfor %}
+    </ul>
+  </details>
+  {% endif %}
+
+  {% if ziele is not none %}
+  <section class="er-gruppe" id="ziele">
+    <h2 class="er-titel">Meine Wochenziele</h2>
+    {% if ziele %}{{ ziele_liste(ziele, hier) }}
+    {% else %}<p class="os-empty">Noch keine Ziele für diese Woche. Drei reichen.</p>{% endif %}
+    <div class="os-btns" style="margin-top:12px">
+      {% if ziele|length < 3 %}<button type="button" class="os-btn small quiet" data-sheet="sheet-ziel">Ziel eintragen</button>{% endif %}
+      <a class="os-btn small quiet" href="{{ url_for('cockpit.cockpit', person=me) }}">Meine Zahlen</a>
+    </div>
+  </section>
+  {% endif %}
+
+  <p class="st-alle"><a class="os-link" href="{{ url_for('aufgaben.liste', ansicht='alle') }}">Alle Aufgaben als Liste oder Board</a>
+    · <button type="button" class="os-link" data-sheet="sheet-neu" data-set-art="anfrage">Anfrage an einen Bereich</button></p>
+</main>
+{{ sheet_neu(bereiche, personen, meine_bereiche, me, heute, hier) }}
+{% if ziele is not none %}{{ ziel_sheet('sheet-ziel', me, woche, katalog, hier) }}{% endif %}
+{% endblock %}

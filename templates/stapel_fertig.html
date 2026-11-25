@@ -1,15 +1,15 @@
 {% extends "base.html" %}
 {% from "_os.html" import i, toasts %}
-{% block title %}Geschafft · Aufgaben{% endblock %}
+{% block title %}Geschafft · Freigaben{% endblock %}
 {% block content %}
 <main class="os-page st-start st-fertig">
   {{ toasts() }}
   <span class="st-haken" aria-hidden="true">{{ i('check') }}</span>
-  <h1 class="st-gruss">{% if uebersprungen %}Durch.{% else %}Alles erledigt.{% endif %}</h1>
-  <p class="st-text">{% if uebersprungen %}{{ uebersprungen }} {{ 'Karte hast' if uebersprungen == 1 else 'Karten hast' }} du auf „Jetzt nicht“ gelegt. Sie bleiben im Stapel.{% else %}Neue Freigaben und Aufgaben kommen von selbst in den Stapel.{% endif %}</p>
+  <h1 class="st-gruss">{% if uebersprungen %}Durch.{% else %}Alles entschieden.{% endif %}</h1>
+  <p class="st-text">{% if uebersprungen %}{{ uebersprungen }} {{ 'Karte hast' if uebersprungen == 1 else 'Karten hast' }} du auf „Jetzt nicht“ gelegt. Sie bleiben im Stapel.{% else %}Neue Freigaben kommen von selbst hierher.{% endif %}</p>
   <div class="os-btns" style="justify-content:center;margin-top:32px">
     {% if uebersprungen %}<a class="os-btn ink" href="{{ url_for('stapel.fokus', neu='1') }}">Noch einmal durchgehen</a>{% endif %}
-    <a class="os-btn quiet" href="{{ url_for('stapel.start') }}">Zur Übersicht</a>
+    <a class="os-btn quiet" href="{{ url_for('aufgaben.start') }}">Zu den Aufgaben</a>
   </div>
 </main>
 {% endblock %}

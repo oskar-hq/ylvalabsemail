@@ -43,7 +43,7 @@ def _freigaben_globals():
 # ---------------------------------------------------------------- Freigabe-Zentrale
 
 
-@bp.get("/freigaben")
+@bp.get("/freigaben/alle")
 @login_required
 def zentrale():
     c = db()

@@ -21,12 +21,12 @@
 <body class="{% block body_class %}{% endblock %}">
 {% if account %}
 {% set ep = request.endpoint or '' %}
-{% set sec = 'aufgaben' if ep.startswith(('stapel.', 'aufgaben.', 'freigaben.zentrale')) else ('pipeline' if ep.startswith(('pipeline.', 'kunden.')) and ep != 'kunden.einstellungen' else ('chat' if ep in ('crm.chat', 'crm.inbox', 'crm.conversation', 'crm.compose_mail') else ('crm' if ep.startswith(('crm.', 'leads.detail')) else ('mailer' if ep in ('compose', 'history') else ('mehr' if ep.startswith(('settings.', 'personen.', 'agenten.')) else ''))))) %}
+{% set sec = 'freigaben' if ep.startswith(('stapel.', 'freigaben.zentrale')) else 'aufgaben' if ep.startswith('aufgaben.') else ('pipeline' if ep.startswith(('pipeline.', 'kunden.')) and ep != 'kunden.einstellungen' else ('chat' if ep in ('crm.chat', 'crm.inbox', 'crm.conversation', 'crm.compose_mail') else ('crm' if ep.startswith(('crm.', 'leads.detail')) else ('mailer' if ep in ('compose', 'history') else ('mehr' if ep.startswith(('settings.', 'personen.', 'agenten.')) else ''))))) %}
 {% set mit_person = account.team %}
-{% set n_auf = stapel_offen() if mit_person else 0 %}{% set n_chat = inbox_unread() if mit_person and darf('crm') else 0 %}
+{% set n_frei = stapel_offen() if mit_person else 0 %}{% set n_auf = aufgaben_offen() if mit_person else 0 %}{% set n_chat = inbox_unread() if mit_person and darf('crm') else 0 %}
 {% set who_name = (account.name or account.address or account.user or 'Team') %}
 <header class="top">
-  <a class="brand" href="{{ url_for('index') }}" aria-label="Ylva Labs, zu den Aufgaben">
+  <a class="brand" href="{{ url_for('index') }}" aria-label="Ylva Labs, zu den Freigaben">
     <span class="brand-tile"><span class="mark" aria-hidden="true"><i class="d"></i><i class="d"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i class="d"></i><i class="d"></i></span></span>
   </a>
   {% set abs_ = g.get('arbeitsbereiche') or [] %}{% if mit_person and abs_|length > 1 %}{% set ab_jetzt = (abs_|selectattr('key', 'equalto', g.arbeitsbereich)|first) %}
@@ -40,7 +40,8 @@
   </details>{% endif %}
   <nav aria-label="Hauptnavigation">
     <span class="nav-main">
-      {% if mit_person %}<a href="{{ url_for('stapel.start') }}" class="{{ 'on' if sec == 'aufgaben' }}">Aufgaben{% if n_auf %} <span class="nav-count" title="Wartet heute auf dich">{{ n_auf }}</span>{% endif %}</a>
+      {% if mit_person %}<a href="{{ url_for('stapel.start') }}" class="{{ 'on' if sec == 'freigaben' }}">Freigaben{% if n_frei %} <span class="nav-count" title="Wartet auf deine Entscheidung">{{ n_frei }}</span>{% endif %}</a>
+      <a href="{{ url_for('aufgaben.start') }}" class="{{ 'on' if sec == 'aufgaben' }}">Aufgaben{% if n_auf %} <span class="nav-count" title="Heute fällig oder überfällig">{{ n_auf }}</span>{% endif %}</a>
       <a href="{{ url_for('pipeline.seite') }}" class="{{ 'on' if sec == 'pipeline' }}">Pipeline</a>
       {% if darf('crm') %}<a href="{{ url_for('crm.board') }}" class="{{ 'on' if sec == 'crm' }}">CRM</a>
       <a href="{{ url_for('crm.chat') }}" class="{{ 'on' if sec == 'chat' }}">Chat{% if n_chat %} <span class="nav-count" title="Ungelesene Gespräche">{{ n_chat }}</span>{% endif %}</a>{% endif %}
@@ -85,7 +86,8 @@
 {% if mit_person %}{% for n in notfaelle_aktiv() %}<a class="os-notfall-band" href="{{ url_for('freigaben.notfall') }}#n{{ n.id }}"><b>Notfall: {{ n.art_label }}</b><span>{{ n.text }} · gemeldet von {{ n.von_name }} um {{ n.gemeldet_am[11:16] }}</span></a>{% endfor %}{% endif %}
 {% if not account.team and request.endpoint != 'team.who_am_i' %}<div class="who-banner">Du bist mit dem Postfach angemeldet und kannst den Mailer nutzen. <a href="{{ url_for('team.who_am_i', next=request.path) }}">Wähle, wer du bist</a>, oder melde dich mit deinem Namen an.</div>{% endif %}
 <nav class="tabbar" aria-label="Bereiche">
-  {% if mit_person %}<a href="{{ url_for('stapel.start') }}" class="{{ 'on' if sec == 'aufgaben' }}">{% if n_auf %}<span class="tab-count">{{ n_auf }}</span>{% endif %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg>Aufgaben</a>
+  {% if mit_person %}<a href="{{ url_for('stapel.start') }}" class="{{ 'on' if sec == 'freigaben' }}">{% if n_frei %}<span class="tab-count">{{ n_frei }}</span>{% endif %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg>Freigaben</a>
+  <a href="{{ url_for('aufgaben.start') }}" class="{{ 'on' if sec == 'aufgaben' }}">{% if n_auf %}<span class="tab-count">{{ n_auf }}</span>{% endif %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="5" cy="7" r="1.6"/><circle cx="5" cy="17" r="1.6"/><path d="M10 7h10M10 17h10"/></svg>Aufgaben</a>
   <a href="{{ url_for('pipeline.seite') }}" class="{{ 'on' if sec == 'pipeline' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Pipeline</a>
   {% if darf('crm') %}<a href="{{ url_for('crm.board') }}" class="{{ 'on' if sec == 'crm' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg>CRM</a>
   <a href="{{ url_for('crm.chat') }}" class="{{ 'on' if sec == 'chat' }}">{% if n_chat %}<span class="tab-count">{{ n_chat }}</span>{% endif %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/></svg>Chat</a>{% endif %}{% endif %}

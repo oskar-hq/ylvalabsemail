@@ -178,6 +178,16 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
     `nachricht_eintragen` ins OS, Antworten aus dem Chat mit `nachrichten_zu_senden` abholen und mit
     `nachricht_gesendet_melden` bestätigen; Outreach sucht Leads selbst.
 
+- **Freigaben und Aufgaben getrennt (25.11.2026, Stufe 13b).** Oben stehen jetzt fünf Reiter: **Freigaben,
+  Aufgaben, Pipeline, CRM, Chat**.
+  - **Freigaben** ist die Startseite. Dort läuft nur, was du mit Ja oder Nein entscheiden musst (Karten der Agents,
+    Termin-Einladungen, Erstkontakte …), eine Karte nach der anderen.
+  - **Aufgaben** ist eine Liste wie Apple Erinnerungen. Hier tragen die Agents ein, was ein Mensch tun muss
+    (anrufen, unterschreiben, bauen), für Oskar, Finn und die anderen. Abhaken mit einem Tipp, oben schnell selbst
+    eintragen, oben umschalten zwischen Meine, einer Person oder Alle.
+  - **Nach dem Update:** den Bots einmal den neuen Prompt geben (Einstellungen → Agents → Einrichten). Neu darin:
+    Ja/Nein-Fragen als Freigabe, alles zum Selbermachen als Aufgabe für die Person.
+
 - Die automatischen Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.
 - Einrichtungs-Skript, Docker-Container, HTTPS über Caddy, Sicherung und Zurückspielen wurden

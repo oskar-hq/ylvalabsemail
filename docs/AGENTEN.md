@@ -65,7 +65,7 @@ Rechten; anpassbar in der App.
 | `kennzahlen` | Kennzahlen | liest | cockpit | KPIs einer Kalenderwoche fürs Team (z. B. 2026-W48, leer = diese Woche) mit Ziel, Vorwoche und Ampel. |
 | `regeln_und_entscheidungen` | Regeln und Entscheidungen | liest | entscheidungen | Welche Freigabe-Arten es gibt und nach welchem Entscheidungsrecht sie gehen, Freigabe-Stufen A–D, das Entscheidungs-Log der letzten 30 Tage und deine Tageslimits. Lesen, bevor du etwas anfragst, das schon entschieden sein könnte. |
 | `freigaben_status` | Status meiner Freigaben | liest | immer | Antworten auf deine Freigaben seit dem letzten Aufruf (nur_neue=false: letzte 30 Tage): freigegeben, abgelehnt (mit Grund), gewählte Option, geänderte Fassung, Ergebnis der Ausführung, dazu was noch offen ist. Bei jedem Lauf zuerst aufrufen. „bitte_ausfuehren“ heißt: du führst genau den freigegebenen Inhalt aus und meldest es mit freigabe_erledigt_melden. |
-| `aufgabe_anlegen` | Aufgabe anlegen | schreibt | aufgaben (Bearbeiten) | Neue Aufgabe für eine Person (oder den Bereich) mit Termin. Sucht vorher selbst nach ähnlichen offenen Aufgaben und legt dann nichts an, sondern meldet sie (trotzdem=true legt trotzdem an). anfrage=true macht eine Anfrage an einen anderen Bereich. |
+| `aufgabe_anlegen` | Aufgabe anlegen | schreibt | aufgaben (Bearbeiten) | Neue Aufgabe für einen Menschen (person, z. B. oskar oder finn) mit Termin: alles, was ein Mensch tun muss und was du weder selbst erledigen noch per Freigabe klären kannst (anrufen, Vertrag unterschreiben, vor Ort, etwas bauen). Steht dann auf seiner Aufgaben-Liste zum Abhaken. Ja/Nein-Fragen gehören nicht hierher, sondern in freigabe_anfragen. Sucht vorher selbst nach ähnlichen offenen Aufgaben und legt dann nichts an, sondern meldet sie (trotzdem=true legt trotzdem an). anfrage=true macht eine Anfrage an einen anderen Bereich. |
 | `aufgabe_aendern` | Aufgabe ändern oder zuweisen | schreibt | aufgaben (Bearbeiten) | Titel, Notiz, Termin (faellig), Priorität (1 hoch, 2 normal, 3 niedrig), Bereich oder Person einer Aufgabe ändern. Zuweisen = person setzen. |
 | `aufgabe_erledigen` | Aufgabe abhaken | schreibt | aufgaben (Bearbeiten) | Aufgabe als erledigt markieren (erledigt=false öffnet sie wieder). Nur, wenn sie wirklich erledigt ist, z. B. laut Meeting-Protokoll. |
 | `notiz_anlegen` | Notiz anlegen | schreibt | aufgaben oder leads oder crm oder kunden (Bearbeiten) | Notiz an einen Lead/Kunden (lead_id), ein Projekt (projekt_id) oder eine Aufgabe (aufgabe_id, als Kommentar). Für Gesprächsnotizen, Meeting-Ergebnisse, Recherche. |
@@ -128,10 +128,14 @@ einzige Quelle für Firmendaten, ins Second Brain nur Zusammenfassungen und Lear
   Später). Details und Entwurf klappen auf, der Entwurf ist dort bearbeitbar. Gleichartige Karten eines Agents mit
   gleichem `buendel` erscheinen als eine Karte mit Einzelauswahl („3 × Welle 3“). Zahl in der Navigation, Push
   aufs Handy bei 🟥.
-- **Aufgaben** (`/aufgaben`, seit Stufe 13 die Startseite): eine große Zahl, „Starten“, dann eine Karte pro
-  Bildschirm (`/aufgaben/fokus`): Freigaben der Agents zuerst, dann Antworten, Anfragen, Aufgaben. Tasten:
-  Enter freigeben, ← ablehnen, 1–3 Option, J „Jetzt nicht“, W „Später“. Darunter „Von den Agents“ (aus
-  `info_melden`).
+- **Freigaben** (`/freigaben`, Startseite seit Stufe 13b): nur was entschieden werden muss. Eine große Zahl,
+  „Starten“, dann eine Karte pro Bildschirm (`/freigaben/fokus`): Agent-Freigaben und die übrigen Freigaben.
+  Tasten: Enter freigeben, ← ablehnen, 1–3 Option, J „Jetzt nicht“, W „Später“. Darunter „Von den Agents“ (aus
+  `info_melden`). Die ausführliche Zentrale liegt unter `/freigaben/alle`.
+- **Aufgaben** (`/aufgaben`, Stufe 13b): eine Erinnerungsliste wie Apple Erinnerungen. Was ein Mensch tun muss und
+  ein Agent weder erledigen noch freigeben lassen kann, trägt der Agent mit `aufgabe_anlegen` (person, faellig)
+  ein. Gruppiert nach Überfällig, Heute, Morgen, Nächste 7 Tage, Später; abhaken mit einem Tipp; oben Schnell-
+  Eingabe (Was, Für wen, Wann); Filter Meine, je Person, Alle. „von Ops (Agent)“ zeigt, wer es eingetragen hat.
 - **Pipeline** (`/pipeline`): je Agent eine Karte mit Status (arbeitet gerade, wartet auf euch, heute aktiv,
   ruhig, nicht verbunden), Balken je Stunde und farbigen Punkten je Aktion (aus dem Firmen-Protokoll), dazu die
   Projekte als Board nach Phase.
@@ -161,6 +165,7 @@ Briefe hält ein Mensch im Chat unter „Festhalten“ fest.
 ## 6. Regeln für Agents (Kurzfassung)
 
 1. Nie selbst freigeben. Entwurf + `freigabe_anfragen`; nach dem Ja führt das OS aus oder meldet „bitte ausführen“.
+   Ja/Nein-Fragen sind Freigaben; was ein Mensch selbst tun muss, ist eine Aufgabe (`aufgabe_anlegen` mit person).
 2. Erst suchen, dann anlegen (Dubletten). `aufgabe_anlegen` und `lead_anlegen` prüfen selbst und melden Treffer.
 3. Kurzformat: Titel ≤ 5 Wörter, „was“ ein Satz, Optionen A/B/C mit Empfehlung, Frist, Dringlichkeit. Bündeln.
    Reine Infos mit `info_melden`. Tageslimit für Karten (Standard 5, ein Bündel zählt einmal).
@@ -200,6 +205,7 @@ Ab sofort ist das Firmen-OS von Ylva Labs (https://mail.ylvalabs.de) die Datenba
 
 Was sich ändert:
 - Freigaben und Entscheidungen laufen NICHT mehr über Slack #entscheidungen und nicht mehr über Notizen im Second Brain, sondern nur noch über das OS: Entwurf anlegen (entwurf_anlegen) und Freigabe anfragen (freigabe_anfragen). Das OS bestimmt selbst, wer entscheidet, und zeigt es dort als Karte. Oskar und Finn entscheiden im OS.
+- Zwei Arten, Menschen etwas vorzulegen: Was jemand nur mit Ja oder Nein entscheiden muss, ist eine Freigabe (freigabe_anfragen, landet unter „Freigaben“). Was ein Mensch selbst tun muss und du weder erledigen noch freigeben lassen kannst (anrufen, unterschreiben, vor Ort, bauen), ist eine Aufgabe für genau diese Person (aufgabe_anlegen mit person, landet auf ihrer Aufgaben-Liste zum Abhaken).
 - Aufgaben stehen nur noch im OS (aufgabe_anlegen, aufgabe_aendern, aufgabe_erledigen, aufgaben_suchen), nicht mehr in Second-Brain-Notizen wie „Aufgaben“ oder in Slack-Listen. Bestehende offene Aufgaben aus dem Second Brain trägst du einmalig ins OS ein (vorher mit aufgaben_suchen prüfen, ob es sie schon gibt) und markierst sie im Second Brain als „umgezogen ins OS am <Datum>“.
 - Kunden, Leads, Projekte, Notizen: nur im OS (lead_anlegen, lead_aendern, notiz_anlegen, projekt). Das OS ist die einzige Quelle der Wahrheit für Firmendaten.
 - Ins Second Brain schreibst du nur noch Zusammenfassungen und Learnings für Oskars Meta-Ebene (Muster, Erkenntnisse, was funktioniert hat), keine Kopien von Aufgaben, Leads, Freigaben oder Entscheidungen.
@@ -230,6 +236,7 @@ Ab sofort ist das Firmen-OS von Ylva Labs (https://mail.ylvalabs.de) die Datenba
 
 Was sich ändert:
 - Freigaben und Entscheidungen laufen NICHT mehr über Slack #entscheidungen und nicht mehr über Notizen im Second Brain, sondern nur noch über das OS: Entwurf anlegen (entwurf_anlegen) und Freigabe anfragen (freigabe_anfragen). Das OS bestimmt selbst, wer entscheidet, und zeigt es dort als Karte. Oskar und Finn entscheiden im OS.
+- Zwei Arten, Menschen etwas vorzulegen: Was jemand nur mit Ja oder Nein entscheiden muss, ist eine Freigabe (freigabe_anfragen, landet unter „Freigaben“). Was ein Mensch selbst tun muss und du weder erledigen noch freigeben lassen kannst (anrufen, unterschreiben, vor Ort, bauen), ist eine Aufgabe für genau diese Person (aufgabe_anlegen mit person, landet auf ihrer Aufgaben-Liste zum Abhaken).
 - Aufgaben stehen nur noch im OS (aufgabe_anlegen, aufgabe_aendern, aufgabe_erledigen, aufgaben_suchen), nicht mehr in Second-Brain-Notizen wie „Aufgaben“ oder in Slack-Listen. Bestehende offene Aufgaben aus dem Second Brain trägst du einmalig ins OS ein (vorher mit aufgaben_suchen prüfen, ob es sie schon gibt) und markierst sie im Second Brain als „umgezogen ins OS am <Datum>“.
 - Kunden, Leads, Projekte, Notizen: nur im OS (lead_anlegen, lead_aendern, notiz_anlegen, projekt). Das OS ist die einzige Quelle der Wahrheit für Firmendaten.
 - Ins Second Brain schreibst du nur noch Zusammenfassungen und Learnings für Oskars Meta-Ebene (Muster, Erkenntnisse, was funktioniert hat), keine Kopien von Aufgaben, Leads, Freigaben oder Entscheidungen.
@@ -260,6 +267,7 @@ Ab sofort ist das Firmen-OS von Ylva Labs (https://mail.ylvalabs.de) die Datenba
 
 Was sich ändert:
 - Freigaben und Entscheidungen laufen NICHT mehr über Slack #entscheidungen und nicht mehr über Notizen im Second Brain, sondern nur noch über das OS: Entwurf anlegen (entwurf_anlegen) und Freigabe anfragen (freigabe_anfragen). Das OS bestimmt selbst, wer entscheidet, und zeigt es dort als Karte. Oskar und Finn entscheiden im OS.
+- Zwei Arten, Menschen etwas vorzulegen: Was jemand nur mit Ja oder Nein entscheiden muss, ist eine Freigabe (freigabe_anfragen, landet unter „Freigaben“). Was ein Mensch selbst tun muss und du weder erledigen noch freigeben lassen kannst (anrufen, unterschreiben, vor Ort, bauen), ist eine Aufgabe für genau diese Person (aufgabe_anlegen mit person, landet auf ihrer Aufgaben-Liste zum Abhaken).
 - Aufgaben stehen nur noch im OS (aufgabe_anlegen, aufgabe_aendern, aufgabe_erledigen, aufgaben_suchen), nicht mehr in Second-Brain-Notizen wie „Aufgaben“ oder in Slack-Listen. Bestehende offene Aufgaben aus dem Second Brain trägst du einmalig ins OS ein (vorher mit aufgaben_suchen prüfen, ob es sie schon gibt) und markierst sie im Second Brain als „umgezogen ins OS am <Datum>“.
 - Kunden, Leads, Projekte, Notizen: nur im OS (lead_anlegen, lead_aendern, notiz_anlegen, projekt). Das OS ist die einzige Quelle der Wahrheit für Firmendaten.
 - Ins Second Brain schreibst du nur noch Zusammenfassungen und Learnings für Oskars Meta-Ebene (Muster, Erkenntnisse, was funktioniert hat), keine Kopien von Aufgaben, Leads, Freigaben oder Entscheidungen.
@@ -290,6 +298,7 @@ Ab sofort ist das Firmen-OS von Ylva Labs (https://mail.ylvalabs.de) die Datenba
 
 Was sich ändert:
 - Freigaben und Entscheidungen laufen NICHT mehr über Slack #entscheidungen und nicht mehr über Notizen im Second Brain, sondern nur noch über das OS: Entwurf anlegen (entwurf_anlegen) und Freigabe anfragen (freigabe_anfragen). Das OS bestimmt selbst, wer entscheidet, und zeigt es dort als Karte. Oskar und Finn entscheiden im OS.
+- Zwei Arten, Menschen etwas vorzulegen: Was jemand nur mit Ja oder Nein entscheiden muss, ist eine Freigabe (freigabe_anfragen, landet unter „Freigaben“). Was ein Mensch selbst tun muss und du weder erledigen noch freigeben lassen kannst (anrufen, unterschreiben, vor Ort, bauen), ist eine Aufgabe für genau diese Person (aufgabe_anlegen mit person, landet auf ihrer Aufgaben-Liste zum Abhaken).
 - Aufgaben stehen nur noch im OS (aufgabe_anlegen, aufgabe_aendern, aufgabe_erledigen, aufgaben_suchen), nicht mehr in Second-Brain-Notizen wie „Aufgaben“ oder in Slack-Listen. Bestehende offene Aufgaben aus dem Second Brain trägst du einmalig ins OS ein (vorher mit aufgaben_suchen prüfen, ob es sie schon gibt) und markierst sie im Second Brain als „umgezogen ins OS am <Datum>“.
 - Kunden, Leads, Projekte, Notizen: nur im OS (lead_anlegen, lead_aendern, notiz_anlegen, projekt). Das OS ist die einzige Quelle der Wahrheit für Firmendaten.
 - Ins Second Brain schreibst du nur noch Zusammenfassungen und Learnings für Oskars Meta-Ebene (Muster, Erkenntnisse, was funktioniert hat), keine Kopien von Aufgaben, Leads, Freigaben oder Entscheidungen.

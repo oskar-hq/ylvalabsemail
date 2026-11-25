@@ -1,6 +1,6 @@
 # Übergabe für den Weiterbau (nach Stufe 13)
 
-**Stand:** 25.11.2026 · Stufe 1 bis 13 gebaut und gemergt (12: Agenten-Schnittstelle, [AGENTEN.md](AGENTEN.md); 13: aufgeräumt wie das Cockpit, Lead-Suche und Branchentest entfernt) · nächste: Praxistest mit dem ersten Kunden (Abschnitt 3)
+**Stand:** 25.11.2026 · Stufe 1 bis 13 gebaut und gemergt (12: Agenten-Schnittstelle, [AGENTEN.md](AGENTEN.md); 13: aufgeräumt wie das Cockpit, Lead-Suche und Branchentest entfernt; 13b: Freigaben und Aufgaben getrennt) · nächste: Praxistest mit dem ersten Kunden (Abschnitt 3)
 
 Diese Datei ist für die nächste Sitzung (Mensch oder KI), die am Firmen-OS weiterbaut. **Wer neu einsteigt:**
 erst `CLAUDE.md`, dann diese Datei ganz (vor allem „Arbeitsbereiche“ in Abschnitt 2). Sie fasst zusammen, was
@@ -13,7 +13,7 @@ steht, wie hier gearbeitet wird und was als Nächstes sinnvoll ist. Ausführlich
    [DESIGN.md](DESIGN.md) lesen, dann den betroffenen Code.
 2. Kurzen Plan für die Stufe mit Oskar abstimmen. Oskar hat für Stufe 2 bis 10 gesagt: Plan kurz abstimmen, dann bauen,
    testen, im Browser ansehen, Doku nachziehen, Pull Request und mergen.
-3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 186 Tests, alle grün; mit Stufe 13 fielen die Tests der Lead-Suche und des Branchentests weg). Neue Tests für das OS
+3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 187 Tests, alle grün; mit Stufe 13 fielen die Tests der Lead-Suche und des Branchentests weg). Neue Tests für das OS
    kommen in `tests/test_os.py` (die Reihenfolge der Testdateien ist wichtig: `test_leads.py` setzt die
    Umgebung, Dateien davor dürfen `app.main` nicht importieren).
 4. Seiten im Browser ansehen (Playwright ist vorinstalliert): Handy 390 px und Desktop, hell und dunkel.
@@ -42,7 +42,7 @@ Requests gehen dorthin. Nach einem Merge den Arbeits-Branch neu von dort abzweig
 | Start | `startklar.py` (Checkliste für den echten Betrieb, nur gespeicherte Werte) | Einstellungen → Startklar, Hinweis auf Mein Tag, Mein Profil → Meldungen aufs Handy |
 | 11 Arbeitsbereiche | `arbeitsbereiche.py` (aktiver Arbeitsbereich, Einstellungen und Postfach je Kunde, Zahlen für Kunden) | Auswahl oben, Einstellungen → Arbeitsbereiche, Kunden-Bereich → Outreach, Postfach-Ordner |
 | 12 Agents (MCP) | `agenten.py` (Agenten-Konten, OAuth, Entwürfe, Zuständigkeit, Freigaben mit Ausführung, Infos), `mcp_server.py` (Protokoll, Werkzeuge), `agenten_prompts.py` | `/mcp/<key>`, `/oauth/*`, Einstellungen → Agents (Einrichten), Freigaben-Karten, Mein Tag → Von den Agents, Boards unter Kunden und Aufgaben |
-| 13 Aufgeräumt | `stapel.py` (Aufgabenstapel), `stapel_views.py`, `pipeline_views.py`, Chat in `crm_views.py` | Aufgaben (Start + Fokus), Pipeline (Agents + Projekte), Chat, Einstellungen neu |
+| 13 Aufgeräumt | `stapel.py` (Freigabe-Stapel), `stapel_views.py`, `pipeline_views.py`, Chat in `crm_views.py`, `aufgaben.erinnerungen` (13b) | Freigaben (Start + Fokus), Aufgaben (Erinnerungsliste), Pipeline, Chat, Einstellungen neu |
 | 10 Assistent | `assistent.py` (Fragen mit Werkzeugen und Rechteprüfung, „Was zuerst?“, Entwürfe, Angebote mit PDF und Freigabe), `ai.anfrage` | Assistent, Mein Tag → Was zuerst?, Angebote, Einstellungen → Assistent, Entwurf-Knöpfe in Gespräch/Termin/Projekt |
 
 Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module wieder nutzen sollten:

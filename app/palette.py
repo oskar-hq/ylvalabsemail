@@ -11,9 +11,10 @@ bp = Blueprint("palette", __name__)
 
 # (Titel, Bereich, Endpoint, Argumente, Stichworte)
 PAGES = [
-    ("Aufgaben", "Start", "stapel.start", {}, "heute stapel freigaben aufgaben fokus start"),
-    ("Alle Aufgaben", "Aufgaben", "aufgaben.liste", {}, "liste aufgaben erledigt delegiert"),
-    ("Alle Freigaben", "Aufgaben", "freigaben.zentrale", {}, "freigabe genehmigen entscheiden"),
+    ("Freigaben", "Start", "stapel.start", {}, "heute stapel freigaben fokus start entscheiden ja nein"),
+    ("Aufgaben", "Erinnerungen", "aufgaben.start", {}, "aufgaben erinnerungen todo abhaken erledigen"),
+    ("Alle Aufgaben", "Aufgaben", "aufgaben.liste", {}, "liste board aufgaben erledigt delegiert"),
+    ("Alle Freigaben", "Freigaben", "freigaben.zentrale", {}, "freigabe zentrale genehmigen entscheiden"),
     ("Pipeline", "Überblick", "pipeline.seite", {}, "agents projekte phase überblick aktivität"),
     ("Chat", "Kunden", "crm.chat", {}, "nachrichten mails slack whatsapp linkedin antworten gespräch"),
     ("Agents", "Agents", "agenten.einstellungen", {}, "grok bots ki agenten mcp"),

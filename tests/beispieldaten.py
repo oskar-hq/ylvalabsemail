@@ -232,6 +232,15 @@ def seed_os(conn):
                 conn.execute("INSERT INTO ereignisse (at, wer, art, objekt_typ, text) VALUES (?,?,?,?,?)",
                              (f"{heute}T{stunde:02d}:{10 + i * 7:02d}:00", agenten.wer_von(key), art, art,
                               f"Beispiel: {art} bearbeitet"))
+    from app import aufgaben
+    for wer, titel, person, tage, notiz in [
+            ("agent:ops", "Vertrag Grünholz unterschreiben", "oskar", 0, "Liegt als PDF im Projekt."),
+            ("agent:outreach", "Hansen zurückrufen", "oskar", -1, "Wollte vormittags erreicht werden."),
+            ("agent:delivery", "Kalender-Anbindung für Grünholz bauen", "finn", 2, ""),
+            ("oskar", "Steuerberater Unterlagen schicken", "oskar", 5, "")]:
+        aufgaben.anlegen(conn, wer, titel, aufgaben.bereich_fuer(conn, person),
+                         (date.today() + timedelta(days=tage)).isoformat(), person=person, notiz=notiz,
+                         quelle="agent" if wer.startswith("agent:") else "hand")
     conn.execute("UPDATE agenten SET zuletzt_aktiv=?, zuletzt_was=? WHERE key='delivery'",
                  (datetime.now().isoformat(timespec="seconds"), "Projekt Gärtnerei Grünholz"))
     if leads:

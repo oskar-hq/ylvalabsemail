@@ -138,8 +138,9 @@ Abschnitt 8.
 ### 4.1 Start: „Mein Tag“ (seit Stufe 13: „Aufgaben“ als Stapel)
 
 Die erste Seite nach dem Login, für jede Person anders. Das OS sagt der Person, was sie heute tun soll.
-Seit Stufe 13 (25.11.2026) als Aufgabenstapel wie im Outreach-Cockpit: eine große Zahl, „Starten“, dann eine Karte
-pro Bildschirm (Freigaben, Antworten, Anfragen, Aufgaben), Ja oder Nein mit einem Tipp oder einer Taste.
+Seit Stufe 13 (25.11.2026) als Stapel wie im Outreach-Cockpit: eine große Zahl, „Starten“, dann eine Karte pro
+Bildschirm, Ja oder Nein mit einem Tipp oder einer Taste. Seit Stufe 13b getrennt: **Freigaben** (Startseite, nur
+was entschieden werden muss) und **Aufgaben** (Erinnerungsliste für das, was Menschen tun müssen).
 
 - Freigaben, die auf mich warten (mit Zähler in der Glocke)
 - Meine Aufgaben, sortiert nach Fälligkeit und Priorität, überfällige oben
@@ -903,6 +904,23 @@ Die Reihenfolge 2 und 3 kann getauscht werden, je nachdem, was im Alltag zuerst 
     in der Datenbank (nichts geht verloren); Testbranchen-Daten werden nicht mehr angezeigt. Kennzahl „Kontakte“
     zählt weiter alle Kontakte aus dem Verlauf.
 
+- [x] **Stufe 13b – Freigaben und Aufgaben getrennt** (gebaut 25.11.2026)
+  Ziel (Oskar, 25.11.2026): Die Aufgabenseite wird zur **Freigabenseite**, auf der nur läuft, was die Agents
+  abnicken lassen müssen. Dazu eine eigene **Aufgabenseite wie Apple Erinnerungen**, in die die Agents Aufgaben für
+  Finn, Oskar und die anderen schreiben: Dinge, die sie weder freigeben lassen noch selbst erledigen können.
+  *Umsetzung und Abweichungen:*
+  - Navigation jetzt fünf Reiter: **Freigaben · Aufgaben · Pipeline · CRM · Chat**. Startseite sind die Freigaben.
+  - Freigaben (`/freigaben`, `/freigaben/fokus`, `stapel.py`): nur Agent-Freigaben und die übrigen Freigaben
+    (Termin-Einladung, Erstkontakt, Rechnung …). Antworten von Kunden stehen nur noch im Chat (mit Zahl im Reiter).
+    Die bisherige Freigabe-Zentrale liegt unter `/freigaben/alle`.
+  - Aufgaben (`/aufgaben`, `aufgaben.erinnerungen`, `erinnerungen.html`): Liste nach Überfällig, Heute, Morgen,
+    Nächste 7 Tage, Später; Kreis zum Abhaken; Schnell-Eingabe mit Was, Für wen, Wann (der Bereich ergibt sich aus
+    der Person, `aufgaben.bereich_fuer`); Filter Meine, je Person, Alle; Anfragen an die eigenen Bereiche mit
+    „Annehmen“; zuletzt Erledigtes zum Wieder-Öffnen; Termine heute, „Zeit läuft“ und Wochenziele. Die ausführliche
+    Liste mit Board bleibt unter `/aufgaben/alle`.
+  - Agents: `aufgabe_anlegen` beschreibt jetzt genau diese Trennung; die Umzugs-Prompts sagen: Ja/Nein → Freigabe,
+    selbst tun → Aufgabe für die Person.
+  - Alte Adressen: `/aufgaben/fokus`, `/mein-tag`, `/heute`, `/leads` führen zu den Freigaben.
 
 ## 9. Was das OS ausdrücklich nicht sein soll
 

@@ -1,9 +1,10 @@
-"""Seiten des Aufgabenstapels (Stufe 13): Start (eine Zahl, „Starten“) und Fokus (eine Karte pro Bildschirm)."""
-from datetime import date, datetime, timedelta
+"""Seiten des Freigabe-Stapels (Stufe 13, seit 13b nur Freigaben): Start (eine Zahl, „Starten“) und Fokus (eine
+Karte pro Bildschirm). Die Aufgaben stehen auf einer eigenen Seite (`aufgaben_views.start`)."""
+from datetime import datetime
 
 from flask import Blueprint, flash, g, redirect, render_template, request, session, url_for
 
-from . import aufgaben, firma, mailbox, stapel
+from . import firma, stapel
 from .leads_views import db, me
 from .main import login_required, safe_next
 
@@ -29,43 +30,35 @@ def _gruss(name):
     return ("Guten Morgen" if h < 11 else "Guten Tag" if h < 18 else "Guten Abend") + ", " + (name or "").split(" ")[0]
 
 
-@bp.get("/aufgaben")
+@bp.get("/freigaben")
 @login_required
 def start():
-    if request.args:  # alte Links wie /aufgaben?ansicht=alle: das ist die Liste
-        return redirect(url_for("aufgaben.liste", **request.args))
     c = db()
     key = me()
     if not key:
         return redirect(url_for("team.who_am_i", next=request.path))
     items = stapel.stapel(c, key)
-    from . import agenten, kalender
-    from .aufgaben_views import _form_kontext, _startklar_offen
-    jetzt = datetime.now()
-    termine = kalender.liste(c, jetzt.strftime("%Y-%m-%dT%H:%M"), jetzt.date().isoformat() + "T23:59", key) \
-        if firma.darf(c, key, "kalender") else []
+    from . import agenten
+    from .aufgaben_views import _startklar_offen
     _, spaeter = agenten.karten(c, key)
     person = firma.person(c, key) or {}
-    from . import kpis
-    woche = kpis.woche_von()
-    cockpit = firma.darf(c, key, "cockpit")
-    return render_template("stapel.html", account=g.account, items=items, zahlen=stapel.zusammenfassung(items),
-                           n=sum(z["n"] for z in stapel.zusammenfassung(items)), gruss=_gruss(person.get("name")),
-                           termine=termine, infos=agenten.infos_fuer(c, key), spaeter=spaeter,
+    zahlen = stapel.zusammenfassung(items)
+    return render_template("stapel.html", account=g.account, items=items, zahlen=zahlen,
+                           n=sum(z["n"] for z in zahlen), gruss=_gruss(person.get("name")),
+                           infos=agenten.infos_fuer(c, key), spaeter=spaeter,
                            einrichten=firma.darf(c, key, "personen", firma.VERWALTEN)
-                           and not agenten.einrichtung(c)["fertig"], startklar_offen=_startklar_offen(c, key),
-                           ziele=kpis.ziele_der_woche(c, woche, key) if cockpit else None, woche=woche,
-                           katalog=[k for k in kpis.KATALOG if k["fn"] and k["je_person"]], **_form_kontext())
+                           and not agenten.einrichtung(c)["fertig"], startklar_offen=_startklar_offen(c, key))
 
 
 @bp.get("/heute")
 @bp.get("/leads")
+@bp.get("/aufgaben/fokus")
 def alt_start():
-    """Frühere Startseiten (Web-App auf dem Handy, Lesezeichen) führen zu den Aufgaben."""
+    """Frühere Startseiten (Web-App auf dem Handy, Lesezeichen, Stapel unter /aufgaben) führen zu den Freigaben."""
     return redirect(url_for("stapel.start"))
 
 
-@bp.get("/aufgaben/fokus")
+@bp.get("/freigaben/fokus")
 @login_required
 def fokus():
     c = db()
@@ -80,18 +73,11 @@ def fokus():
         session.pop("stapel_skip", None)
         return render_template("stapel_fertig.html", account=g.account, gesamt=gesamt,
                                uebersprungen=len(stapel.stapel(c, key)))
-    item = items[0]
-    extra = {}
-    if item["typ"] == "antwort":
-        lead = c.execute("SELECT * FROM leads WHERE id=?", (item["lead_id"],)).fetchone()
-        verlauf = mailbox.thread(c, dict(lead)) if lead else []
-        extra = {"verlauf": verlauf[-3:], "lead": dict(lead) if lead else None}
-    return render_template("stapel_fokus.html", account=g.account, item=item, items=items, gesamt=gesamt,
-                           erledigt=max(0, gesamt - len(items)), hier=url_for("stapel.fokus"),
-                           morgen=(date.today() + timedelta(days=1)).isoformat(), **extra)
+    return render_template("stapel_fokus.html", account=g.account, item=items[0], items=items, gesamt=gesamt,
+                           erledigt=max(0, gesamt - len(items)), hier=url_for("stapel.fokus"))
 
 
-@bp.post("/aufgaben/fokus/weiter")
+@bp.post("/freigaben/fokus/weiter")
 @login_required
 def weiter():
     """„Jetzt nicht“: Karte bis zum Ende dieser Sitzung überspringen."""
@@ -103,24 +89,21 @@ def weiter():
     return redirect(safe_next(request.form.get("next", "")) or url_for("stapel.fokus"))
 
 
-@bp.post("/aufgaben/fokus/spaeter")
+@bp.post("/freigaben/fokus/spaeter")
 @login_required
 def spaeter():
-    """„Später“: Aufgabe auf morgen, Agent-Freigabe auf morgen früh, alles andere nur überspringen."""
+    """„Später“: Agent-Freigabe auf morgen früh, alles andere nur überspringen."""
     from . import agenten
     c = db()
     key = request.form.get("key", "")
     typ, _, rest = key.partition(":")
     try:
-        if typ == "aufgabe":
-            aufgaben.aendern(c, me(), int(rest), faellig=(date.today() + timedelta(days=1)).isoformat())
-            flash("Auf morgen verschoben.")
-        elif typ == "agent":
+        if typ == "agent":
             for fid in request.form.getlist("ids") or [rest]:
                 agenten.spaeter(c, me(), int(fid))
             flash("Auf morgen früh gelegt.")
         else:
             return weiter()
-    except (aufgaben.AufgabeError, agenten.AgentError, ValueError) as exc:
+    except (agenten.AgentError, ValueError) as exc:
         flash(f"Nicht verschoben: {exc}")
     return redirect(url_for("stapel.fokus"))

@@ -532,7 +532,7 @@ def reihenfolge(c, person, limit=8):
         out.append({"punkte": (90, 62, 45)[g["rang"]],
                     "titel": f"Freigabe: {len(g['eintraege'])} × {g['buendel']}" if mehrere else f"Freigabe: {k['titel']}",
                     "warum": f"{k['agent']}" + (f", Frist {g['frist'][8:10]}.{g['frist'][5:7]}." if g["frist"] else ""),
-                    "url": f"/freigaben#{'b' if mehrere else 'a'}{k['id']}"})
+                    "url": f"/freigaben/alle#{'b' if mehrere else 'a'}{k['id']}"})
     jetzt = datetime.now().strftime("%Y-%m-%dT%H:%M")
     if firma.darf(c, person, "kalender"):
         for t in kalender.liste(c, jetzt, date.today().isoformat() + "T23:59", person):

@@ -1,4 +1,5 @@
-"""Seite „Aufgaben“ (alle Aufgaben als Liste und Board, Anfragen an andere Bereiche) und Kommentare mit @-Erwähnung."""
+"""Seite „Aufgaben“ (Stufe 13b: Erinnerungsliste wie Apple Erinnerungen), „Alle Aufgaben“ (Liste und Board,
+Anfragen an andere Bereiche) und Kommentare mit @-Erwähnung."""
 import json
 import re
 from datetime import date, timedelta
@@ -77,6 +78,36 @@ def mein_tag():
 ANSICHTEN = [("meine", "Meine"), ("bereich", "Bereich"), ("vergeben", "Vergeben"), ("alle", "Alle")]
 
 
+@bp.get("/aufgaben")
+@login_required
+def start():
+    """Aufgaben wie eine Erinnerungsliste: was Menschen erledigen müssen (Agents tragen es per MCP ein, Menschen
+    oben im Eingabefeld). Abhaken mit einem Tipp; „Für“ wechselt zwischen mir, einer anderen Person und allen."""
+    if request.args and not set(request.args) <= {"fuer"}:  # alte Links wie /aufgaben?ansicht=alle: die Liste
+        return redirect(url_for("aufgaben.liste", **request.args))
+    c = db()
+    key = me()
+    if not key:
+        return redirect(url_for("team.who_am_i", next=request.path))
+    personen = firma.aktive_personen(c)
+    fuer = request.args.get("fuer") or key
+    if fuer != "alle" and fuer not in {p["key"] for p in personen}:
+        fuer = key
+    daten = aufgaben.erinnerungen(c, None if fuer == "alle" else fuer)
+    from datetime import datetime
+    from . import kalender, kpis
+    termine = []
+    if fuer == key and firma.darf(c, key, "kalender"):
+        jetzt = datetime.now()
+        termine = kalender.liste(c, jetzt.strftime("%Y-%m-%dT%H:%M"), jetzt.date().isoformat() + "T23:59", key)
+    woche = kpis.woche_von()
+    ziele = kpis.ziele_der_woche(c, woche, key) if fuer == key and firma.darf(c, key, "cockpit") else None
+    return render_template("erinnerungen.html", account=g.account, fuer=fuer, termine=termine,
+                           ziele=ziele, woche=woche, katalog=[k for k in kpis.KATALOG if k["fn"] and k["je_person"]],
+                           hier=url_for("aufgaben.start", fuer=None if fuer == key else fuer), **daten,
+                           **_form_kontext())
+
+
 @bp.get("/aufgaben/alle")
 @login_required
 def liste():
@@ -109,10 +140,12 @@ def neu():
     c = db()
     f = request.form
     termin = aufgaben.schnell_termin(f.get("schnell", ""))
+    person = f.get("person") or None
+    bereich = f.get("bereich") or aufgaben.bereich_fuer(c, person or me())  # Schnell-Eingabe: nur Was und Für wen
     try:
-        aid = aufgaben.anlegen(c, me(), f.get("titel", ""), f.get("bereich", ""),
+        aid = aufgaben.anlegen(c, me(), f.get("titel", ""), bereich,
                                termin.isoformat() if termin else f.get("faellig", ""),
-                               person=f.get("person") or None, prio=f.get("prio", 2), notiz=f.get("notiz", ""),
+                               person=person, prio=f.get("prio", 2), notiz=f.get("notiz", ""),
                                anfrage=f.get("art") == "anfrage")
     except (aufgaben.AufgabeError, firma.FirmaError) as exc:
         return _fertig(str(exc), _zurueck(url_for("aufgaben.liste")), ok=False, status=400)
