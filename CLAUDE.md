@@ -24,4 +24,5 @@ Kurz zur Technik: Python/Flask, SQLite (`app/leaddb.py`, Schema + `MIGRATIONS`),
 Hintergrund-Arbeiter (`app/agent.py`). Tests: `python -m unittest discover tests`. Oberfläche, Doku und
 Fachbegriffe auf Deutsch. Erstkontakt per Mail ist erlaubt (§ 7 UWG geklärt, 02.11.2026; Schalter
 `OUTREACH_EMAIL` unter Einstellungen → Postfach und Versand); nichts geht ohne Freigabe an Kunden. Einen Demo-Modus
-gibt es nicht mehr; lokale Vorschau mit `tests/vorschau.py`.
+gibt es nicht mehr; lokale Vorschau mit `tests/vorschau.py`. Eine automatische Lead-Suche gibt es seit Stufe 13
+nicht mehr: Leads tragen die Agents per MCP ein. Oben nur vier Reiter (Aufgaben, Pipeline, CRM, Chat).

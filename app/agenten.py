@@ -12,7 +12,7 @@
 - **Freigaben** (Zeilen in `freigaben` mit art='agent'): Das OS bestimmt aus Art und Entscheidungsrechten selbst,
   wer zuständig ist. Der Agent kann höchstens jemanden vorschlagen. Nach der Freigabe führt das OS aus, was es kann
   (Mail über das Postfach, Lead-Stufe, Projekt-Status); sonst meldet es dem Agent „bitte ausführen“ zurück.
-- **Infos** (`agent_infos`): Reine Infos ohne Entscheidung landen im Tagesüberblick auf Mein Tag.
+- **Infos** (`agent_infos`): Reine Infos ohne Entscheidung landen auf der Aufgaben-Seite unter „Von den Agents“.
 
 Alle Regeln (Redirect-Adressen, Token-Laufzeiten, Tageslimits, Bündeln, wer welche Art entscheidet) stehen in den
 Einstellungen (kv „regel:agenten“), nicht im Code (G9).
@@ -819,7 +819,7 @@ def anfragen(c, agent, art, titel, was, optionen=None, empfehlung=None, frist=No
 
 
 def info(c, agent, titel, text="", fuer=None, lead_id=None, projekt_id=None):
-    """Reine Info ohne Entscheidung: landet im Tagesüberblick auf Mein Tag, nicht als Freigabe."""
+    """Reine Info ohne Entscheidung: landet auf der Aufgaben-Seite unter „Von den Agents“, nicht als Freigabe."""
     from . import firma
     titel = re.sub(r"\s+", " ", titel or "").strip()
     if not titel or len(titel) > 120:

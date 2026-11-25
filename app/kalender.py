@@ -310,9 +310,6 @@ def anlegen(c, wer, titel, start, ende=None, dauer=None, verantwortlich=None, pe
     lead = leaddb.get_lead(c, lead_id, alle=True) if lead_id else None
     if lead_id and not lead:
         raise KalenderError("Diesen Lead gibt es nicht.")
-    from . import branchentest
-    if lead and not branchentest.kontakt_frei(lead):
-        raise KalenderError("Erst die Lead-Prüfung abwarten, dann einen Termin vereinbaren.")
     art = "serie" if serie_id else ("kunde" if gaeste or lead else "intern")
     status = "geplant"
     from . import freigaben
@@ -758,7 +755,7 @@ def konflikte(c, personen, start, ende, ohne_termin=None):
 def ergebnis(c, wer, tid, art, notiz="", preisgespraech=False, folge_titel="", folge_faellig=""):
     """Ergebnis eintragen. Bei Leads: stattgefunden schiebt auf „Gespräch“, ernsthaftes Preisgespräch zählt im
     Branchentest; eine Folgeaufgabe wird gleich angelegt."""
-    from . import aufgaben, branchentest, crm, firma, leaddb
+    from . import aufgaben, crm, firma, leaddb
     t = get(c, tid)
     if not t:
         raise KalenderError("Diesen Termin gibt es nicht.")
@@ -777,8 +774,9 @@ def ergebnis(c, wer, tid, art, notiz="", preisgespraech=False, folge_titel="", f
                          + (f" {notiz}" if notiz else ""), author=name)
         if art == "stattgefunden":
             crm.advance(c, t["lead_id"], "gespraech", author=name)
-            if preisgespraech:
-                branchentest.preisgespraech(c, wer, t["lead_id"], True)
+            if preisgespraech and not (leaddb.get_lead(c, t["lead_id"], alle=True) or {}).get("preisgespraech_am"):
+                leaddb.update_lead(c, t["lead_id"], preisgespraech_am=leaddb.now())
+                leaddb.add_event(c, t["lead_id"], "status", "Ernsthaftes Preisgespräch.", author=name)
     if folge_titel.strip():
         b = aufgaben.wiedervorlage_bereich(c) if t["lead_id"] else (firma.bereiche_von(c, wer) or ["markt"])[0]
         aufgaben.anlegen(c, wer, folge_titel, b, folge_faellig or (date.today() + timedelta(days=1)).isoformat(),

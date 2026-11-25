@@ -31,6 +31,7 @@ GROUPS = [
         ("OUTREACH_EMAIL", "Erstkontakt per Mail erlauben", "bool", "true",
          "Freigegebene Erstkontakte gehen per Mail raus. Aus: nur Brief und Telefon"),
         ("SEND_DELAY", "Pause zwischen zwei Mails (Sekunden)", "float", "1", ""),
+        ("LEADS_FOLLOWUP_DAYS", "Nachfassen nach Tagen ohne Antwort", "int", "7", "0 = nie"),
         ("MAX_RECIPIENTS", "Höchstens Empfänger pro Versand", "int", "200", ""),
         ("FROM_ADDRESS", "Absenderadresse", "emails", "", "Nur nötig, wenn der Login-Name keine E-Mail-Adresse ist"),
         ("IMAP_SENT_FOLDER", "Ordner „Gesendet“", "text", "", "Leer = automatisch erkennen"),
@@ -45,24 +46,12 @@ GROUPS = [
         ("DEFAULT_CLOSING", "Vorbelegter Schlusssatz im Mailer", "text",
          "Ihr habt ein Problem, das nervt, oder eine Idee, die raus will? Antwortet einfach auf diese Mail.", ""),
     ]),
-    ("suche", "Suche und Bewertung", [
-        ("LEADS_REGION", "Suchgebiet", "select:DE-SH|", "DE-SH", "DE-SH = ganz Schleswig-Holstein, leer = Umkreis"),
-        ("LEADS_CENTER", "Mittelpunkt (Breite,Länge)", "text", "54.6614,9.9311", "Kappeln. Für die Entfernung und den Umkreis"),
-        ("LEADS_RADIUS_KM", "Umkreis in km", "float", "50", "Nur, wenn das Suchgebiet leer ist"),
-        ("LEADS_RULE_MIN", "Mindestpunktzahl", "int", "50", "Ab dieser Punktzahl passt ein Betrieb"),
-        ("LEADS_RUN_CHECK", "Vorschlag: Betriebe pro Lauf bewerten", "int", "150", ""),
-        ("LEADS_RUN_TOP", "Vorschlag: die besten ins CRM", "int", "25", ""),
-        ("LEADS_FOLLOWUP_DAYS", "Nachfassen nach Tagen ohne Antwort", "int", "7", "0 = nie"),
-        ("OVERPASS_URL", "Kartensuche (Overpass-Adresse)", "url", "https://overpass-api.de/api/interpreter", ""),
-    ]),
     ("ki", "KI und Budget", [
         ("ANTHROPIC_API_KEY", "KI-Schlüssel (Anthropic)", "secret", "", "Optional. Nur für KI-Entwürfe. In der Anthropic Console ein Ausgabenlimit setzen"),
         ("AI_MODEL", "Modell für Entwürfe und Chat", "text", "claude-opus-5", ""),
         ("AI_MODEL_ANALYSE", "Modell für Erinnerungen und Lernen", "text", "claude-sonnet-5", ""),
         ("AI_EFFORT", "Denk-Aufwand für Entwürfe", "select:low|medium|high", "high", ""),
         ("AI_EFFORT_ANALYSE", "Denk-Aufwand für Erinnerungen", "select:low|medium|high", "medium", ""),
-        ("LEADS_RUN_DRAFTS", "Vorschlag: KI-Entwürfe pro Lauf", "int", "0", ""),
-        ("LEADS_RUN_BUDGET_EUR", "Vorschlag: Budget pro Lauf (€)", "float", "2", ""),
         ("LEADS_MONTHLY_BUDGET_EUR", "Monatsbudget für die KI (€)", "float", "20", "Harte Grenze. 0 = keine Grenze"),
         ("EUR_PER_USD", "Euro pro US-Dollar", "float", "0.86", "Zum Umrechnen der Preise"),
     ]),
@@ -86,15 +75,12 @@ PAGES = {
     "postfach": [("ausgang", "Postausgang", ["SMTP_HOST", "SMTP_PORT", "SMTP_SECURITY"]),
                  ("eingang", "Posteingang", ["IMAP_HOST", "IMAP_PORT", "IMAP_SENT_FOLDER", "FEHLER_ORDNER"]),
                  ("zugang", "Akquise-Postfach", ["OUTREACH_USER", "OUTREACH_PASSWORD", "FROM_ADDRESS"]),
-                 ("versand", "Versand", ["OUTREACH_EMAIL", "SEND_DELAY", "MAX_RECIPIENTS"])],
+                 ("versand", "Versand", ["OUTREACH_EMAIL", "LEADS_FOLLOWUP_DAYS", "SEND_DELAY", "MAX_RECIPIENTS"])],
     "absender": [("name", "Name und Unterschrift", ["ORG_NAME", "LEADS_SENDER_NAME", "DEFAULT_SENDER_NAME"]),
                  ("texte", "Fußzeile und Schlusssatz", ["DEFAULT_FOOTER", "DEFAULT_CLOSING"])],
-    "suche": [("gebiet", "Suchgebiet", ["LEADS_REGION", "LEADS_CENTER", "LEADS_RADIUS_KM"]),
-              ("bewertung", "Bewertung und Lauf", ["LEADS_RULE_MIN", "LEADS_RUN_CHECK", "LEADS_FOLLOWUP_DAYS"]),
-              ("karte", "Kartensuche", ["OVERPASS_URL"])],
     "ki": [("schluessel", "KI-Schlüssel", ["ANTHROPIC_API_KEY"]),
            ("modelle", "Modelle", ["AI_MODEL", "AI_EFFORT", "AI_MODEL_ANALYSE", "AI_EFFORT_ANALYSE"]),
-           ("budget", "Budget", ["LEADS_MONTHLY_BUDGET_EUR", "LEADS_RUN_BUDGET_EUR", "LEADS_RUN_DRAFTS", "EUR_PER_USD"])],
+           ("budget", "Budget", ["LEADS_MONTHLY_BUDGET_EUR", "EUR_PER_USD"])],
     "google": [("zugang", "Google-Zugang", ["GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET"])],
     "unipile": [("zugang", "Unipile-Zugang", ["UNIPILE_DSN", "UNIPILE_API_KEY"])],
     "hinweise": [("hinweise", "Benachrichtigungen", ["BASE_URL", "INBOX_MINUTES"])],
@@ -102,7 +88,7 @@ PAGES = {
 # Fehlt einer dieser Werte, steht beim Bereich „Fehlt“
 NEEDED = {"SMTP_HOST", "OUTREACH_USER", "OUTREACH_PASSWORD", "IMAP_HOST"}
 GROUP_HINTS = {"postfach": "Strato, Akquise-Postfach, Versand", "absender": "Firmenname, Unterschrift, Fußzeile",
-               "suche": "Gebiet, Punkte, wie viele pro Lauf", "ki": "Schlüssel, Modelle, Budget",
+               "ki": "Schlüssel, Modelle, Budget",
                "google": "Client-ID und Schlüssel für die Kalender",
                "unipile": "Vorbereitet für WhatsApp und LinkedIn, noch nicht verbunden",
                "hinweise": "Mail-Benachrichtigungen, Adresse der App"}
@@ -235,7 +221,7 @@ def _short(f):
         return "gesetzt" if f["is_set"] else "fehlt"
     if f["type"] == "bool":
         return "an" if f["value"] in ("true", "1", "yes") else "aus"
-    v = f["value"] or ("Umkreis" if f["key"] == "LEADS_REGION" else "")
+    v = f["value"] or ""
     return v if len(v) <= 28 else v[:26] + "…"
 
 
@@ -254,5 +240,6 @@ def menu(data_dir, environ=os.environ):
                           "summary": " · ".join(x for x in (_short(f) for f in fs) if x) or "nicht gesetzt"})
         out.append({"id": gid, "title": title, "hint": GROUP_HINTS.get(gid, ""), "pages": pages,
                     "missing": [m for pg in pages for m in pg["missing"]],
-                    "changed": any(pg["changed"] for pg in pages)})
+                    "changed": any(pg["changed"] for pg in pages),
+                    "worte": " ".join(f"{pg['title']} {f['label']} {f['key']}" for pg in pages for f in pg["fields"])})
     return out

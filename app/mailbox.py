@@ -44,7 +44,7 @@ def thread(c, lead):
                       "channel": "email" if kanal == "mail" else kanal, "kanal": kanal, "id": m["id"],
                       "message_id": m["message_id"], "from_addr": m["from_addr"], "read": m["read"],
                       "wunsch": m["wunsch"], "aenderung_id": m["aenderung_id"], "postfach_name": m["postfach_name"],
-                      "postfach_id": m["postfach_id"]})
+                      "postfach_id": m["postfach_id"], "versand": m["versand"] if "versand" in m.keys() else None})
     return sorted(items, key=lambda i: i["at"] or "")
 
 

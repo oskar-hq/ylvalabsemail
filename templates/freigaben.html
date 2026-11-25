@@ -58,7 +58,7 @@
   <p class="os-caption" style="margin-top:32px">Was auf welcher Stufe läuft (A automatisch, B mit Einspruch, C mit Freigabe, D nur Mensch), steht unter {% if darf('entscheidungen') %}<a href="{{ url_for('freigaben.einstellungen') }}">Einstellungen → Freigaben und Entscheidungen</a>{% else %}Einstellungen → Freigaben und Entscheidungen{% endif %}.</p>
 </main>
 <div class="os-float">
-  <a class="os-back" href="{{ url_for('aufgaben.mein_tag') }}" aria-label="Zu Mein Tag">{{ i('back') }}</a>
+  <a class="os-back" href="{{ url_for('stapel.start') }}" aria-label="Zu den Aufgaben">{{ i('back') }}</a>
 </div>
 {% for liste in gruppen.values() %}{% for f in liste if f.nein and f.darf and not f.nur_link %}
 <dialog class="os-sheet" id="sheet-nein-{{ f.art }}-{{ f.oid }}" aria-label="{{ f.nein }}: {{ f.titel }}">

@@ -65,19 +65,9 @@ SETTINGS = {
     "ADMIN_USERS": [u.lower() for u in re.split(r"[,\s]+", env("ADMIN_USERS")) if u],
     # Austauschordner mit dem Update-Dienst auf dem Server (deploy/install-updater.sh), leer = keine Updates aus der App
     "CONTROL_DIR": Path(env("CONTROL_DIR")) if env("CONTROL_DIR") else None,
-    # Akquise (Bereich „Leads“) und CRM
+    # CRM, Postfach und Hintergrund-Arbeiter
     "LEADS_WORKER": env("LEADS_WORKER", "true").lower() in ("1", "true", "yes"),
-    # Suchgebiet: Bundesland als ISO-Code (DE-SH = Schleswig-Holstein). Leer = Umkreis um LEADS_CENTER.
-    "LEADS_REGION": env("LEADS_REGION", "DE-SH"),
-    "LEADS_CENTER": tuple(float(x) for x in env("LEADS_CENTER", "54.6614,9.9311").split(",")),  # Kappeln, für die Entfernung
-    "LEADS_RADIUS_KM": float(env("LEADS_RADIUS_KM", "50")),
-    # Vorschläge für den Start-Dialog eines Laufs
-    "LEADS_RUN_CHECK": int(env("LEADS_RUN_CHECK", "150")),
-    "LEADS_RUN_TOP": int(env("LEADS_RUN_TOP", "25")),  # nicht mehr genutzt: Passende warten aufs Prüfen
-    "LEADS_RUN_DRAFTS": int(env("LEADS_RUN_DRAFTS", "0")),
-    "LEADS_RUN_BUDGET_EUR": float(env("LEADS_RUN_BUDGET_EUR", "2")),
     "LEADS_MONTHLY_BUDGET_EUR": float(env("LEADS_MONTHLY_BUDGET_EUR", "20")),  # 0 = keine Grenze
-    "LEADS_RULE_MIN": int(env("LEADS_RULE_MIN", "50")),  # ab dieser Punktzahl der Regel-Bewertung kommt er in die Pipeline
     "LEADS_FOLLOWUP_DAYS": int(env("LEADS_FOLLOWUP_DAYS", "7")),  # nach so vielen Tagen ohne Antwort nachfassen, 0 = nie
     "LEADS_SENDER_NAME": env("LEADS_SENDER_NAME", "Oskar Jacobsen"),
     "OUTREACH_USER": env("OUTREACH_USER"),
@@ -86,7 +76,6 @@ SETTINGS = {
     "INBOX_MINUTES": float(env("INBOX_MINUTES", "10")),
     "NOTIFY_EMAILS": [a for a in re.split(r"[,\s]+", env("NOTIFY_EMAILS")) if a],
     "BASE_URL": env("BASE_URL"),
-    "OVERPASS_URL": env("OVERPASS_URL", "https://overpass-api.de/api/interpreter"),
 }
 UPLOAD_DIR = SETTINGS["DATA_DIR"] / "uploads"
 DB_PATH = SETTINGS["DATA_DIR"] / "mailer.db"
@@ -266,7 +255,8 @@ def login_required(view):
 # Seiten ohne eigenes Modul (Mein Tag, Profil, Glocke, Web-App) darf jede angemeldete Person öffnen.
 FREI = {"index", "arbeitsbereich_wechseln", "leads.manifest", "leads.service_worker", "leads.push_key", "leads.push_subscribe",
         "leads.push_unsubscribe", "leads.push_test", "crm.notices_json", "crm.notices_read", "palette.search",
-        "uploaded", "band_svg", "leads.status_json"}
+        "uploaded", "band_svg", "stapel.start", "stapel.alt_start", "stapel.fokus", "stapel.weiter", "stapel.spaeter",
+        "pipeline.seite"}
 # Mit dem Postfach angemeldet, aber noch keine Person gewählt: nur der Mailer und die Auswahl
 OHNE_PERSON = {"compose", "preview", "send", "upload", "history", "history_html", "uploaded", "band_svg",
                "team.who_am_i", "leads.manifest", "leads.service_worker", "crm.notices_json", "crm.notices_read",
@@ -284,7 +274,7 @@ MODUL_JE_SEITE = {"compose": "mailer", "preview": "mailer", "send": "mailer", "u
                   # Stufe 12: Agent-Freigaben entscheidet man wie alle Freigaben (die Funktion prüft, wer darf)
                   "agenten.entscheiden": "aufgaben", "agenten.buendel": "aufgaben"}
 MODUL_JE_BEREICH = {"leads": "leads", "crm": "crm", "settings": "einstellungen", "aufgaben": "aufgaben",
-                    "personen": "personen", "branchentest": "leads", "kalender": "kalender", "cockpit": "cockpit",
+                    "personen": "personen", "kalender": "kalender", "cockpit": "cockpit",
                     "kunden": "kunden", "freigaben": "aufgaben", "finanzen": "finanzen",
                     "posteingang": "einstellungen", "arbeitsbereiche": "einstellungen", "assistent": "assistent",
                     "angebote": "kunden", "agenten": "personen"}
@@ -335,7 +325,7 @@ def _zugang():
 
 
 # ---------------------------------------------------------------- Arbeitsbereich (Stufe 11, app/arbeitsbereiche.py)
-AB_BEREICHE = {"leads", "crm", "branchentest"}  # Seiten, deren Leads zu einem Arbeitsbereich gehören
+AB_BEREICHE = {"leads", "crm"}  # Seiten, deren Leads zu einem Arbeitsbereich gehören
 
 
 @app.before_request
@@ -650,7 +640,9 @@ def defaults():
 @app.route("/")
 @login_required
 def index():
-    return redirect(url_for("aufgaben.mein_tag"))
+    if not g.account.get("team"):
+        return redirect(url_for("compose"))
+    return redirect(url_for("stapel.start"))
 
 
 def lead_fields(lead):
@@ -941,11 +933,9 @@ app.register_blueprint(palette_bp)
 app.register_blueprint(team_bp)
 from .aufgaben_views import bp as aufgaben_bp  # noqa: E402
 from .personen_views import bp as personen_bp  # noqa: E402
-from .branchentest_views import bp as branchentest_bp  # noqa: E402
 
 app.register_blueprint(aufgaben_bp)
 app.register_blueprint(personen_bp)
-app.register_blueprint(branchentest_bp)
 from .kalender_views import bp as kalender_bp  # noqa: E402
 
 app.register_blueprint(kalender_bp)
@@ -986,14 +976,18 @@ def arbeitsbereich_wechseln():
     if not arbeitsbereiche.darf(db(), g.account.get("team"), key):
         abort(403, "In diesem Arbeitsbereich arbeitest du nicht.")
     session["ab"] = key
-    nxt = safe_next(request.form.get("next") or "") or url_for("leads.overview")
+    nxt = safe_next(request.form.get("next") or "") or url_for("stapel.start")
     # Seiten eines einzelnen Leads gibt es im anderen Arbeitsbereich nicht: zur Übersicht des Bereichs
-    if re.search(r"^/(leads|crm/postfach|crm)/\d+", nxt):
-        nxt = "/crm/postfach" if nxt.startswith("/crm") else url_for("leads.overview")
+    if re.search(r"^/(leads|crm/postfach|crm|chat)/\d+", nxt):
+        nxt = url_for("crm.chat") if nxt.startswith(("/crm/postfach", "/chat")) else url_for("crm.board")
     return redirect(nxt)
 
 from .agenten_views import bp as agenten_bp  # noqa: E402  Stufe 12: MCP, OAuth, Einstellungen → Agenten
 app.register_blueprint(agenten_bp)
+from .stapel_views import bp as stapel_bp  # noqa: E402  Stufe 13: Aufgabenstapel (Start der App)
+from .pipeline_views import bp as pipeline_bp  # noqa: E402  Stufe 13: Pipeline (Agents, Projekte, Zahlen)
+app.register_blueprint(stapel_bp)
+app.register_blueprint(pipeline_bp)
 
 
 @app.errorhandler(403)

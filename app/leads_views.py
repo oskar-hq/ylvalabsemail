@@ -1,14 +1,12 @@
 """Oberfläche der Akquise: Übersicht, Firma im Detail (Akte) mit Chat, Regeln, Gehirn, Web-App und Push."""
-import csv
-import io
 import json
 import re
 import time
 from datetime import datetime
 
-from flask import Blueprint, Response, abort, flash, g, jsonify, redirect, render_template, request, send_from_directory, url_for
+from flask import Blueprint, Response, abort, g, jsonify, redirect, render_template, request, send_from_directory, url_for
 
-from . import agent, ai, assistent, aufgaben, branchentest, claude_research, kalender, kpis, projekte, crm, emailbuild, firma, known, leaddb, mailbox, niches, pixel, reports, schedule, scoring, team, websearch, webpush
+from . import agent, ai, assistent, aufgaben, kalender, kpis, projekte, crm, emailbuild, firma, leaddb, pixel, team, webpush
 from .main import DB_PATH, ROOT, SETTINGS, login_required
 
 bp = Blueprint("leads", __name__)
@@ -95,7 +93,7 @@ def status_payload():
         "counts": leaddb.tab_counts(c),
         "unread": c.execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND unread=1").fetchone()[0],
         "due_tasks": crm.due_count(c),
-        "stages": {k: n for k, n in c.execute("SELECT stage, COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND stage IS NOT NULL GROUP BY stage")}, "rule_min": my("LEADS_RULE_MIN"), "today": crm.today(),
+        "stages": {k: n for k, n in c.execute("SELECT stage, COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND stage IS NOT NULL GROUP BY stage")}, "today": crm.today(),
         "last_search": leaddb.kv_get(c, "last_search"),
         "run": dict(run, params=json.loads(run["params"])) if run else None,
         "run_eur": money(run_cost["usd"]) if run_cost else 0, "run_tokens": (run_cost["tin"] + run_cost["tout"]) if run_cost else 0,
@@ -115,12 +113,6 @@ def my(key):
     return team.prefs(db(), me()).get(key, SETTINGS[key])
 
 
-def run_defaults():
-    est = agent.estimate(db(), my("LEADS_RUN_DRAFTS") if ai.available() else 0, followups=False)
-    return {"check": my("LEADS_RUN_CHECK"), "top": my("LEADS_RUN_TOP"), "drafts": my("LEADS_RUN_DRAFTS"),
-            "budget": my("LEADS_RUN_BUDGET_EUR"), "estimate": est, "models": ai.MODELS,
-            "own_left": agent.person_budget_left_eur(db(), me())}
-
 # ---------------------------------------------------------------- Heute (Startseite)
 
 
@@ -131,308 +123,10 @@ def _first_name(account):
     return re.split(r"[._\-]", local)[0].capitalize() or "Team"
 
 
-@bp.get("/heute")
-@login_required
-def home():
-    st = status_payload()
-    c = st["counts"]
-    new_replies = mailbox.unread_count(db(), me())
-    st["due_tasks"] = crm.due_count(db(), me())  # Heute: eigene Wiedervorlagen und die noch niemandem zugeordneten
-    parts = [(new_replies, "neue Antworten" if new_replies != 1 else "neue Antwort", url_for("crm.inbox")),
-             (st["due_tasks"], "Wiedervorlagen" if st["due_tasks"] != 1 else "Wiedervorlage", url_for("crm.board")),
-             (c["entwurf"], "Freigaben" if c["entwurf"] != 1 else "Freigabe", url_for("leads.overview", tab="entwurf")),
-             (c["nachfassen"], "Nachfassen", url_for("leads.overview", tab="nachfassen")),
-             (c["qualified"], "Interessenten" if c["qualified"] != 1 else "Interessent",
-              url_for("leads.overview", tab="qualified"))]
-    to_review = review_count()
-    parts.append((to_review, "zu prüfen", url_for("leads.review")))
-    total = sum(n for n, _, _ in parts)
-    # „Starten“ führt zuerst zum Durchwischen der neuen Betriebe (Ja = CRM, Nein = aussortiert), danach zu
-    # Antworten, Wiedervorlagen, Freigaben, Nachfassen und Interessenten
-    start = None
-    if to_review:
-        start = url_for("leads.review")
-    elif new_replies:
-        start = url_for("crm.inbox")
-    elif st["due_tasks"]:
-        start = url_for("crm.board")
-    else:
-        for key in ("entwurf", "nachfassen", "qualified"):
-            if c[key]:
-                first = leaddb.tab_leads(db(), key, limit=1)
-                start = url_for("leads.detail", lead_id=first[0]["id"]) if first else None
-                break
-    hour = datetime.now().hour
-    greeting = "Guten Morgen" if hour < 11 else ("Guten Tag" if hour < 18 else "Guten Abend")
-    return render_template("home.html", account=g.account, sched=schedule_view(), queue=review_queue(10),
-                           to_review=to_review, st=st, parts=[p for p in parts if p[0]], total=total,
-                           start=start, greeting=greeting, name=_first_name(g.account))
-
 # ---------------------------------------------------------------- Übersicht
 
 
-@bp.get("/leads")
-@login_required
-def overview():
-    tab = request.args.get("tab", "alle")
-    keys = [k for k, _, _ in leaddb.TABS]
-    if tab not in keys:
-        tab = "alle"
-    sections = [(k, label, hint, leaddb.tab_leads(db(), k, limit=300 if tab == k else 8))
-                for k, label, hint in leaddb.TABS if tab in ("alle", k)]
-    by_key = {k: (k, label, hint, items) for k, label, hint, items in sections}
-    groups = [(title, hint, [by_key[k] for k in keys if k in by_key]) for title, hint, keys in leaddb.TAB_GROUPS]
-    return render_template("leads.html", account=g.account, tab=tab, tabs=leaddb.TABS, sections=sections,
-                           sched=schedule_view(), stages=crm.STAGES, members=team.members(db()), me=me(),
-                           groups=[grp for grp in groups if grp[2]], tab_groups=leaddb.TAB_GROUPS,
-                           st=status_payload(), rd=run_defaults())
-
-
 OPEN_STATUSES = ("kandidat", "recherche", "vorgeprueft", "analysiert", "passt", "entwurf", "aussortiert", "fehler")
-
-
-@bp.post("/leads/ins-crm")
-@login_required
-def to_crm():
-    """Mehrere Betriebe auf einmal ins CRM: in einen Reiter (Stufe) und, wenn noch niemand zuständig ist, zu einer
-    Person. Ab „Kontaktiert“ zählen sie unter Leads als versendet, aussortierte kommen mit „Neu“ zurück zu „Passt“."""
-    c = db()
-    stage = request.form.get("stage", "neu")
-    if stage not in crm.STAGE_KEYS:
-        return jsonify(error="Unbekannter Reiter."), 400
-    names = team.names(c)
-    owner = request.form.get("owner", me() or "")
-    if owner and owner not in names:
-        return jsonify(error="Unbekannte Person."), 400
-    ids = [int(x) for x in request.form.getlist("id") if x.isdigit()][:500]
-    if not ids:
-        return jsonify(error="Bitte mindestens einen Betrieb auswählen."), 400
-    moved, kept = 0, []
-    for lead_id in ids:
-        lead = leaddb.get_lead(c, lead_id)
-        if not lead:
-            continue
-        fields = {"unread": 0}
-        if stage != "neu" and lead["status"] in OPEN_STATUSES:
-            fields.update(status="versendet", sent_at=lead["sent_at"] or leaddb.now(), rejected_by=None)
-        elif stage == "neu" and lead["status"] == "aussortiert":
-            fields.update(status="passt", rejected_by=None)
-        leaddb.update_lead(c, lead_id, **fields)
-        crm.set_stage(c, lead_id, stage, author=who(), note="Aus den Leads ins CRM geschickt.")
-        if stage == "neu":
-            branchentest.eingang(c, lead_id, me())  # Branchentest: wer recherchiert hat, Testbranche, Prüfung
-        if owner and not lead["owner"]:
-            crm.set_owner(c, lead_id, owner, who())
-        elif owner and lead["owner"] != owner:
-            kept.append(lead["name"])
-        moved += 1
-    return jsonify(ok=True, moved=moved, stage=crm.STAGE_LABELS[stage], owner=names.get(owner, ""), kept=kept,
-                   url=url_for("crm.board", wer=owner or "alle"))
-
-
-@bp.get("/leads/suche")
-@login_required
-def search():
-    """Neue Betriebe finden: Lauf starten (Kartensuche und Bewertung) oder mit Claude recherchieren."""
-    weights = niches.load(db())
-    marks = ",".join("?" * len(weights))
-    waiting_mine = db().execute(f"SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND status='kandidat' AND niche IN ({marks})",
-                                list(weights)).fetchone()[0] if weights else 0
-    return render_template("search.html", account=g.account, st=status_payload(), rd=run_defaults(),
-                           waiting_mine=waiting_mine, report=reports.last_manual(db()),
-                           sched=schedule_view(), niche_weights=weights, niche_info=niches.NICHES, known_total=known.count(db()),
-                           niche_summary=niches.describe(weights))
-
-
-@bp.get("/leads/berichte")
-@login_required
-def run_reports():
-    """Berichte: jeder Lauf von Hand und der Tagesbericht der automatischen Suche, eine Woche zurück."""
-    art = request.args.get("art", "hand")
-    if art not in ("hand", "auto"):
-        art = "hand"
-    days = reports.manual_days(db()) if art == "hand" else reports.auto_days(db())
-    return render_template("reports.html", account=g.account, art=art, days=days, sched=schedule_view(),
-                           st=status_payload())
-
-
-@bp.get("/leads/schon-gefunden")
-@login_required
-def known_list():
-    """Merkliste: alle jemals gefundenen Betriebe, auch aussortierte. Neue Funde mit gleicher Webseite, E-Mail,
-    gleichem Karteneintrag oder gleichem Namen im gleichen Ort kommen nicht noch einmal."""
-    q = request.args.get("q", "").strip()[:80]
-    c = db()
-    if request.args.get("format") == "csv":
-        out = io.StringIO()
-        w = csv.writer(out, delimiter=";")
-        w.writerow(["Firma", "Ort", "Webseite", "E-Mail", "Zuerst gefunden", "Quelle", "Von", "Stand heute"])
-        for r in known.listing(c, q, limit=100000):
-            w.writerow([crm._cell(x) for x in (r["name"], r["city"], r["host"], r["email"], r["first_seen_at"][:10],
-                        known.SOURCES.get(r["source"], r["source"]), r["found_by"], _known_state(r))])
-        return Response("\ufeff" + out.getvalue(), mimetype="text/csv",
-                        headers={"Content-Disposition": 'attachment; filename="schon-gefunden.csv"'})
-    rows = known.listing(c, q)
-    for r in rows:
-        r["state"] = _known_state(r)
-    return render_template("known.html", account=g.account, rows=rows, q=q, total=known.count(c),
-                           sources=known.SOURCES, people=team.names(c), st=status_payload())
-
-
-def _known_state(r):
-    if r.get("status") is None:
-        return "nicht mehr in der App"
-    if r.get("stage"):
-        return "im CRM · " + crm.STAGE_LABELS.get(r["stage"], r["stage"])
-    return leaddb.STATUS_LABELS.get(r["status"], r["status"])
-
-
-def _profile():
-    fuer = request.values.get("fuer", "manuell")
-    return fuer if fuer in niches.PROFILES else "manuell"
-
-
-@bp.get("/leads/nischen")
-@login_required
-def niche_page():
-    """Nischen für die Suche wählen und die Prozente verteilen, getrennt für die manuelle und die automatische Suche."""
-    from .settings_views import is_admin
-    c, profile = db(), _profile()
-    counts = {r["niche"]: r["n"] for r in c.execute(
-        "SELECT niche, COUNT(*) n FROM leads WHERE arbeitsbereich=ab() AND status='kandidat' AND niche IS NOT NULL GROUP BY niche")}
-    return render_template("niches.html", account=g.account, groups=niches.catalog(), weights=niches.load(c, profile),
-                           custom=niches.is_custom(c, profile), default_keys=niches.DEFAULT_KEYS, counts=counts,
-                           profile=profile, profiles=niches.PROFILE_LABELS, own=niches.has_own(c, profile),
-                           locked=profile == "auto" and not is_admin(g.account),
-                           st=status_payload())
-
-
-@bp.post("/leads/nischen")
-@login_required
-def niche_save():
-    from .settings_views import is_admin
-    profile = _profile()
-    back = url_for("leads.niche_page", fuer=profile)
-    if profile == "auto" and not is_admin(g.account):
-        abort(403, "Die Nischen der automatischen Suche ändern nur Admins, wie den Zeitplan.")
-    if request.form.get("zuruecksetzen") == "1":
-        niches.reset(db(), profile)
-        flash("Die automatische Suche nimmt wieder dieselben Nischen wie die manuelle.")
-        return redirect(back)
-    keys = request.form.getlist("niche")
-    weights = None
-    if request.form.get("eigene") == "1":
-        weights = {k: request.form.get(f"w_{k}", "") for k in keys}
-    try:
-        result = niches.parse(keys, weights)
-    except niches.NicheError as exc:
-        flash(f"Nicht gespeichert: {exc}")
-        return redirect(back)
-    niches.save(db(), result, profile)
-    agent.log.info("Nischen (%s) geändert von %s: %s", profile, who(), niches.describe(result, limit=50))
-    flash(f"{niches.PROFILE_LABELS[profile]}: {len(result)} Nischen gespeichert ({niches.describe(result)}). "
-          "Bewertet wird in diesem Verhältnis.")
-    return redirect(url_for("leads.automatic") if profile == "auto" else url_for("leads.search"))
-
-
-def schedule_view():
-    """Für die Anzeige: je Art die Einstellung, Kurzfassung, letzter und nächster Start."""
-    c = db()
-    state = leaddb.kv_get(c, "schedule_state", {}) or {}
-    now = datetime.now()
-    out = {}
-    for kind, cfg in schedule.load(c).items():
-        st = state.get(kind) or {}
-        nxt = schedule.next_start(cfg, now, st.get("last"))
-        out[kind] = {"cfg": cfg, "label": schedule.KINDS[kind], "summary": schedule.describe(cfg),
-                     "last": st.get("last"), "note": st.get("note"), "next": nxt.isoformat(timespec="minutes") if nxt else None}
-    return out
-
-
-@bp.get("/leads/automatik")
-@login_required
-def automatic():
-    from .settings_views import is_admin
-    auto_weights = niches.load(db(), "auto")
-    return render_template("automatik.html", account=g.account, sched=schedule_view(), days=schedule.DAYS,
-                           niche_weights=auto_weights, niche_info=niches.NICHES,
-                           niche_own=niches.has_own(db(), "auto"),
-                           min_every=schedule.MIN_EVERY, st=status_payload(), admin=is_admin(g.account),
-                           today_eur=money(leaddb._sum(db(), "at >= ?", (datetime.now().strftime("%Y-%m-%d"),))["usd"]),
-                           offline=list(reversed((leaddb.kv_get(db(), "offline_gaps", []) or [])[-3:])),
-                           day_report=next((d for d in reports.auto_days(db()) if d["released"]), None))
-
-
-@bp.post("/leads/automatik/<kind>")
-@login_required
-def automatic_save(kind):
-    from .settings_views import is_admin
-    if kind not in schedule.KINDS:
-        abort(404)
-    if not is_admin(g.account):
-        abort(403, "Nur Admins können den Zeitplan ändern.")
-    try:
-        cfg = schedule.parse(kind, request.form)
-    except schedule.ScheduleError as exc:
-        flash(f"Nicht gespeichert: {exc}")
-        return redirect(url_for("leads.automatic"))
-    if kind == "ki" and cfg["enabled"] and not ai.available():
-        flash("Nicht gespeichert: Für die Suche mit KI fehlt der KI-Schlüssel (Einstellungen → KI und Budget).")
-        return redirect(url_for("leads.automatic"))
-    schedule.save(db(), kind, cfg)
-    agent.log.info("Zeitplan „%s“ geändert von %s: %s", kind, who(), schedule.describe(cfg))
-    flash(f"{schedule.KINDS[kind]}: {schedule.describe(cfg)}. Gespeichert.")
-    agent.wake()
-    return redirect(url_for("leads.automatic"))
-
-
-@bp.get("/leads/status.json")
-@login_required
-def status_json():
-    return jsonify(status_payload())
-
-
-@bp.post("/leads/run")
-@login_required
-def run():
-    try:
-        params = {"bewerten": max(0, min(1000, int(request.form.get("bewerten", 0)))),
-                  "top": max(0, min(200, int(request.form.get("top", my("LEADS_RUN_TOP"))))),
-                  "entwuerfe": max(0, min(50, int(request.form.get("entwuerfe", 0)))),
-                  "budget_eur": max(0.0, min(100.0, float(request.form.get("budget_eur", "0").replace(",", ".") or 0))),
-                  "suchen": request.form.get("suchen") == "1", "karte": request.form.get("karte") == "1",
-                  "web_anzahl": max(0, min(websearch.MAX_FIRMS, int(request.form.get("web_anzahl") or 0)))
-                  if request.form.get("web") == "1" else 0,
-                  "web_kanaele": websearch.parse_channels(request.form.getlist("web_kanaele")),
-                  "erinnerungen": request.form.get("erinnerungen") == "1", "person": me()}
-    except ValueError:
-        return jsonify(error="Bitte Zahlen eingeben."), 400
-    if not params["karte"] and not params["web_anzahl"] and not params["bewerten"]:
-        return jsonify(error="Bitte wählen, wo gesucht wird: Karte oder Websuche."), 400
-    own = agent.person_budget_left_eur(db(), me())
-    if (params["entwuerfe"] or params["web_anzahl"]) and own is not None and own <= 0:
-        return jsonify(error="Dein eigenes KI-Budget für diesen Monat ist aufgebraucht (Mein Profil)."), 400
-    run_id, error = agent.start_run(params, who())
-    if error:
-        return jsonify(error=error), 400
-    return jsonify(ok=True, run_id=run_id, message="Lauf gestartet. Du bekommst Bescheid, wenn er fertig ist.")
-
-
-@bp.post("/leads/stop")
-@login_required
-def stop():
-    agent.stop_run()
-    return jsonify(ok=True, message="Wird nach dem aktuellen Schritt gestoppt.")
-
-
-@bp.get("/leads/schaetzung")
-@login_required
-def estimate():
-    try:
-        drafts = int(request.args.get("entwuerfe", 0))
-    except ValueError:
-        abort(400)
-    return jsonify(agent.estimate(db(), max(0, drafts), request.args.get("erinnerungen") == "1"))
 
 
 @bp.get("/leads/kosten")
@@ -471,8 +165,7 @@ def detail(lead_id):
                            tasks=crm.open_tasks(db(), lead_id=lead_id), can_mail=can_mail, mail_hint=mail_hint,
                            tab=leaddb.tab_of(lead), tabs=leaddb.TABS, people=team.names(db()),
                            komm=aufgaben.kommentare(db(), "lead", lead_id), os_personen=firma.aktive_personen(db()),
-                           testbranchen=branchentest.branchen(db()), kanaele=branchentest.KANAELE,
-                           pruefung=branchentest.offene_pruefung(db(), lead_id),
+                           testbranchen=[], kanaele=[], pruefung=None,
                            lead_termine=kalender.zum_lead(db(), lead_id), projekt=projekte.zum_lead(db(), lead_id),
                            lead_angebote=assistent.angebote(db(), lead_id=lead_id))
 
@@ -639,10 +332,7 @@ def chat(lead_id):
 
 def _gesperrt_bis_pruefung(lead):
     """Kontakt erst nach bestandener Lead-Prüfung (Branchentest, Lernstufe)."""
-    if branchentest.kontakt_frei(lead):
-        return None
-    return jsonify(error="Erst die Lead-Prüfung abwarten." if lead.get("pruef_status") == "wartet" else
-                   "Dieser Lead wurde bei der Prüfung abgelehnt."), 409
+    return None  # Lead-Prüfung gibt es seit Stufe 13 nicht mehr
 
 
 @bp.post("/leads/<int:lead_id>/send")
@@ -718,59 +408,6 @@ REVIEW_SQL = ("SELECT * FROM leads WHERE arbeitsbereich=ab() AND status='passt' 
               "AND IFNULL(rejected_by,'')='' ORDER BY fit_score DESC, distance_km LIMIT ?")
 
 
-def review_queue(limit=30):
-    out = []
-    for r in db().execute(REVIEW_SQL, (limit,)).fetchall():
-        lead = dict(r)
-        lead["p"] = crm.profile(lead)
-        research = leaddb.get_lead(db(), lead["id"])["research"]
-        lead["signale"] = sorted(research.get("signale") or [], key=lambda x: -x[0])[:5]
-        out.append(lead)
-    return out
-
-
-def review_count():
-    return db().execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND status='passt' AND stage IS NULL AND interest IS NULL "
-                        "AND IFNULL(rejected_by,'')=''").fetchone()[0]
-
-
-@bp.get("/leads/pruefen")
-@login_required
-def review():
-    return render_template("review.html", account=g.account, queue=review_queue(), total=review_count(),
-                           st=status_payload())
-
-
-@bp.post("/leads/<int:lead_id>/urteil")
-@login_required
-def verdict(lead_id):
-    """Gut: als „Neu“ ins CRM. Nicht gut: aussortieren (der Algorithmus lernt aus beidem)."""
-    lead = lead_or_404(lead_id)
-    good = request.form.get("gut") == "1"
-    if good:
-        crm.advance(db(), lead_id, "neu", author=who())
-        leaddb.update_lead(db(), lead_id, unread=0)
-        leaddb.add_event(db(), lead_id, "status", "Beim Prüfen als gut markiert, ins CRM.", author=who())
-        crm.claim(db(), lead_id, me())
-        branchentest.eingang(db(), lead_id, me())
-        leaddb.add_signal(db(), "gut", f"Das Team findet {lead['name']} ({lead['branche']} / {lead['category_label']}, "
-                          f"{lead['fit_score']} Punkte) passend.", lead_id)
-    else:
-        _reject(lead, request.form.get("reason", "").strip() or "Beim Prüfen als nicht gut markiert.")
-    return jsonify(ok=True, left=review_count())
-
-
-@bp.post("/leads/<int:lead_id>/urteil/zurueck")
-@login_required
-def verdict_undo(lead_id):
-    lead = lead_or_404(lead_id)
-    leaddb.update_lead(db(), lead_id, status="passt", rejected_by=None, stage=None, stage_at=leaddb.now())
-    leaddb.add_event(db(), lead_id, "status", "Entscheidung beim Prüfen rückgängig gemacht.", author=who())
-    db().execute("DELETE FROM signals WHERE lead_id=? AND processed=0 AND kind IN ('gut','aussortiert')", (lead_id,))
-    db().commit()
-    return jsonify(ok=True, name=lead["name"], left=review_count())
-
-
 @bp.post("/leads/<int:lead_id>/interest")
 @login_required
 def set_interest(lead_id):
@@ -796,22 +433,6 @@ def note(lead_id):
     if not text:
         return jsonify(error="Leere Notiz."), 400
     leaddb.add_event(db(), lead_id, "note", text, author=who())
-    return jsonify(ok=True)
-
-
-@bp.post("/leads/<int:lead_id>/retry")
-@login_required
-def retry(lead_id):
-    """Neu nach Regeln bewerten (kostenlos). Geht nur, solange noch nichts verschickt ist."""
-    lead = lead_or_404(lead_id)
-    if lead["status"] not in ("kandidat", "passt", "aussortiert", "fehler"):
-        return jsonify(error="Der Betrieb ist schon kontaktiert, eine neue Bewertung ändert nichts mehr."), 400
-    if not lead["website"]:
-        return jsonify(error="Ohne Webseite gibt es nichts zu bewerten."), 400
-    if not SETTINGS["LEADS_WORKER"]:
-        return jsonify(error="Der Hintergrund-Arbeiter ist aus (LEADS_WORKER=false)."), 400
-    leaddb.kv_set(db(), "request:lead", lead_id)
-    agent.wake()
     return jsonify(ok=True)
 
 
@@ -855,59 +476,8 @@ def draft_template(lead_id):
     return jsonify(ok=True)
 
 
-@bp.get("/leads/regeln")
-@login_required
-def rules():
-    return render_template("rules.html", account=g.account, rules=scoring.rules_table(), ko_rules=scoring.KO_RULES,
-                           base=scoring.BASE, top=my("LEADS_RUN_TOP"),
-                           threshold=my("LEADS_RULE_MIN"), st=status_payload())
-
 # ---------------------------------------------------------------- Recherche mit Claude (ohne API-Tokens)
 
-
-@bp.get("/leads/claude")
-@login_required
-def claude():
-    try:
-        count = max(5, min(200, int(request.args.get("anzahl", 40))))
-    except ValueError:
-        count = 40
-    branche = request.args.get("branche", "")
-    if branche not in claude_research.BRANCHEN:
-        branche = ""
-    brain = leaddb.brain(db())
-    template = leaddb.brain_sections(brain, [agent.TEMPLATE_HEADING])
-    prompt = claude_research.build_prompt(brain, SETTINGS, count, branche, claude_research.known_hosts(db()),
-                                          template, niches.load(db()))
-    waiting = db().execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND status='kandidat' AND source_id LIKE 'claude:%'"
-                           ).fetchone()[0]
-    return render_template("claude.html", account=g.account, prompt=prompt, count=count, branche=branche,
-                           branchen=claude_research.BRANCHEN, columns=claude_research.COLUMNS,
-                           used=claude_research.placeholders(template), own=claude_research.OWN_PLACEHOLDERS,
-                           waiting=waiting, filename=claude_research.FILENAME, st=status_payload())
-
-
-@bp.post("/leads/claude/import")
-@login_required
-def claude_import():
-    file = request.files.get("file")
-    raw = file.read() if file and file.filename else request.form.get("text", "").encode()
-    if not raw.strip():
-        flash("Bitte eine CSV-Datei auswählen oder den Inhalt einfügen.")
-        return redirect(url_for("leads.claude"))
-    try:
-        result = claude_research.import_csv(db(), raw, who(), SETTINGS["LEADS_CENTER"])
-    except claude_research.CsvError as exc:
-        flash(f"Nicht übernommen: {exc}")
-        return redirect(url_for("leads.claude"))
-    msg = f"{result['neu']} Betriebe übernommen."
-    if result["uebersprungen"]:
-        msg += f" {len(result['uebersprungen'])} übersprungen: " + "; ".join(
-            f"Zeile {line}: {reason}" for line, reason in result["uebersprungen"][:8])
-    if result["neu"]:
-        msg += " Sie werden im nächsten Lauf zuerst bewertet (kostenlos, ohne neue Suche)."
-    flash(msg)
-    return redirect(url_for("leads.claude"))
 
 # ---------------------------------------------------------------- Erinnerung (Nachfassen)
 

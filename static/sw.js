@@ -9,14 +9,14 @@ self.addEventListener('push', (event) => {
     body: data.body || '',
     icon: '/static/icon-192.png',
     badge: '/static/icon-192.png',
-    data: { url: data.url || '/leads' },
+    data: { url: data.url || '/aufgaben' },
     tag: data.url || 'leads',
   }));
 });
 
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  const url = new URL(event.notification.data?.url || '/leads', self.location.origin).href;
+  const url = new URL(event.notification.data?.url || '/aufgaben', self.location.origin).href;
   event.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
     for (const win of wins) {

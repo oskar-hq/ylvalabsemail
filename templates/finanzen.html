@@ -85,6 +85,6 @@
   <div class="os-btns" style="margin-top:32px"><a class="os-btn small quiet" href="{{ url_for('finanzen.kosten') }}">Laufende Kosten</a>{% if darf('finanzen', 4) %}<a class="os-btn small quiet" href="{{ url_for('finanzen.einstellungen') }}">Einstellungen</a>{% endif %}</div>
 </main>
 <div class="os-float">
-  <a class="os-back" href="{{ url_for('aufgaben.mein_tag') }}" aria-label="Zu Mein Tag">{{ i('back') }}</a>
+  <a class="os-back" href="{{ url_for('stapel.start') }}" aria-label="Zu den Aufgaben">{{ i('back') }}</a>
 </div>
 {% endblock %}

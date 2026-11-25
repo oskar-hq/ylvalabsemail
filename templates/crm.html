@@ -7,14 +7,13 @@
     <h1 class="title">CRM <span class="muted" style="font-size:.45em;font-weight:500">{{ total_cards }}</span></h1>
     <div class="btn-row head-btns">
       <input type="search" id="boardFilter" placeholder="Name, Ort, Branche …" aria-label="Filtern" class="crm-search">
-      {% set n_in = inbox_unread() %}<a class="btn" href="{{ url_for('crm.inbox') }}">Postfach{% if n_in %} <span class="nav-count new-count">{{ n_in }}</span>{% endif %}</a>
+      
       <button class="btn primary" type="button" id="newLead" title="Firma anlegen">+ Firma</button>
       <details class="more-menu account"><summary class="btn" aria-label="Mehr">···</summary>
         <div class="account-menu">
           <button type="button" id="importBtn">CSV importieren</button>
           <a href="{{ url_for('crm.export_csv') }}">CSV exportieren</a>
           <a href="{{ url_for('crm.board', ansicht='tabelle') if view == 'board' else url_for('crm.board') }}">{{ 'Als Tabelle anzeigen' if view == 'board' else 'Als Board anzeigen' }}</a>
-          <a href="{{ url_for('leads.search') }}">Neue Betriebe finden</a>
         </div>
       </details>
     </div>
@@ -109,7 +108,7 @@
       </tbody>
     </table>
   </div>
-  <p class="muted small">Auf eine Spaltenüberschrift tippen zum Sortieren. „Fehlt“: Das findet die kostenlose Suche nicht, dafür <a href="{{ url_for('leads.claude') }}">mit Claude recherchieren</a> oder einen Entwurf von der KI schreiben lassen.</p>
+  <p class="muted small">Auf eine Spaltenüberschrift tippen zum Sortieren. „Fehlt“: Das tragen die Agents nach.</p>
   {% endif %}
 </main>
 

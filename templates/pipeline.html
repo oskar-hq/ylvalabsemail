@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, avatar %}
+{% block title %}Pipeline · Ylva Labs{% endblock %}
+{% block content %}
+<main class="os-page pl-seite">
+  {{ toasts() }}
+  <header class="os-head">
+    <h1 class="os-title-l">Pipeline</h1>
+  </header>
+
+  <div class="os-tiles pl-kacheln" aria-label="Kennzahlen">{% for label, n, url in kacheln %}
+    <a class="os-tile {{ 'zero' if not n }}{{ ' alert' if n and label in ('Freigaben offen', 'Aufgaben überfällig') }}" href="{{ url }}"><span>{{ label }}</span><b>{{ n }}</b></a>{% endfor %}
+  </div>
+
+  <section class="os-section">
+    <h2 class="os-headline">Agents heute</h2>
+    <div class="pl-agents">{% for a in agents %}
+      <a class="pl-agent {{ a.status_key }}" href="{{ url_for('agenten.detail', key=a.key) }}" aria-label="{{ a.name }}: {{ a.status_text }}, {{ a.heute }} Aktionen heute, {{ a.offen }} Freigaben offen">
+        <div class="pl-agent-kopf">
+          <span class="pl-ring" aria-hidden="true">{{ a.name[:1] }}</span>
+          <span class="pl-agent-name"><b>{{ a.name }}</b><span class="pl-status"><i></i>{{ a.status_text }}</span></span>
+          {% if a.offen %}<span class="pl-offen" title="Freigaben, die auf euch warten">{{ a.offen }}</span>{% endif %}
+        </div>
+        <div class="pl-balken" aria-hidden="true">{% for h, n, anteil in a.balken %}
+          <span class="{{ 'jetzt' if h == jetzt_h }}" title="{{ h }} Uhr: {{ n }} Aktionen"><i style="height:{{ (anteil * 100)|round|int if n else 0 }}%"></i></span>{% endfor %}
+        </div>
+        <div class="pl-achse" aria-hidden="true"><span>{{ stunden[0] }}</span><span>12</span><span>{{ stunden[-1] }}</span></div>
+        <div class="pl-punkte" aria-hidden="true">{% for p in a.punkte %}<i class="{{ p.farbe }}" title="{{ p.zeit }} {{ p.text }}"></i>{% endfor %}{% if not a.punkte %}<span class="os-caption">noch nichts heute</span>{% endif %}</div>
+        <div class="pl-zaehl">{% for name, n in a.zaehl %}<span><b>{{ n }}</b> {{ name }}</span>{% endfor %}</div>
+        {% if a.offen and a.bei %}<p class="pl-bei">wartet auf {{ a.bei|join(', ') }}</p>{% elif a.letzte %}<p class="pl-bei">{{ a.letzte.at[11:16] }} · {{ a.letzte.text|truncate(60) }}</p>{% endif %}
+      </a>{% else %}<p class="os-empty">Noch keine Agents. <a href="{{ url_for('agenten.einrichten') }}">Einrichten</a></p>{% endfor %}
+    </div>
+    <p class="pl-legende" aria-hidden="true"><i class="blau"></i>Aufgabe <i class="gruen"></i>Lead <i class="orange"></i>Freigabe <i class="lila"></i>Projekt <i class="grau"></i>Notiz, Entwurf, Info</p>
+  </section>
+
+  {% if zeige_projekte %}
+  <section class="os-section">
+    <h2 class="os-headline">Projekte</h2>
+    <div class="os-board pl-board" aria-label="Projekte nach Phase">{% for s in spalten %}
+      <section class="os-spalte"><h3 class="os-spalte-kopf">{{ s.label }} <span>{{ s.karten|length }}</span></h3>
+        {% for p in s.karten %}<a class="os-bkarte pl-projekt" href="{{ url_for('kunden.detail', pid=p.id) }}">
+          <b>{{ p.kunde or p.titel }}</b>
+          <span>{{ p.titel if p.titel and p.titel != 'Projekt ' ~ p.kunde else '' }}</span>
+          <span class="pl-fort" aria-label="Fortschritt"><i style="transform:scaleX({{ p.fortschritt }})"></i></span>
+          <span class="pl-projekt-fuss">{% if p.verantwortlich_name %}<em class="pl-mini" title="{{ p.verantwortlich_name }}">{{ p.verantwortlich_name[:1] }}</em>{% endif %}{% if p.technik_name %}<em class="pl-mini" title="{{ p.technik_name }}">{{ p.technik_name[:1] }}</em>{% endif %}
+            {% if p.freigaben %}<span class="os-tag red">{{ p.freigaben }} Freigabe{{ 'n' if p.freigaben != 1 }}</span>{% endif %}
+            {% if p.aenderungen %}<span class="os-tag">{{ p.aenderungen }} Wunsch{{ 'e' if p.aenderungen != 1 }}</span>{% endif %}
+            {% if p.aufgaben %}<span class="os-tag muted">{{ p.aufgaben }} Aufgabe{{ 'n' if p.aufgaben != 1 }}</span>{% endif %}</span>
+        </a>{% else %}<p class="os-caption">–</p>{% endfor %}
+      </section>{% endfor %}
+    </div>
+  </section>
+  {% endif %}
+</main>
+{% endblock %}

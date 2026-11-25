@@ -1,4 +1,4 @@
-"""Systemcheck: Ist alles eingerichtet? Prüft Einstellungen, Postfach, KI, Kartensuche, Kreisdaten, Webseiten und Push.
+"""Systemcheck: Ist alles eingerichtet? Prüft Einstellungen, Postfach, KI, Webseiten und Push.
 
 In der App unter „Leads → Systemcheck“, oder im Terminal auf dem Server:
     docker compose exec mailer python -m app.systemcheck      (mit Docker)
@@ -12,7 +12,6 @@ import os
 import shutil
 import ssl
 import time
-import urllib.request
 
 OK, WARN, FAIL = "ok", "warn", "fail"
 
@@ -22,7 +21,6 @@ FAIL_HINTS = {
                           "Die Firewall des Servers muss ausgehend Port 465 bzw. 587 erlauben.",
     "Posteingang (IMAP)": "IMAP_HOST prüfen (Strato: imap.strato.de) und ausgehend Port 993 erlauben.",
     "KI-Schlüssel und Modelle": "Schlüssel in console.anthropic.com prüfen; der Server muss api.anthropic.com erreichen.",
-    "Kartensuche (OpenStreetMap)": "Der Server muss overpass-api.de erreichen. Ist der Dienst überlastet, später erneut prüfen.",
     "Webseiten lesen": "Der Server muss ausgehend beliebige Webseiten über HTTPS (Port 443) erreichen.",
     "Datenordner": "Rechte des Datenordners prüfen (Docker: Volume mailer-data).",
 }
@@ -110,13 +108,6 @@ def run(settings, smtp_connect, sent_folder, data_dir):
                 return FAIL, f"Modell {model} nicht verfügbar: {exc}", "AI_MODEL / AI_MODEL_ANALYSE in der .env prüfen."
         return OK, "Schlüssel gültig, freigeschaltet: " + ", ".join(models), None
 
-    def overpass_check():
-        url = S["OVERPASS_URL"].rsplit("/", 1)[0] + "/status"
-        req = urllib.request.Request(url, headers={"User-Agent": finder.USER_AGENT})
-        with urllib.request.urlopen(req, timeout=20) as resp:
-            first = resp.read(300).decode("utf-8", "ignore").splitlines()[:1]
-        return OK, f"Kartensuche erreichbar ({first[0] if first else 'ok'})", None
-
     def web_check():
         url, html = finder.fetch_page("https://ylvalabs.de/", {})
         return OK, f"Webseiten lesbar (Test: {url}, {len(html) // 1000} kB)", None
@@ -162,7 +153,7 @@ def run(settings, smtp_connect, sent_folder, data_dir):
 
     def worker_check():
         if not S["LEADS_WORKER"]:
-            return WARN, "LEADS_WORKER=false", "Ohne Arbeiter laufen keine Läufe und das Postfach wird nicht gelesen."
+            return WARN, "LEADS_WORKER=false", "Ohne Arbeiter wird das Postfach nicht gelesen und nichts verschickt."
         if not agent.STATE["running"]:
             return WARN, "Arbeiter läuft in diesem Prozess nicht (normal beim Aufruf im Terminal)", None
         return OK, f"Läuft, zuletzt: {agent.STATE['activity']}", None
@@ -170,7 +161,7 @@ def run(settings, smtp_connect, sent_folder, data_dir):
     checks = [
         ("Grundeinstellungen", config), ("HTTPS-Adresse", https), ("Datenordner", storage),
         ("Postausgang (SMTP)", smtp_check), ("Posteingang (IMAP)", imap_check), ("KI-Schlüssel und Modelle", ai_check),
-        ("Kartensuche (OpenStreetMap)", overpass_check), ("Webseiten lesen", web_check), ("Push-Benachrichtigungen", push_check),
+        ("Webseiten lesen", web_check), ("Push-Benachrichtigungen", push_check),
 ("Budget und Versand", budget_check), ("Updates aus der App", updater_check), ("Hintergrund-Arbeiter", worker_check),
     ]
     return [_check(name, func) for name, func in checks]

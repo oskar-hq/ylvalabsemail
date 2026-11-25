@@ -125,7 +125,7 @@ def ziel_neu():
     person = f.get("person") or me()
     if not kpis.darf_ziele(c, me(), person):
         abort(403, "Ziele setzt die Person selbst und wer sie führt.")
-    nxt = safe_next(f.get("next", "")) or url_for("aufgaben.mein_tag")
+    nxt = safe_next(f.get("next", "")) or url_for("stapel.start")
     try:
         kpis.ziel_anlegen(c, me(), person, f.get("woche") or kpis.woche_von(), f.get("text", ""),
                           f.get("kpi") or None, f.get("zielwert") or None)
@@ -137,7 +137,7 @@ def ziel_neu():
 @bp.post("/ziele/<int:zid>")
 @login_required
 def ziel_stand(zid):
-    nxt = safe_next(request.form.get("next", "")) or url_for("aufgaben.mein_tag")
+    nxt = safe_next(request.form.get("next", "")) or url_for("stapel.start")
     try:
         if request.form.get("loeschen") == "1":
             kpis.ziel_loeschen(db(), me(), zid)

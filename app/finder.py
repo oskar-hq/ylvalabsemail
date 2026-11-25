@@ -1,8 +1,7 @@
-"""Firmen finden (OpenStreetMap) und ihre Webseite lesen."""
+"""Webseiten sicher lesen (nur öffentliche Adressen, robots.txt) und Links auf soziale Netzwerke erkennen.
+Die Suche über OpenStreetMap gibt es seit Stufe 13 nicht mehr (Leads kommen von den Agents)."""
 import http.client
 import ipaddress
-import json
-import math
 import re
 import socket
 import urllib.error
@@ -11,71 +10,8 @@ import urllib.request
 import urllib.robotparser
 from html.parser import HTMLParser
 
-from . import niches
 
 USER_AGENT = "YlvaLabsLeadBot/1.0 (+https://ylvalabs.de; info@ylvalabs.de)"
-
-# Welche OpenStreetMap-Einträge gesucht werden, steht in niches.py (ihr wählt die Nischen in der App aus).
-
-LABELS = {
-    "carpenter": "Tischlerei", "joiner": "Tischlerei", "electrician": "Elektro", "plumber": "Sanitär",
-    "hvac": "Heizung/Lüftung", "heating_engineer": "Heizungsbau", "roofer": "Dachdeckerei",
-    "painter": "Malerbetrieb", "metal_construction": "Metallbau", "builder": "Bauunternehmen",
-    "stonemason": "Steinmetz", "tiler": "Fliesenleger", "glaziery": "Glaserei", "plasterer": "Stuckateur",
-    "gardener": "Garten- und Landschaftsbau", "landscaper": "Garten- und Landschaftsbau",
-    "boatbuilder": "Bootsbau", "shipbuilder": "Werft", "car_repair": "Kfz-Werkstatt", "baker": "Bäckerei",
-    "butcher": "Fleischerei", "brewery": "Brauerei", "hairdresser": "Friseur", "optician": "Optiker",
-    "agricultural_engines": "Landmaschinen", "sawmill": "Sägewerk", "scaffolder": "Gerüstbau",
-    "floorer": "Bodenleger", "insulation": "Dämmung", "window_construction": "Fensterbau",
-    "chimney_sweeper": "Schornsteinfeger", "locksmith": "Schlüsseldienst", "upholsterer": "Polsterei",
-    "tax_advisor": "Steuerberatung", "accountant": "Buchhaltung", "lawyer": "Kanzlei", "notary": "Notariat",
-    "estate_agent": "Immobilien", "insurance": "Versicherung", "architect": "Architekturbüro",
-    "engineer": "Ingenieurbüro", "logistics": "Logistik", "consulting": "Beratung", "company": "Unternehmen",
-    "surveyor": "Vermessung", "property_management": "Hausverwaltung", "employment_agency": "Personalvermittlung",
-    "nursing_home": "Pflegeheim", "home_care": "Ambulante Pflege", "social_facility": "Soziale Einrichtung",
-    "dentist": "Zahnarztpraxis", "doctors": "Arztpraxis", "doctor": "Arztpraxis", "clinic": "Klinik",
-    "veterinary": "Tierarztpraxis", "physiotherapist": "Physiotherapie", "rehabilitation": "Reha",
-    "occupational_therapist": "Ergotherapie", "speech_therapist": "Logopädie", "care": "Pflege",
-    "cabinet_maker": "Tischlerei", "shipyard": "Werft", "moving_company": "Spedition/Umzüge",
-    "assisted_living": "Betreutes Wohnen", "day_care": "Tagespflege",
-    "farm": "Hof", "farmyard": "Hof", "agrarian": "Agrarhandel", "car": "Autohaus",
-    "furniture": "Möbel", "kitchen": "Küchenstudio", "bathroom_furnishing": "Bäder",
-    "doityourself": "Baumarkt", "trade": "Fachhandel", "hardware": "Eisenwaren", "electronics": "Elektronik",
-    "bicycle": "Fahrräder", "hearing_aids": "Hörakustik", "boat": "Bootshandel", "tyres": "Reifenhandel",
-    "motorcycle": "Motorräder", "works": "Produktion", "hotel": "Hotel", "camp_site": "Campingplatz",
-    "guest_house": "Pension", "caravan_site": "Wohnmobilplatz", "driving_school": "Fahrschule",
-}
-
-
-def haversine_km(lat1, lon1, lat2, lon2):
-    r = 6371.0
-    p1, p2 = math.radians(lat1), math.radians(lat2)
-    dp, dl = math.radians(lat2 - lat1), math.radians(lon2 - lon1)
-    a = math.sin(dp / 2) ** 2 + math.cos(p1) * math.cos(p2) * math.sin(dl / 2) ** 2
-    return 2 * r * math.asin(math.sqrt(a))
-
-
-def overpass_query(lat, lon, radius_km, region="", keys=None):
-    """Suche in einem Bundesland (ISO-Code, z. B. DE-SH) oder, ohne Region, im Umkreis um einen Punkt.
-    `keys`: die gewählten Nischen (ohne Angabe die, die zu Ylva Labs passen)."""
-    if region:
-        head, where = f'area["ISO3166-2"="{region}"]->.gebiet;', "(area.gebiet)"
-    else:
-        head, where = "", f"(around:{int(radius_km * 1000)},{lat},{lon})"
-    parts = "".join(f"nwr{where}{sel}[\"name\"];" for sel in niches.selectors(keys or niches.DEFAULT_KEYS))
-    return f"[out:json][timeout:300];{head}({parts});out center tags;"
-
-
-def classify(tags, keys=None):
-    """OSM-Tags -> (branche, kategorie, lesbares Label, nische)."""
-    niche, category = niches.match(tags, keys or niches.DEFAULT_KEYS)
-    if niche is None:
-        return "sonstige", category, "Betrieb", None
-    value = category.split("=", 1)[1] if category else ""
-    label = LABELS.get(value) or niches.NICHES[niche]["label"]
-    if category.startswith("industrial=") and value not in LABELS:
-        label = "Industrie: " + value.replace("_", " ")
-    return niches.NICHES[niche]["branche"], category, label, niche
 
 
 def normalize_url(url):
@@ -86,91 +22,6 @@ def normalize_url(url):
         url = "https://" + url
     return url
 
-
-SOCIAL_HOSTS = ("facebook.com", "instagram.com", "linkedin.com", "xing.com", "google.com", "business.site",
-                "wixsite.com", "jimdosite.com", "tiktok.com", "youtube.com")
-# Offensichtlich zu klein oder nicht vor Ort entscheidend. Ohne KI, also kostenlos.
-SMALL_CATEGORIES = {"craft=hairdresser", "craft=beautician", "craft=tailor", "craft=key_cutter", "craft=shoemaker",
-                    "craft=photographer", "amenity=driving_school"}
-
-
-def rough_filter(tags, website, host, category=""):
-    """Kostenloser Grobfilter vor jeder KI. Gibt einen Grund zurück, wenn der Betrieb rausfällt.
-    `category`: die gewählte Nische, nach der gesucht wurde; die gilt nie als „zu klein“."""
-    if tags.get("brand") or tags.get("brand:wikidata") or tags.get("operator:wikidata"):
-        return "Filiale einer Kette (laut Kartendaten)"
-    if not website:
-        return "Keine Webseite, die KI hätte nichts zu lesen"
-    if any(host == h or host.endswith("." + h) for h in SOCIAL_HOSTS):
-        return "Nur eine Social-Media- oder Baukasten-Seite, vermutlich sehr klein"
-    for key, value in tags.items():
-        if f"{key}={value}" in SMALL_CATEGORIES and f"{key}={value}" != category:
-            return f"Branche meist ohne nennenswerte Verwaltung ({LABELS.get(value, value)})"
-    return None
-
-
-def parse_elements(elements, lat, lon, radius_km=None, keys=None):
-    """Overpass-Antwort -> Liste von Firmen (nur mit Webseite oder E-Mail)."""
-    found, seen = [], set()
-    for el in elements:
-        tags = el.get("tags") or {}
-        name = (tags.get("name") or "").strip()
-        website = normalize_url(tags.get("website") or tags.get("contact:website") or tags.get("url"))
-        email = (tags.get("email") or tags.get("contact:email") or "").split(";")[0].strip()
-        if not name or not (website or email):
-            continue
-        plat = el.get("lat") or (el.get("center") or {}).get("lat")
-        plon = el.get("lon") or (el.get("center") or {}).get("lon")
-        if plat is None or plon is None:
-            continue
-        dist = haversine_km(lat, lon, plat, plon)
-        if radius_km and dist > radius_km:
-            continue
-        host = urllib.parse.urlparse(website).netloc.lower().removeprefix("www.") if website else ""
-        dedupe = host or name.lower()
-        if dedupe in seen:  # Filialen/mehrere Einträge derselben Firma nur einmal
-            continue
-        seen.add(dedupe)
-        branche, category, label, niche = classify(tags, keys)
-        filter_reason = rough_filter(tags, website, host, category)
-        street = " ".join(x for x in (tags.get("addr:street"), tags.get("addr:housenumber")) if x)
-        city = " ".join(x for x in (tags.get("addr:postcode"), tags.get("addr:city")) if x)
-        found.append({
-            "source_id": f"osm:{el.get('type')}/{el.get('id')}", "name": name, "branche": branche,
-            "category": category, "category_label": label, "niche": niche,
-            "address": ", ".join(x for x in (street, city) if x), "city": tags.get("addr:city", ""),
-            "lat": plat, "lon": plon, "distance_km": round(dist, 1), "website": website, "email": email,
-            "phone": (tags.get("phone") or tags.get("contact:phone") or "").split(";")[0].strip(),
-            "filter_reason": filter_reason, "social": osm_social(tags),
-        })
-    return found
-
-
-# Weitere öffentliche Overpass-Server: Ist der eingestellte überlastet (504, 429, Zeitüberschreitung), fragt die
-# Suche den nächsten. Alle liefern dieselben OpenStreetMap-Daten.
-OVERPASS_MIRRORS = ["https://overpass-api.de/api/interpreter", "https://overpass.private.coffee/api/interpreter",
-                    "https://overpass.kumi.systems/api/interpreter"]
-
-
-def search_osm(lat, lon, radius_km, overpass_url, region="", keys=None):
-    """Mit Region (z. B. DE-SH) zählt nur das Bundesland, Entfernung dient dann nur der Anzeige."""
-    data = urllib.parse.urlencode({"data": overpass_query(lat, lon, radius_km, region, keys)}).encode()
-    errors = []
-    for url in dict.fromkeys([overpass_url, *OVERPASS_MIRRORS]):
-        req = urllib.request.Request(url, data=data, headers={"User-Agent": USER_AGENT})
-        try:
-            with urllib.request.urlopen(req, timeout=330) as resp:
-                payload = json.load(resp)
-        except urllib.error.HTTPError as exc:
-            if exc.code not in (429, 502, 503, 504):
-                raise
-            errors.append(f"{urllib.parse.urlparse(url).netloc}: {exc.code}")
-            continue
-        except (urllib.error.URLError, TimeoutError, socket.timeout, ValueError) as exc:
-            errors.append(f"{urllib.parse.urlparse(url).netloc}: {getattr(exc, 'reason', exc)}")
-            continue
-        return parse_elements(payload.get("elements", []), lat, lon, None if region else radius_km, keys)
-    raise OSError("alle Kartenserver überlastet oder nicht erreichbar (" + "; ".join(errors) + ")")
 
 # ---------------------------------------------------------------- Webseite lesen
 
@@ -376,20 +227,13 @@ SOCIAL = [
     ("youtube", "YouTube", r"^https?://(?:www\.)?youtube\.com/(@[^/?#]{2,100}|channel/[^/?#]+|c/[^/?#]+|user/[^/?#]+)/?$"),
 ]
 SOCIAL_LABELS = {k: label for k, label, _ in SOCIAL}
-_OSM_SOCIAL = {"instagram": "https://www.instagram.com/{}/", "facebook": "https://www.facebook.com/{}",
-               "linkedin": None, "xing": None, "tiktok": "https://www.tiktok.com/@{}", "youtube": None}
 
 
 def social_url(network, value):
-    """Ein Link oder Name (z. B. aus OpenStreetMap „contact:instagram=agentur_xy“) als aufgeräumter Link, sonst ''."""
+    """Ein Link als aufgeräumter Profil-Link des Netzwerks, sonst ''."""
     value = (value or "").strip()
-    if not value:
-        return ""
     if not value.startswith("http"):
-        template = _OSM_SOCIAL.get(network)
-        if not template or not re.fullmatch(r"@?[A-Za-z0-9_.\-]{2,60}", value):
-            return ""
-        value = template.format(value.lstrip("@"))
+        return ""
     url = value.split("?")[0].split("#")[0]
     pattern = dict((k, p) for k, _, p in SOCIAL)[network]
     return url if re.match(pattern, url, re.I) else ""
@@ -406,10 +250,3 @@ def social_links(urls):
     return found
 
 
-def osm_social(tags):
-    out = {}
-    for key in SOCIAL_LABELS:
-        url = social_url(key, tags.get(f"contact:{key}") or tags.get(key))
-        if url:
-            out[key] = url
-    return out

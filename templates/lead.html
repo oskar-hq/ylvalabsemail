@@ -1,6 +1,6 @@
 {% extends "base.html" %}
 {% from "_os.html" import kommentare as os_kommentare %}
-{% block title %}{{ lead.name }} · Leads{% endblock %}
+{% block title %}{{ lead.name }} · CRM{% endblock %}
 {% set editable = lead.status in ('passt', 'entwurf', 'aussortiert', 'fehler') and not lead.interest %}
 {% set chat = events|selectattr('kind', 'in', ['feedback', 'ai'])|list %}
 {% set replies = events|selectattr('kind', 'equalto', 'reply')|list %}
@@ -8,7 +8,7 @@
 {% block content %}
 <main class="page wide" data-lead="{{ lead.id }}">
   <p class="crumbs mono"><a href="{{ url_for('crm.board') }}">‹ CRM</a> <span class="muted">/</span>
-    <a href="{{ url_for('leads.overview', tab=tab) }}">{{ (tabs|selectattr(0, 'equalto', tab)|first)[1] }}</a></p>
+    <a href="{{ url_for('crm.chat', lead_id=lead.id) }}">Chat</a></p>
 
   <header class="lead-head">
     <h1 class="title">{{ lead.name }}</h1>
@@ -35,7 +35,7 @@
         {% endif %}
         <details class="more"><summary class="small">Originaltext</summary><div class="quote">{{ last.text }}</div></details>
         <div class="btn-row">
-          <a class="btn small primary" href="{{ url_for('crm.conversation', lead_id=lead.id) }}">Im Postfach antworten</a>
+          <a class="btn small primary" href="{{ url_for('crm.chat', lead_id=lead.id) }}">Im Chat antworten</a>
           {% if can_mail %}<a class="btn small" href="{{ url_for('compose', lead=lead.id) }}">Gestaltet antworten</a>{% endif %}
           {% if lead.email %}<a class="btn small" href="mailto:{{ lead.email }}?subject={{ ('Re: ' ~ (lead.subject or ''))|urlencode }}">Im Mailprogramm antworten</a>{% endif %}
         </div>
@@ -185,36 +185,6 @@
       </div>
       {% endif %}
 
-      <div class="side-block" id="branchentest">
-        <span class="label">Branchentest <a class="muted" href="{{ url_for('branchentest.uebersicht') }}">· Auswertung</a></span>
-        {% if lead.pruef_status == 'wartet' %}<p class="note warn small">In Prüfung{% if pruefung %} bei {{ people.get(pruefung.pruefer, pruefung.pruefer) }}{% endif %}. Bis dahin nicht kontaktieren.{% if pruefung and pruefung.pruefer == account.team %} <a href="{{ url_for('branchentest.pruefen') }}">Jetzt prüfen</a>{% endif %}</p>
-        {% elif lead.pruef_status == 'abgelehnt' %}<p class="note err small">Bei der Lead-Prüfung abgelehnt.</p>
-        {% elif lead.pruef_status == 'angenommen' %}<p class="small muted">Prüfung bestanden.</p>{% endif %}
-        <form method="post" action="{{ url_for('branchentest.lead_test', lead_id=lead.id) }}" data-os-fetch="reload" class="task-form">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-          <select name="testbranche" aria-label="Testbranche"><option value="">Keine Testbranche</option>
-            {% for b in testbranchen %}<option value="{{ b.key }}" {{ 'selected' if lead.testbranche == b.key }}>{{ b.name }}</option>{% endfor %}</select>
-          <div class="row">
-            <select name="herkunft" aria-label="Herkunft"><option value="kalt" {{ 'selected' if lead.herkunft != 'warm' }}>Kalt (zählt)</option><option value="warm" {{ 'selected' if lead.herkunft == 'warm' }}>Warm, Oskars Kontakt (zählt nicht)</option></select>
-            <button class="btn small">Speichern</button>
-          </div>
-        </form>
-        {% if lead.pruef_status not in ('wartet', 'abgelehnt') %}
-        <form method="post" action="{{ url_for('branchentest.kontakt', lead_id=lead.id) }}" data-os-fetch="reload" class="task-form">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-          <input type="text" name="notiz" maxlength="500" placeholder="Kontakt: z. B. „Inhaber erreicht, will Unterlagen“">
-          <div class="row">
-            <select name="kanal" aria-label="Kontaktweg">{% for k, l in kanaele %}<option value="{{ k }}">{{ l }}</option>{% endfor %}</select>
-            <button class="btn small">Kontakt protokollieren</button>
-          </div>
-        </form>
-        {% endif %}
-        <form method="post" action="{{ url_for('branchentest.preisgespraech', lead_id=lead.id) }}" data-os-fetch="reload">
-          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="an" value="{{ '0' if lead.preisgespraech_am else '1' }}">
-          <button class="btn small {{ 'primary' if lead.preisgespraech_am else '' }}">{{ 'Ernsthaftes Preisgespräch ✓' if lead.preisgespraech_am else 'Ernsthaftes Preisgespräch geführt' }}</button>
-        </form>
-      </div>
-
       <div class="side-block">
         <span class="label">Wiedervorlagen</span>
         {% if tasks %}
@@ -239,8 +209,8 @@
 
       {% if lead.fit_reason %}
       <div class="side-block">
-        <span class="label">Bewertung nach Regeln <a class="muted" href="{{ url_for('leads.rules') }}">· so geht’s</a></span>
-        {% if lead.fit_score is not none %}<div class="meter" title="{{ lead.fit_score }}/100"><i style="width:{{ lead.fit_score }}%"></i><b style="left:{{ st.rule_min }}%" title="Schwelle {{ st.rule_min }}"></b></div>{% endif %}
+        <span class="label">Bewertung nach Regeln</span>
+        {% if lead.fit_score is not none %}<div class="meter" title="{{ lead.fit_score }}/100"><i style="width:{{ lead.fit_score }}%"></i></div>{% endif %}
         {% if lead.research.signale %}
         <ul class="signals small">{% for points, reason in lead.research.signale %}<li><span class="mono {{ 'neg' if points < 0 }}">{{ '%+d'|format(points) }}</span> {{ reason }}</li>{% endfor %}</ul>
         {% else %}<p class="small">{{ lead.fit_reason }}</p>{% endif %}

@@ -1,12 +1,12 @@
-"""Seiten „Mein Tag“ und „Aufgaben“ (mit Anfragen an andere Bereiche) und Kommentare mit @-Erwähnung."""
+"""Seite „Aufgaben“ (alle Aufgaben als Liste und Board, Anfragen an andere Bereiche) und Kommentare mit @-Erwähnung."""
 import json
 import re
-from datetime import date, datetime, timedelta
+from datetime import date, timedelta
 
 from markupsafe import Markup, escape
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
 
-from . import assistent, aufgaben, branchentest, crm, firma, freigaben, kalender, kpis, leaddb, mailbox
+from . import aufgaben, firma, leaddb
 from .leads_views import db, me
 from .main import SETTINGS, darf, login_required, safe_next
 
@@ -68,51 +68,8 @@ def _startklar_offen(c, key):
 @bp.get("/mein-tag")
 @login_required
 def mein_tag():
-    c = db()
-    key = me()
-    tag = aufgaben.mein_tag(c, key)
-    hour = datetime.now().hour
-    gruss = "Guten Morgen" if hour < 11 else ("Guten Tag" if hour < 18 else "Guten Abend")
-    akquise = None
-    if darf("leads") or darf("crm"):
-        akquise = {"wiedervorlagen": crm.due_count(c, key) if darf("crm") else 0,
-                   "antworten": mailbox.unread_count(c, key) if darf("crm") else 0,
-                   "pruefen": leaddb.tab_counts(c).get("entwurf", 0) if darf("leads") else 0}
-    termine = ergebnisse = []
-    if darf("kalender"):
-        jetzt = datetime.now()
-        termine = kalender.liste(c, (jetzt - timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M"),
-                                 jetzt.date().isoformat() + "T23:59", key)
-        ergebnisse = kalender.offene_ergebnisse(c, key)
-    woche = kpis.woche_von()
-    ziele = kpis.ziele_der_woche(c, woche, key) if darf("cockpit") else []
-    offene_freigaben = freigaben.offen(c, key)
-    from . import agenten
-    agent_gruppen, _ = agenten.karten(c, key)
-    agent_infos = agenten.infos_fuer(c, key)
-    agenten_einrichten = (firma.darf(c, key, "personen", firma.VERWALTEN)
-                          and not agenten.einrichtung(c)["fertig"])
-    meine_leads = branchentest.recherche_kpis(c, key) if darf("leads") else None
-    person = firma.person(c, key)
-    wochentag = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
-    monat = ["Januar", "Februar", "März", "April", "Mai", "Juni", "Juli", "August", "September", "Oktober",
-             "November", "Dezember"]
-    jetzt = datetime.now()
-    html = render_template("mein_tag.html", account=g.account, t=tag, gruss=gruss, akquise=akquise,
-                           freigaben=offene_freigaben, meine_leads=meine_leads, termine=termine,
-                           ergebnisse=ergebnisse, kalender_verbunden=kalender.verbunden(c, key), ziele=ziele, woche=woche,
-                           katalog=[k for k in kpis.KATALOG if k["fn"] and k["je_person"]],
-                           vorname=(person["name"] if person else "Team").split(" ")[0],
-                           datum=f"{wochentag[jetzt.weekday()]}, {jetzt.day}. {monat[jetzt.month - 1]}",
-                           was_zuerst=assistent.reihenfolge(c, key, limit=5),
-                           was_zuerst_ki=assistent.letzte_prioritaeten(c, key) if darf("assistent") else None,
-                           was_zuerst_knopf=darf("assistent") and assistent.regeln(c)["prioritaeten_ki"],
-                           startklar_offen=_startklar_offen(c, key),
-                           agent_gruppen=agent_gruppen, agent_infos=agent_infos,
-                           agenten_einrichten=agenten_einrichten,
-                           **_form_kontext())
-    aufgaben.erwaehnungen_gesehen(c, key)  # einmal gezeigt, danach nicht mehr „neu“
-    return html
+    """Seit Stufe 13 ist der Aufgabenstapel die Startseite; alte Links auf „Mein Tag“ landen dort."""
+    return redirect(url_for("stapel.start"))
 
 # ---------------------------------------------------------------- Aufgaben
 
@@ -120,7 +77,7 @@ def mein_tag():
 ANSICHTEN = [("meine", "Meine"), ("bereich", "Bereich"), ("vergeben", "Vergeben"), ("alle", "Alle")]
 
 
-@bp.get("/aufgaben")
+@bp.get("/aufgaben/alle")
 @login_required
 def liste():
     c = db()

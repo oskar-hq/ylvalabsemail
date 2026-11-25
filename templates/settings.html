@@ -3,69 +3,91 @@
 {% from "_os.html" import i as osi %}
 {% block title %}Einstellungen · Ylva Labs{% endblock %}
 {% block content %}
-<main class="page narrow">
-  <h1 class="title">Einstellungen</h1>
+{% macro zeile(url, ico, titel, text, flag=None, ok=False, worte='') -%}
+<li data-ein-suche="{{ (titel ~ ' ' ~ text ~ ' ' ~ worte)|lower }}"><a href="{{ url }}"><span class="ico">{{ ico }}</span>
+  <span class="txt"><b>{{ titel }}</b><span>{{ text }}</span></span>
+  {% if flag %}<span class="flag {{ 'ok' if ok }}"><i></i>{{ flag }}</span>{% endif %}<span class="chev">›</span></a></li>
+{%- endmacro %}
+{% set gruppen = {} %}{% for grp in menu %}{% set _ = gruppen.update({grp.id: grp}) %}{% endfor %}
+{% macro gruppe(gid, ico) -%}
+{% set grp = gruppen.get(gid) %}{% if grp %}
+{{ zeile(url_for('settings.group', gid=gid), ico, grp.title, grp.hint, 'Fehlt' if grp.missing else ('geändert' if grp.changed else None), ok=not grp.missing, worte=grp.worte) }}
+{% endif %}
+{%- endmacro %}
+<main class="os-page ein-seite">
+  <h1 class="os-title-l">Einstellungen</h1>
   {% with messages = get_flashed_messages() %}{% for m in messages %}<p class="note {{ 'err' if ':' in m and 'Gespeichert' not in m else '' }} small">{{ m }}</p>{% endfor %}{% endwith %}
   {% if not admin %}<p class="note warn small">Ändern darf nur, wer „Einstellungen: Verwalten“ hat (Personen → Rollen und Rechte).</p>{% endif %}
 
+  <input class="os-input ein-suche" type="search" placeholder="Einstellung suchen, z. B. SMTP, Slack, Rechte …" aria-label="Einstellungen durchsuchen" data-ein-suche-feld>
+
+  {% if up.version and up.version.behind %}
+  <a class="ein-update" href="{{ url_for('settings.software') }}"><span><b>Neue Version da</b> · {{ up.version.behind }} Änderung{{ 'en' if up.version.behind != 1 }}</span><span class="os-btn small ink">Update {{ osi('pfeil') }}</span></a>
+  {% endif %}
+
+  <section class="ein-blick" aria-label="Auf einen Blick" data-ein-block>
+    <h2 class="os-headline">Auf einen Blick</h2>
+    <div class="ein-kacheln">
+      <a class="ein-kachel {{ 'offen' if startklar.pflicht else 'gut' }}" href="{{ url_for('settings.startklar_seite') }}"><i></i><b>Startklar</b>
+        <span>{% if startklar.pflicht %}noch {{ startklar.pflicht }} Punkt{{ 'e' if startklar.pflicht != 1 }}{% elif startklar.empfohlen %}{{ startklar.empfohlen }} Empfehlung{{ 'en' if startklar.empfohlen != 1 }}{% else %}alles eingerichtet{% endif %}</span></a>
+      <a class="ein-kachel {{ 'offen' if agenten_offen else 'gut' }}" href="{{ url_for('agenten.einrichten') if agenten_offen else url_for('agenten.einstellungen') }}"><i></i><b>Agents</b>
+        <span>{{ 'einrichten' if agenten_offen else 'verbunden' }}</span></a>
+      {% set pf = gruppen.get('postfach') %}
+      <a class="ein-kachel {{ 'offen' if pf and pf.missing else 'gut' }}" href="{{ url_for('settings.group', gid='postfach') }}"><i></i><b>Postfach</b>
+        <span>{{ 'fehlt noch' if pf and pf.missing else 'eingerichtet' }}</span></a>
+      <a class="ein-kachel {{ 'offen' if up.version and up.version.behind else 'gut' }}" href="{{ url_for('settings.software') }}"><i></i><b>Software</b>
+        <span>{% if up.version and up.version.behind %}Update da{% elif up.version and up.version.version %}Version {{ up.version.version }}{% else %}aktuell{% endif %}</span></a>
+    </div>
+  </section>
+
+  <p class="menu-title" data-ein-block>Firma und Team</p>
   <ul class="menu">
-    <li><a href="{{ url_for('settings.startklar_seite') }}"><span class="ico">{{ osi('check') }}</span>
-      <span class="txt"><b>Startklar</b><span>{% if startklar.pflicht %}Noch {{ startklar.pflicht }} Punkt{{ 'e' if startklar.pflicht != 1 }} bis zum Start{% elif startklar.empfohlen %}Eingerichtet, {{ startklar.empfohlen }} Empfehlung{{ 'en' if startklar.empfohlen != 1 }} offen{% else %}Alles eingerichtet{% endif %}</span></span>
-      {% if startklar.pflicht %}<span class="flag"><i></i>Offen</span>{% endif %}<span class="chev">›</span></a></li>
+    {{ zeile(url_for('personen.liste'), osi('person'), 'Personen', 'Anlegen, einladen, sperren, archivieren', worte='team mitarbeiter passwort einladung') }}
+    {{ zeile(url_for('personen.rollen'), osi('schloss'), 'Rollen und Rechte', 'Wer was sehen, bearbeiten und verwalten darf', worte='berechtigung admin') }}
+    {{ zeile(url_for('personen.bereiche'), osi('bereich'), 'Bereiche', 'Verantwortliche, Wiedervorlagen', worte='vertrieb technik') }}
+    {{ zeile(url_for('arbeitsbereiche.einstellungen'), osi('bereich'), 'Arbeitsbereiche', 'Outreach für Kunden: eigenes Postfach, Absender, Abrechnung', worte='kunde mandant') }}
   </ul>
 
-  <p class="menu-title">Firma</p>
+  <p class="menu-title" data-ein-block>Agents und Freigaben</p>
   <ul class="menu">
-    <li><a href="{{ url_for('personen.liste') }}"><span class="ico">{{ osi('person') }}</span>
-      <span class="txt"><b>Personen</b><span>Anlegen, einladen, sperren, archivieren</span></span><span class="chev">›</span></a></li>
-    <li><a href="{{ url_for('personen.rollen') }}"><span class="ico">{{ osi('schloss') }}</span>
-      <span class="txt"><b>Rollen und Rechte</b><span>Wer was sehen, bearbeiten und verwalten darf</span></span><span class="chev">›</span></a></li>
-    {% if darf('personen') %}<li><a href="{{ url_for('agenten.einstellungen') }}"><span class="ico">{{ osi('link') }}</span>
-      <span class="txt"><b>Agents</b><span>KI-Agents (Grok, Claude) verbinden, Rechte, Limits, wer was freigibt</span></span>
-      {% if agenten_offen %}<span class="flag"><i></i>Einrichten</span>{% endif %}<span class="chev">›</span></a></li>{% endif %}
-    {% if darf('kunden') %}<li><a href="{{ url_for('kunden.einstellungen') }}"><span class="ico">{{ osi('aufgabe') }}</span>
-      <span class="txt"><b>Projekte</b><span>Abnahme-Checkliste, Änderungswünsche, Abrechnung, Zeit</span></span><span class="chev">›</span></a></li>{% endif %}
-    {% if darf('kunden') %}<li><a href="{{ url_for('kunden.portal_einstellungen') }}"><span class="ico">{{ osi('person') }}</span>
-      <span class="txt"><b>Kunden-Bereich</b><span>Einmal-Link, was Kunden sehen, Wochenbericht, Erinnerung</span></span><span class="chev">›</span></a></li>{% endif %}
-    <li><a href="{{ url_for('arbeitsbereiche.einstellungen') }}"><span class="ico">{{ osi('bereich') }}</span>
-      <span class="txt"><b>Arbeitsbereiche</b><span>Outreach für Kunden: eigenes Postfach, Absender, Suchgebiet, Abrechnung</span></span><span class="chev">›</span></a></li>
-    <li><a href="{{ url_for('posteingang.einstellungen') }}"><span class="ico">{{ osi('at') }}</span>
-      <span class="txt"><b>Postfächer</b><span>Weitere Adressen wie kontakt@ oder persönliche, wem sie gehören</span></span><span class="chev">›</span></a></li>
-    {% if darf('finanzen') %}<li><a href="{{ url_for('finanzen.einstellungen') }}"><span class="ico">{{ osi('protokoll') }}</span>
-      <span class="txt"><b>Finanzen</b><span>Firmendaten für Rechnungen, Umsatzsteuer, Nummernkreis, Mailtext, Geld-Regel</span></span><span class="chev">›</span></a></li>{% endif %}
-    {% if darf('kalender') %}<li><a href="{{ url_for('kalender.einstellungen') }}"><span class="ico">{{ osi('kalender') }}</span>
-      <span class="txt"><b>Kalender</b><span>Google-Zugang, Regeln, Wochengespräch</span></span><span class="chev">›</span></a></li>{% endif %}
-    {% if darf('assistent') %}<li><a href="{{ url_for('assistent.einstellungen') }}"><span class="ico">{{ osi('check') }}</span>
-      <span class="txt"><b>Assistent</b><span>KI-Fragen, „Was zuerst?“, Entwürfe, Modell, Angebote</span></span><span class="chev">›</span></a></li>{% endif %}
-    {% if darf('entscheidungen') %}<li><a href="{{ url_for('freigaben.einstellungen') }}"><span class="ico">{{ osi('check') }}</span>
-      <span class="txt"><b>Freigaben und Entscheidungen</b><span>Freigabe-Stufen A–D, Entscheidungsrechte, Notfall-Zuständigkeit</span></span><span class="chev">›</span></a></li>{% endif %}
-    <li><a href="{{ url_for('personen.bereiche') }}"><span class="ico">{{ osi('bereich') }}</span>
-      <span class="txt"><b>Bereiche</b><span>Verantwortliche, Wiedervorlagen</span></span><span class="chev">›</span></a></li>
-    {% if darf('protokoll') %}<li><a href="{{ url_for('personen.protokoll') }}"><span class="ico">{{ osi('protokoll') }}</span>
-      <span class="txt"><b>Firmen-Protokoll</b><span>Wer hat wann was geändert</span></span><span class="chev">›</span></a></li>{% endif %}
-  </ul>
-  <p class="menu-title">Anbindungen und Regeln</p>
-
-  <ul class="menu">
-    {% for grp in menu %}
-    <li><a href="{{ url_for('settings.group', gid=grp.id) }}"><span class="ico">{{ icon(grp.id) }}</span>
-      <span class="txt"><b>{{ grp.title }}</b><span>{{ grp.hint }}</span></span>
-      {% if grp.missing %}<span class="flag"><i></i>Fehlt</span>{% elif grp.changed %}<span class="flag ok"><i></i>geändert</span>{% endif %}
-      <span class="chev">›</span></a></li>
-    {% endfor %}
+    {% if darf('personen') %}{{ zeile(url_for('agenten.einstellungen'), osi('link'), 'Agents', 'Grok und Claude verbinden, Rechte, Limits, wer was freigibt', 'Einrichten' if agenten_offen else None, worte='mcp oauth grok bot ki slack') }}{% endif %}
+    {% if darf('entscheidungen') %}{{ zeile(url_for('freigaben.einstellungen'), osi('check'), 'Freigaben und Entscheidungen', 'Freigabe-Stufen A–D, Entscheidungsrechte, Notfall-Zuständigkeit', worte='genehmigen human in the loop') }}{% endif %}
+    {% if darf('assistent') %}{{ zeile(url_for('assistent.einstellungen'), osi('anfrage'), 'Assistent', 'KI-Fragen, „Was zuerst?“, Entwürfe, Modell, Angebote', worte='ki claude') }}{% endif %}
   </ul>
 
-  <p class="menu-title">System</p>
+  <p class="menu-title" data-ein-block>Kunden und Geld</p>
   <ul class="menu">
-    <li><a href="{{ url_for('settings.software') }}"><span class="ico">{{ icon('software') }}</span>
-      <span class="txt"><b>Software und Updates</b><span>{% if up.version and up.version.version %}Version {{ up.version.version }}{% else %}Version und neue Updates{% endif %}</span></span>
-      {% if up.version and up.version.behind %}<span class="flag"><i></i>Update</span>{% endif %}<span class="chev">›</span></a></li>
-    <li><a href="{{ url_for('settings.backup_page') }}"><span class="ico">{{ icon('sicherung') }}</span>
-      <span class="txt"><b>Sicherung</b><span>Herunterladen, zurückspielen</span></span><span class="chev">›</span></a></li>
-    <li><a href="{{ url_for('leads.system') }}"><span class="ico">{{ icon('system') }}</span>
-      <span class="txt"><b>Systemcheck</b><span>Ist alles eingerichtet?</span></span><span class="chev">›</span></a></li>
-    <li><a href="{{ url_for('settings.access') }}"><span class="ico">{{ icon('zugang') }}</span>
-      <span class="txt"><b>Zugang und Sicherheit</b><span>Anmeldung mit dem Postfach, Notfall-Zugang</span></span><span class="chev">›</span></a></li>
+    {% if darf('kunden') %}{{ zeile(url_for('kunden.einstellungen'), osi('aufgabe'), 'Projekte', 'Abnahme-Checkliste, Änderungswünsche, Abrechnung, Zeit', worte='phase projekt') }}
+    {{ zeile(url_for('kunden.portal_einstellungen'), osi('person'), 'Kunden-Bereich', 'Einmal-Link, was Kunden sehen, Wochenbericht, Erinnerung', worte='portal') }}{% endif %}
+    {% if darf('finanzen') %}{{ zeile(url_for('finanzen.einstellungen'), osi('protokoll'), 'Finanzen', 'Firmendaten für Rechnungen, Umsatzsteuer, Nummernkreis, Geld-Regel', worte='rechnung steuer iban') }}{% endif %}
   </ul>
+
+  <p class="menu-title" data-ein-block>Verbindungen</p>
+  <ul class="menu">
+    {{ gruppe('postfach', icon('postfach')) }}
+    {{ zeile(url_for('posteingang.einstellungen'), osi('at'), 'Weitere Postfächer', 'Adressen wie kontakt@ oder persönliche, wem sie gehören', worte='imap mail') }}
+    {% if darf('kalender') %}{{ zeile(url_for('kalender.einstellungen'), osi('kalender'), 'Kalender', 'Regeln, Wochengespräch', worte='termine meet') }}{% endif %}
+    {{ gruppe('google', icon('google')) }}
+    {{ gruppe('unipile', osi('link')) }}
+    {{ gruppe('ki', icon('ki')) }}
+  </ul>
+
+  <p class="menu-title" data-ein-block>Texte und Hinweise</p>
+  <ul class="menu">
+    {{ gruppe('absender', icon('absender')) }}
+    {{ gruppe('hinweise', icon('hinweise')) }}
+  </ul>
+
+  <p class="menu-title" data-ein-block>System</p>
+  <ul class="menu">
+    {{ zeile(url_for('settings.software'), icon('software'), 'Software und Updates', ('Version ' ~ up.version.version) if up.version and up.version.version else 'Version und neue Updates', 'Update' if up.version and up.version.behind else None, worte='aktualisieren') }}
+    {{ zeile(url_for('settings.backup_page'), icon('sicherung'), 'Sicherung', 'Herunterladen, zurückspielen', worte='backup') }}
+    {{ zeile(url_for('leads.system'), icon('system'), 'Systemcheck', 'Ist alles eingerichtet?', worte='fehler status') }}
+    {{ zeile(url_for('settings.access'), icon('zugang'), 'Zugang und Sicherheit', 'Anmeldung mit dem Postfach, Notfall-Zugang', worte='login domain') }}
+    {% if darf('protokoll') %}{{ zeile(url_for('personen.protokoll'), osi('protokoll'), 'Firmen-Protokoll', 'Wer hat wann was geändert', worte='log verlauf') }}{% endif %}
+    {{ zeile(url_for('leads.costs'), osi('protokoll'), 'KI-Kosten', 'Was die KI diesen Monat gekostet hat', worte='budget euro tokens') }}
+  </ul>
+  <p class="os-empty" data-ein-nichts hidden>Nichts gefunden. Die Suche oben rechts (Strg K) kennt auch jedes einzelne Feld.</p>
 </main>
+<script src="{{ url_for('static', filename='einstellungen.js') }}"></script>
 {% endblock %}

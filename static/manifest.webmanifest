@@ -3,7 +3,7 @@
   "short_name": "Ylva Leads",
   "description": "KI-Akquise von Ylva Labs: Entwürfe prüfen, Antworten sehen, Benachrichtigungen bekommen.",
   "lang": "de",
-  "start_url": "/heute",
+  "start_url": "/aufgaben",
   "scope": "/",
   "display": "standalone",
   "background_color": "#000000",

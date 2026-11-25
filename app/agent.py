@@ -1,21 +1,15 @@
-"""Der Hintergrund-Arbeiter der Akquise.
+"""Der Hintergrund-Arbeiter des OS.
 
-Läuft als Thread im Mailer-Prozess (Gunicorn mit genau einem Worker).
-Von sich aus liest er nur das Postfach und ordnet Antworten nach Regeln ein (kostenlos). Ein Lauf, den ihr von
-Hand startet, macht:
-
-1. Suchen (OpenStreetMap) und Grobfilter nach Regeln: kostenlos.
-2. Bewertung nach Regeln (app/scoring.py): Webseite lesen, Punkte vergeben, ohne KI, kostenlos.
-   Wer genug Punkte hat, kommt als „Neu“ in die Pipeline.
-3. Nur wenn ihr es wollt: Entwürfe für die Besten, von der KI geschrieben, mit Budgetgrenze.
-Versendet wird nie automatisch.
+Läuft als Thread im Prozess (Gunicorn mit genau einem Worker). Er liest die Postfächer, ordnet Antworten nach
+Regeln ein (kostenlos), erinnert ans Nachfassen und treibt die Takte der Module (Kalender, Projekte, Freigaben,
+Kunden-Bereich, Finanzen). Leads suchen die KI-Agents über die Schnittstelle (seit Stufe 13 gibt es keine eigene
+Lead-Suche mehr). Versendet wird nie automatisch.
 """
 import email
 import email.policy
 import imaplib
 import json
 import logging
-import random
 import re
 import smtplib
 import socket
@@ -27,8 +21,7 @@ from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid, parseaddr, parsedate_to_datetime
 from urllib.parse import urlparse
 
-from . import ai, arbeitsbereiche, crm, emailbuild, finder, known, leaddb, mailbox, niches, reports, schedule, scoring, team, \
-    websearch, webpush
+from . import ai, arbeitsbereiche, crm, emailbuild, finder, leaddb, mailbox, scoring, team, webpush
 
 log = logging.getLogger("ylva.leads")
 
@@ -38,8 +31,6 @@ _wake = threading.Event()
 _job_lock = threading.Lock()
 _vapid = None
 
-CORE_BRANCHEN = ("handwerk", "pflege", "landwirtschaft")
-EXPLORE = 0.15  # Anteil zufällig gewählter Betriebe, damit die Suche nicht festfährt
 FREEMAIL = {"gmail.com", "googlemail.com", "web.de", "gmx.de", "gmx.net", "t-online.de", "outlook.com",
             "outlook.de", "hotmail.com", "hotmail.de", "yahoo.com", "yahoo.de", "icloud.com", "me.com",
             "aol.com", "freenet.de", "posteo.de", "mailbox.org", "live.de", "online.de", "arcor.de"}
@@ -179,121 +170,6 @@ def push_to(c, person, title, body, url):
 REGION_LABELS = {"DE-SH": "in ganz Schleswig-Holstein", "DE-SL": "im Saarland", "DE-HH": "in Hamburg"}
 
 
-class SearchError(Exception):
-    pass
-
-
-def run_search(c):
-    lat, lon = S("LEADS_CENTER")
-    keys = niches.search_keys(c)
-    where = REGION_LABELS.get(S("LEADS_REGION"), S("LEADS_REGION")) if S("LEADS_REGION") \
-        else f"im Umkreis von {S('LEADS_RADIUS_KM'):g} km"
-    set_activity(f"Schritt 1/3 · Sucht Betriebe {where} (kostenlos, dauert ein paar Minuten) …")
-    try:
-        found = finder.search_osm(lat, lon, S("LEADS_RADIUS_KM"), S("OVERPASS_URL"), S("LEADS_REGION"), keys)
-    except Exception as exc:
-        raise SearchError(f"Die Kartensuche (OpenStreetMap) ist gerade nicht erreichbar ({exc}). "
-                          "Bitte später erneut starten; es sind keine Kosten entstanden.") from exc
-    new = filtered = duplicates = 0
-    for f in found:
-        if known.find(c, f["name"], f["city"], f["website"], f["email"], f["source_id"]):
-            duplicates += 1  # schon einmal gefunden (von wem auch immer, auch wenn er inzwischen weg ist)
-            continue
-        reason = f.get("filter_reason")
-        cur = c.execute(
-            "INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, category_label,"
-            " niche, address, city, lat, lon, distance_km, website, email, phone, status, rejected_by, fit_reason,"
-            " research) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (leaddb.source_id(f["source_id"]), leaddb.now(), leaddb.now(), f["name"], f["branche"], f["category"], f["category_label"],
-             f.get("niche"),
-             f["address"], f["city"], f["lat"], f["lon"], f["distance_km"], f["website"], f["email"], f["phone"],
-             "aussortiert" if reason else "kandidat", "filter" if reason else None,
-             f"Grobfilter: {reason}" if reason else None, _json({"social": f["social"]}) if f.get("social") else None))
-        new += cur.rowcount
-        filtered += cur.rowcount if reason else 0
-        if cur.rowcount:
-            known.remember(c, f["name"], f["city"], f["website"], f["email"], f["source_id"], "osm",
-                           RUN.get("by") or "Suche", cur.lastrowid, commit=False)
-    c.commit()
-    niches.backfill(c)  # schon bekannte Betriebe, die jetzt in eine gewählte Nische fallen
-    leaddb.kv_set(c, "last_search", {"at": leaddb.now(), "found": len(found), "new": new, "filtered": filtered,
-                                     "known": duplicates, "niches": keys})
-    return new, filtered, duplicates
-
-
-def learned_filter(c):
-    """Auch kostenlos: Branchen, die schon mindestens fünfmal nicht gepasst haben und noch nie, fallen raus.
-    Gesperrte Adressen ebenso."""
-    removed = 0
-    for r in c.execute("""
-            SELECT category, category_label FROM leads
-            WHERE arbeitsbereich=ab() AND status NOT IN ('kandidat','recherche') AND IFNULL(rejected_by,'') != 'filter' AND category != ''
-            GROUP BY category
-            HAVING IFNULL(SUM(interest IN ('qualified','mittel') OR stage IS NOT NULL
-                              OR status IN ('passt','entwurf','versendet')), 0) = 0
-               AND IFNULL(SUM(rejected_by IN ('ki','regel','team') OR interest='kein_interesse'), 0) >= 5""").fetchall():
-        removed += c.execute(
-            "UPDATE leads SET status='aussortiert', rejected_by='filter', updated_at=?, fit_reason=? "
-            "WHERE arbeitsbereich=ab() AND status='kandidat' AND category=?",
-            (leaddb.now(), f"Grobfilter (gelernt): {r['category_label']} hat bisher fünfmal nicht gepasst.",
-             r["category"])).rowcount
-    blocked = set(leaddb.kv_get(c, "blocklist", []))
-    for r in c.execute("SELECT id, email, website FROM leads WHERE arbeitsbereich=ab() AND status='kandidat'").fetchall():
-        if (_domain(r["email"]) or _host(r["website"])) in blocked:
-            leaddb.update_lead(c, r["id"], status="gesperrt", rejected_by="filter",
-                               fit_reason="Adresse steht auf der Sperrliste.")
-            removed += 1
-    c.commit()
-    return removed
-
-
-def _beta(pos, neg):
-    return random.betavariate(1 + pos, 1 + neg)
-
-
-def next_candidate(c, plan=None):
-    """Welche Firma als Nächstes? Branchen, die bisher gut liefen, kommen öfter dran (Thompson-Sampling),
-    und ab und zu wird ganz bewusst etwas anderes ausprobiert, damit die Suche nicht festfährt.
-    `plan` = {"weights": {nische: prozent}, "taken": {nische: anzahl}}: nur die gewählten Nischen, im Verhältnis
-    ihrer Prozente. Die gezählte Nische trägt der Aufrufer in taken ein (siehe execute_run)."""
-    stats = {}
-    for r in c.execute("""
-            SELECT branche, category,
-                   SUM(interest='qualified') q, SUM(interest='mittel') m,
-                   SUM(interest='kein_interesse' OR status='gesperrt') k,
-                   SUM(rejected_by='team') rt, SUM(rejected_by IN ('ki','regel')) rk,
-                   SUM(status IN ('passt','entwurf','versendet','beantwortet') AND rejected_by IS NULL) ok
-            FROM leads WHERE arbeitsbereich=ab() AND status NOT IN ('kandidat','recherche') AND IFNULL(rejected_by,'') != 'filter'
-            GROUP BY branche, category""").fetchall():
-        for key in (("b", r["branche"]), ("c", r["category"])):
-            s = stats.setdefault(key, [0.0, 0.0])
-            s[0] += 3 * (r["q"] or 0) + 1.5 * (r["m"] or 0) + 0.5 * (r["ok"] or 0)
-            s[1] += (r["k"] or 0) + (r["rt"] or 0) + 0.5 * (r["rk"] or 0)
-    rows = c.execute("SELECT id, source_id, branche, category, niche, distance_km FROM leads "
-                     "WHERE arbeitsbereich=ab() AND status='kandidat'").fetchall()
-    imported = [r for r in rows if (r["source_id"] or "").startswith(("claude:", "web:"))]
-    if plan:  # aus der Claude-Recherche nur, was zu den gewählten Nischen passt (oder keine Nische hat)
-        imported = [r for r in imported if not r["niche"] or r["niche"] in plan["weights"]]
-    if imported:  # Betriebe aus der Claude-Recherche zuerst, die habt ihr gezielt suchen lassen
-        rows = imported
-    elif plan:
-        rows = [r for r in rows if r["niche"] in plan["weights"]]
-        niche = niches.pick(plan["weights"], plan["taken"], {r["niche"] for r in rows})
-        rows = [r for r in rows if r["niche"] == niche]
-    if rows and random.random() < EXPLORE:
-        return random.choice(rows)["id"]
-    best, best_score = None, -1e9
-    for r in rows:
-        pb, nb = stats.get(("b", r["branche"]), (0, 0))
-        pc, nc = stats.get(("c", r["category"]), (0, 0))
-        score = 0.6 * _beta(pb, nb) + 0.4 * _beta(pc, nc)
-        score += 0.08 if r["branche"] in CORE_BRANCHEN else 0
-        score -= (r["distance_km"] or 0) / 1000
-        if score > best_score:
-            best, best_score = r["id"], score
-    return best
-
-
 def _host(url):
     return urlparse(url or "").netloc.lower().removeprefix("www.")
 
@@ -306,66 +182,6 @@ def _json(data):
     return json.dumps(data, ensure_ascii=False)
 
 # ---------------------------------------------------------------- Bewertung nach Regeln (kostenlos) und Entwurf (KI)
-
-
-def stage_score(c, lead_id, learned, promote=False):
-    """Webseite lesen und nach Regeln bewerten. Gibt True zurück, wenn der Betrieb passt.
-    Passende kommen nicht von selbst ins CRM: Sie warten unter „Zu prüfen“, bis jemand Ja (CRM, „Neu“) oder Nein
-    (aussortiert) sagt. Nur Betriebe, die schon im CRM sind (von Hand angelegt, importiert), bleiben dort."""
-    lead = leaddb.get_lead(c, lead_id)
-    in_pipeline = lead["stage"] is not None  # von Hand angelegt oder importiert: bleibt drin
-    leaddb.update_lead(c, lead_id, status="recherche")
-    research = finder.research_website(lead["website"]) if lead["website"] else \
-        {"pages": [], "emails": [], "links": [], "errors": ["keine Webseite"]}
-    imported = lead["research"].get("import")  # aus der Claude-Recherche oder Websuche, bleibt erhalten
-    if imported and imported.get("groesse"):
-        research["size_hint"] = imported["groesse"]
-    social = {**(lead["research"].get("social") or {}), **finder.social_links(research["links"])}
-    research["social"] = social
-    research["nische_gewaehlt"] = bool(lead["niche"]) and lead["niche"] in (
-        set(niches.load(c, "manuell")) | set(niches.load(c, "auto")))
-    research["empfehlung"] = (imported or {}).get("begruendung") or ""
-    result = scoring.score(lead, research, learned)
-    if imported:
-        result["zeitfresser"] = list(dict.fromkeys([*imported.get("zeitfresser", []), *result["zeitfresser"]]))
-    threshold = S("LEADS_RULE_MIN")
-    email_addr = result["email"] or lead["email"] or None
-    passes = result["score"] >= threshold and not result["ko"]
-    info = {"signale": result["signals"], "ko": result["ko"], "groesse": result["groesse"], "zeitfresser": result["zeitfresser"],
-            "auszug": result["auszug"], "pages": [p["url"] for p in research["pages"]], "emails": research["emails"],
-            "errors": research["errors"],
-            "beschreibung": next((pg.get("description") for pg in research["pages"] if pg.get("description")), ""),
-            "titel": research["pages"][0]["title"] if research["pages"] else ""}
-    if imported:
-        info["import"] = imported
-    if social:  # Instagram, LinkedIn & Co. zum Anschauen (aus Karte, Webseite oder Claude-Recherche)
-        info["social"] = social
-    common = dict(fit_score=result["score"], fit_reason=scoring.summary(result, threshold), research=_json(info),
-                  contact_name=lead["contact_name"] or result["contact_name"] or None, email=email_addr)
-
-    blocked = set(leaddb.kv_get(c, "blocklist", []))
-    if email_addr and (_domain(email_addr) in blocked or email_addr in blocked):
-        leaddb.update_lead(c, lead_id, status="gesperrt", **common)
-        leaddb.add_event(c, lead_id, "status", "Gesperrt: Diese Adresse möchte nicht kontaktiert werden.")
-        return False
-    duplicate = email_addr and c.execute(
-        "SELECT name FROM leads WHERE arbeitsbereich=ab() AND id != ? AND email=? AND status IN ('passt','entwurf','versendet',"
-        "'beantwortet','gesperrt')", (lead_id, email_addr)).fetchone()
-    if duplicate and not in_pipeline:
-        leaddb.update_lead(c, lead_id, status="aussortiert", rejected_by="regel", **{
-            **common, "fit_reason": f"Doppelt: dieselbe Adresse wie „{duplicate['name']}“."})
-        leaddb.add_event(c, lead_id, "status", f"Aussortiert: gleiche Adresse wie „{duplicate['name']}“.")
-        return False
-    if passes or in_pipeline:
-        leaddb.update_lead(c, lead_id, status="passt", rejected_by=None, **common)
-        note = "" if passes else " Laut Regeln eher nicht, bleibt aber in der Pipeline, weil ihr den Betrieb angelegt habt."
-        leaddb.add_event(c, lead_id, "status", common["fit_reason"] + note, author="Regeln")
-        if promote or in_pipeline:
-            crm.advance(c, lead_id, "neu")
-        return passes
-    leaddb.update_lead(c, lead_id, status="aussortiert", rejected_by="regel", **common)
-    leaddb.add_event(c, lead_id, "status", common["fit_reason"], author="Regeln")
-    return False
 
 
 def _analysis(lead):
@@ -637,6 +453,14 @@ class BudgetStop(Exception):
     pass
 
 
+def _record_usage(stage, model, tokens, cost, lead_id):
+    c = conn()
+    try:
+        leaddb.record_usage(c, stage, model, tokens, cost, None, lead_id, getattr(_local, "person", None))
+    finally:
+        c.close()
+
+
 def avg_cost_usd(c, stage):
     avg, n = leaddb.stage_averages(c).get(stage, (None, 0))
     return avg if n >= 5 and avg else DEFAULT_COST_USD[stage]
@@ -648,224 +472,10 @@ def due_followups(c, without_text=False):
     return [dict(r) for r in rows if not (without_text and r["followup_body"])]
 
 
-def estimate(c, drafts, followups=True):
-    """Was kostet ein Lauf ungefähr? Die Bewertung ist kostenlos, nur Entwürfe und Erinnerungen kosten."""
-    waiting = c.execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND status='passt' AND interest IS NULL "
-                        "AND IFNULL(body,'')='' AND stage IS NOT NULL").fetchone()[0]
-    reminders = len(due_followups(c, without_text=True)) if followups else 0
-    usd = drafts * avg_cost_usd(c, "entwurf") + reminders * avg_cost_usd(c, "erinnerung")
-    if drafts or reminders:
-        usd += avg_cost_usd(c, "lernen")
-    return {"eur": ai.eur(usd), "entwuerfe": drafts, "erinnerungen": reminders, "ohne_entwurf": waiting,
-            "per_stage_eur": {s: ai.eur(avg_cost_usd(c, s)) for s in DEFAULT_COST_USD}}
-
-
 def month_budget_left_eur(c):
     cap = S("LEADS_MONTHLY_BUDGET_EUR")
     return None if not cap else cap - ai.eur(leaddb.month_cost_usd(c))
 
-
-def check_budget(c, run_id, budget_eur, stage):
-    if RUN["cancel"]:
-        raise BudgetStop("Von Hand gestoppt.")
-    nxt = ai.eur(avg_cost_usd(c, stage))
-    spent = ai.eur(leaddb._sum(c, "run_id = ?", (run_id,))["usd"])
-    if spent + nxt > budget_eur:
-        raise BudgetStop(f"Budget des Laufs erreicht ({spent:.2f} € von {budget_eur:.2f} €).")
-    left = month_budget_left_eur(c)
-    if left is not None and nxt > left:
-        raise BudgetStop(f"Monatsbudget von {S('LEADS_MONTHLY_BUDGET_EUR'):.2f} € erreicht.")
-    own = person_budget_left_eur(c, getattr(_local, "person", None))
-    if own is not None and nxt > own:
-        raise BudgetStop("Dein eigenes KI-Budget für diesen Monat ist erreicht.")
-
-
-def _record_usage(stage, model, tokens, cost, lead_id):
-    c = conn()
-    try:
-        leaddb.record_usage(c, stage, model, tokens, cost, getattr(_local, "run_id", None), lead_id,
-                            getattr(_local, "person", None))
-    finally:
-        c.close()
-
-
-def start_run(params, started_by):
-    """Vom Knopf „Lauf starten“. Gibt (run_id, None) oder (None, Fehlertext) zurück."""
-    if not S("LEADS_WORKER"):
-        return None, "Der Hintergrund-Arbeiter ist aus (LEADS_WORKER=false)."
-    if params.get("entwuerfe") and not ai.available():
-        return None, ("Ohne KI-Schlüssel (ANTHROPIC_API_KEY) schreibt niemand Entwürfe. Setzt „Entwürfe“ auf 0: "
-                      "Die Bewertung läuft ohne KI.")
-    if params.get("web_anzahl") and not ai.available():
-        return None, "Die Websuche (Webseiten, Instagram, LinkedIn) braucht einen KI-Schlüssel (ANTHROPIC_API_KEY)."
-    if params.get("web_anzahl") and not params.get("web_kanaele"):
-        return None, "Websuche: bitte mindestens eins wählen, Webseiten, Instagram oder LinkedIn."
-    c = conn()
-    try:
-        if RUN["id"] or c.execute("SELECT 1 FROM runs WHERE status='wartet'").fetchone():
-            return None, "Es läuft schon ein Lauf."
-        left = month_budget_left_eur(c)
-        if (params.get("entwuerfe") or params.get("web_anzahl")) and left is not None and left <= 0:
-            return None, f"Das Monatsbudget von {S('LEADS_MONTHLY_BUDGET_EUR'):.2f} € ist aufgebraucht."
-        cur = c.execute("INSERT INTO runs (started_at, started_by, params, status) VALUES (?,?,?, 'wartet')",
-                        (leaddb.now(), started_by, _json(params)))
-        c.commit()
-        run_id = cur.lastrowid
-    finally:
-        c.close()
-    _wake.set()
-    return run_id, None
-
-
-def stop_run():
-    RUN["cancel"] = True
-    _wake.set()
-
-
-def _progress(text):
-    RUN["progress"] = text
-    set_activity(text)
-
-
-def _eur(value):
-    return f"{value:.2f}".replace(".", ",") + " €"
-
-
-def execute_run(c, run_id):
-    run = c.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
-    p = json.loads(run["params"])
-    with arbeitsbereiche.im(run["arbeitsbereich"]), acting_as(c, p.get("person")):  # eigene Einstellungen der Person, die den Lauf gestartet hat
-        return _execute_run(c, run_id, run, p)
-
-
-def _execute_run(c, run_id, run, p):
-    check, drafts, budget = int(p.get("bewerten", 0)), int(p.get("entwuerfe", 0)), float(p.get("budget_eur", 0))
-    use_ai = ai.available()
-    counts = {"neu_gefunden": 0, "grobfilter": 0, "bewertet": 0, "passen": 0, "zu_pruefen": 0, "entwuerfe": 0,
-              "erinnerungen": 0}
-    RUN.update(id=run_id, cancel=False, by=run["started_by"])
-    _local.run_id = run_id
-    c.execute("UPDATE runs SET status='laeuft' WHERE id=?", (run_id,))
-    c.commit()
-    status, message, notes = "fertig", None, []
-    try:
-        # Schritt 1: suchen und grob filtern (kostenlos). Neu suchen auch, wenn eine gewählte Nische noch nie
-        # gesucht wurde. Welche Auswahl gilt: die der manuellen oder der automatischen Suche (params „nischen“)
-        niches.backfill(c)
-        weights = niches.load(c, p.get("nischen", "manuell"))
-        searched = (leaddb.kv_get(c, "last_search") or {}).get("niches")
-        marks = ",".join("?" * len(weights))
-        waiting = c.execute(f"SELECT 1 FROM leads WHERE arbeitsbereich=ab() AND status='kandidat' AND (niche IN ({marks}) "
-                            "OR ((source_id LIKE 'claude:%' OR source_id LIKE 'web:%') AND niche IS NULL))",
-                            list(weights)).fetchone()
-        web_count = int(p.get("web_anzahl") or 0) if use_ai else 0
-        map_ok = p.get("karte", True)
-        if map_ok and (p.get("suchen") or (check and (not waiting or (searched is not None
-                                                                         and not set(weights) <= set(searched))))):
-            try:
-                counts["neu_gefunden"], counts["grobfilter"], counts["schon_bekannt"] = run_search(c)
-            except SearchError as exc:
-                if not (waiting or web_count):
-                    raise
-                notes.append(f"{exc} Bewertet wurde, was schon gefunden war.")
-        # Schritt 1b (auf Wunsch, KI): im Web, auf Instagram und LinkedIn suchen, auch was nicht auf der Karte steht
-        if web_count:
-            check_budget(c, run_id, budget, "websuche")
-            channels = websearch.parse_channels(p.get("web_kanaele"))
-            _progress(f"Schritt 1/3 · Sucht im Web ({', '.join(websearch.CHANNELS[k] for k in channels)}) …")
-            settings = {k: S(k) for k in ("LEADS_REGION", "LEADS_CENTER", "LEADS_RADIUS_KM")}
-            new, reported, _ = websearch.find(c, settings, weights, channels, web_count, run["started_by"] or "Websuche",
-                                              S("LEADS_CENTER"))
-            counts["web_neu"], counts["web_gemeldet"] = new, reported
-            counts["neu_gefunden"] += new
-        counts["grobfilter"] += learned_filter(c)
-
-        # Schritt 2: nach Regeln bewerten (kostenlos, nur die Webseite wird gelesen)
-        learned = scoring.learned_adjustments(leaddb.category_outcomes(c))
-        plan = {"weights": weights, "taken": {}}
-        for i in range(check):
-            if RUN["cancel"]:
-                raise BudgetStop("Von Hand gestoppt.")
-            lead_id = next_candidate(c, plan)
-            if not lead_id:
-                break
-            niche = leaddb.get_lead(c, lead_id)["niche"]
-            plan["taken"][niche] = plan["taken"].get(niche, 0) + 1
-            _progress(f"Schritt 2/3 · Bewertet {i + 1}/{check}: {leaddb.get_lead(c, lead_id)['name']} (kostenlos)")
-            counts["bewertet"] += 1
-            passed = stage_score(c, lead_id, learned)
-            counts["passen"] += passed
-            rated = leaddb.get_lead(c, lead_id)
-            reports.record(c, run_id, lead_id, passed, rated["fit_score"], rated["fit_reason"])
-        if notes:
-            message = " ".join(notes)
-        if check and not counts["bewertet"]:  # nichts zu bewerten: sagen, woran es liegt
-            others = c.execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND status='kandidat'").fetchone()[0]
-            labels = ", ".join(niches.NICHES[k]["label"] for k in list(weights)[:4]) + (" …" if len(weights) > 4 else "")
-            message = " ".join(notes + [
-                f"In den gewählten Nischen ({labels}) gibt es gerade keine neuen Betriebe"
-                + (f"; {others} warten in anderen Nischen" if others else "") + ". Agenturen und Büros stehen "
-                "oft nicht auf der Karte: Die Websuche (Webseiten, Instagram, LinkedIn) findet sie."])
-        counts["zu_pruefen"] = c.execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND status='passt' AND stage IS NULL "
-                                         "AND interest IS NULL AND IFNULL(rejected_by,'')=''").fetchone()[0]
-
-        # Schritt 3 (nur auf Wunsch): Entwürfe für die besten Betriebe im CRM ohne Nachricht (KI), also nur für
-        # die, zu denen ihr beim Prüfen schon Ja gesagt habt
-        if drafts and use_ai:
-            brain = leaddb.brain(c)
-            best = c.execute("SELECT id, name FROM leads WHERE arbeitsbereich=ab() AND status='passt' AND interest IS NULL AND IFNULL(body,'')='' "
-                             "AND stage IS NOT NULL ORDER BY fit_score DESC, distance_km LIMIT ?", (drafts,)).fetchall()
-            for i, row in enumerate(best):
-                check_budget(c, run_id, budget, "entwurf")
-                _progress(f"Schritt 3/3 · Schreibt Entwurf {i + 1}/{len(best)}: {row['name']}")
-                counts["entwuerfe"] += stage_write(c, row["id"], brain)
-
-        # Erinnerungen für Betriebe, die seit einer Woche nicht geantwortet haben (KI, kurz)
-        if p.get("erinnerungen") and use_ai:
-            due = due_followups(c, without_text=True)
-            for i, lead in enumerate(due):
-                check_budget(c, run_id, budget, "erinnerung")
-                _progress(f"Erinnerung {i + 1}/{len(due)}: {lead['name']}")
-                write_followup(c, lead["id"])
-                counts["erinnerungen"] += 1
-
-        # Wenn die KI geschrieben hat: aus euren Rückmeldungen den Stil lernen
-        if (counts["entwuerfe"] or counts["erinnerungen"]) \
-                and c.execute("SELECT 1 FROM signals WHERE arbeitsbereich=ab() AND processed=0").fetchone():
-            check_budget(c, run_id, budget, "lernen")
-            maybe_reflect(c, force=True)
-    except BudgetStop as exc:
-        status, message = "gestoppt", str(exc)
-    except (ai.AIError, SearchError) as exc:
-        status, message = "fehler", str(exc)
-        STATE["error"], STATE["error_at"] = str(exc), time.time()
-    except Exception as exc:
-        log.exception("Fehler im Lauf %s", run_id)
-        status, message = "fehler", f"{exc.__class__.__name__}: {exc}"
-        STATE["error"], STATE["error_at"] = message, time.time()
-    finally:
-        c.execute("UPDATE leads SET status='fehler', updated_at=? WHERE arbeitsbereich=ab() AND status='recherche'", (leaddb.now(),))
-        _local.run_id = None
-        cost = ai.eur(leaddb._sum(c, "run_id = ?", (run_id,))["usd"])
-        summary = ((f"Websuche: {counts['web_neu']} neu von {counts['web_gemeldet']} gemeldet. "
-                    if counts.get("web_gemeldet") is not None else "")
-                   + f"{counts['bewertet']} bewertet, {counts['passen']} passen"
-                   + (f", {counts['zu_pruefen']} warten aufs Prüfen" if counts["zu_pruefen"] else "")
-                   + (f", {counts['entwuerfe']} Entwürfe" if counts["entwuerfe"] else "")
-                   + (f", {counts['erinnerungen']} Erinnerungen" if counts["erinnerungen"] else "")
-                   + (f". KI-Kosten: {_eur(cost)}." if cost else ". Ohne KI-Kosten."))
-        c.execute("UPDATE runs SET ended_at=?, status=?, message=?, counts=? WHERE id=?",
-                  (leaddb.now(), status, " ".join(x for x in (message, summary) if x), _json(counts), run_id))
-        c.commit()
-        RUN.update(id=None, cancel=False, progress="")
-        title = {"fertig": "Lauf fertig", "gestoppt": "Lauf gestoppt", "fehler": "Lauf mit Fehler beendet"}[status]
-        # Läufe von Hand melden sich aufs Handy; automatische nur bei Fehlern und nur in der App (ihr Ergebnis
-        # kommt gesammelt im Tagesbericht)
-        auto = (run["started_by"] or "").startswith("Automatik")
-        if not (auto and status == "fertig"):
-            notify(c, title, " ".join(x for x in (message, summary) if x),
-                   "/leads?tab=entwurf" if counts["entwuerfe"] else ("/leads/pruefen" if counts["zu_pruefen"] else "/crm"),
-                   push=not auto)
 
 # ---------------------------------------------------------------- Versand
 
@@ -1214,7 +824,7 @@ def handle_reply(c, lead_id, msg, message_id=None):
                          meta={"from": addr, "subject": subject, "date": str(msg.get("Date", ""))})
         if not mailbox.ist_sonstige(c, lead_id):  # Unbekannte landen still unter „Sonstige“
             notify(c, f"Neue Mail von {lead['name']}" if lead["status"] == "kontakt" else f"Neue Antwort von {lead['name']}",
-                   (text or subject)[:220], f"/crm/postfach/{lead_id}")
+                   (text or subject)[:220], f"/chat/{lead_id}")
         return True
     leaddb.add_event(c, lead_id, "reply", text or "(leere Nachricht)", author=name or addr,
                      meta={"from": addr, "subject": subject, "date": str(msg.get("Date", ""))})
@@ -1242,7 +852,7 @@ def handle_reply(c, lead_id, msg, message_id=None):
     leaddb.add_signal(c, "antwort", f"{lead['name']} ({lead['branche']} / {lead['category_label']}, "
                       f"{lead['distance_km']} km, Größe: {lead['research'].get('groesse') or '?'}): {kind}. "
                       f"Antwort: {result['zusammenfassung']}", lead_id)
-    notify(c, f"{INTEREST_TITLES[kind]} {lead['name']}", result["zusammenfassung"][:220], f"/crm/postfach/{lead_id}")
+    notify(c, f"{INTEREST_TITLES[kind]} {lead['name']}", result["zusammenfassung"][:220], f"/chat/{lead_id}")
     return True
 
 
@@ -1468,10 +1078,7 @@ def tick():
                 posteingang.takt(c)
             except Exception:
                 log.exception("Fehler beim Abrufen der weiteren Postfächer")
-            run = c.execute("SELECT id FROM runs WHERE status='wartet' ORDER BY id LIMIT 1").fetchone()
-            if run:  # ein Lauf nach dem anderen, im Arbeitsbereich, für den er gestartet wurde
-                execute_run(c, run["id"])
-            STATE["error"] = None if not run else STATE["error"]
+            STATE["error"] = None
         except ai.AIError as exc:
             log.warning("KI-Fehler: %s", exc)
             STATE["error"], STATE["error_at"] = str(exc), time.time()
@@ -1494,50 +1101,9 @@ def akquise_takt(c):
             fetch_inbox(c)
     notify_due(c)
     notify_tasks(c)
-    reports.notify_released(c, notify)
-    start_scheduled(c)
     if leaddb.kv_get(c, "request:reflect") and ai.available():
         leaddb.kv_set(c, "request:reflect", False)
         maybe_reflect(c, force=True)
-    wanted = leaddb.kv_get(c, "request:lead")
-    if wanted:
-        leaddb.kv_set(c, "request:lead", None)
-        _local.run_id = None
-        recheck_lead(c, wanted)
-
-
-def start_scheduled(c, now=None):
-    """Zeitplan (Leads → Neue Betriebe finden → Automatisch): fälligen Lauf anlegen. Höchstens einer pro Minute."""
-    now = now or datetime.now()
-    state = leaddb.kv_get(c, "schedule_state", {}) or {}
-    started = None
-    for kind, cfg in schedule.load(c).items():
-        last = (state.get(kind) or {}).get("last")
-        if not schedule.due(cfg, now, last):
-            continue
-        stamp = now.isoformat(timespec="seconds")
-        if kind == "ki" and not ai.available():
-            state[kind] = {"last": stamp, "note": "Kein KI-Schlüssel eingetragen, KI-Lauf übersprungen."}
-            continue
-        params, why = schedule.params_for(kind, cfg, c, now, ai.eur)
-        if not params:
-            state[kind] = {"last": stamp, "note": why}
-            continue
-        run_id, error = start_run(params, schedule.STARTED_BY[kind])
-        if error and "läuft schon" in error:
-            continue  # nächste Minute noch einmal
-        state[kind] = {"last": stamp, "note": error or "", "run_id": run_id}
-        if run_id:
-            started = run_id
-            break
-    leaddb.kv_set(c, "schedule_state", state)
-    return started
-
-
-def recheck_lead(c, lead_id):
-    """Einen einzelnen Betrieb von Hand neu bewerten lassen (kostenlos)."""
-    set_activity(f"Bewertet neu: {leaddb.get_lead(c, lead_id)['name']}")
-    stage_score(c, lead_id, scoring.learned_adjustments(leaddb.category_outcomes(c)))
 
 
 def notify_tasks(c):
@@ -1559,7 +1125,6 @@ def _loop():
     c.execute("UPDATE leads SET status='kandidat' WHERE status='recherche'")  # nach Neustart
     c.execute("UPDATE runs SET status='abgebrochen', ended_at=?, message='Server wurde neu gestartet.' "
               "WHERE status='laeuft'", (leaddb.now(),))
-    reports.cleanup(c)
     c.commit()
     c.close()
     while True:

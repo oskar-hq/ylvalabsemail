@@ -36,8 +36,11 @@ CREATE TABLE IF NOT EXISTS postfach_gesehen (
 """
 
 KANAELE = {"mail": "Mail", "telefon": "Telefon", "brief": "Brief", "whatsapp": "WhatsApp", "linkedin": "LinkedIn",
-           "portal": "Kunden-Bereich"}
-VON_HAND = ["telefon", "brief", "whatsapp", "linkedin"]
+           "portal": "Kunden-Bereich", "slack": "Slack"}
+VON_HAND = ["telefon", "brief", "whatsapp", "linkedin", "slack"]
+# Kanäle, die das OS nicht selbst bedient: Nachrichten tragen die Agents ein (MCP), Antworten aus dem Chat warten,
+# bis ein Agent sie verschickt hat (Stufe 13)
+UEBER_AGENTS = ["slack", "whatsapp", "linkedin"]
 START_TAGE = 3  # beim ersten Abruf eines Postfachs: Mails der letzten drei Tage übernehmen
 ABRUF_MINUTEN = 10
 
@@ -265,9 +268,9 @@ def _einsortieren(c, p, msg, mid, start):
     if mailbox.ist_sonstige(c, lead_id):
         pass  # Unbekannte, die wir nie angeschrieben haben: still unter „Sonstige“, keine Meldung
     elif fuer:
-        aufgaben.melden(c, fuer, titel, (text or subject)[:200], f"/crm/postfach/{lead_id}")
+        aufgaben.melden(c, fuer, titel, (text or subject)[:200], f"/chat/{lead_id}")
     else:
-        leaddb.add_notice(c, titel, (text or subject)[:200], f"/crm/postfach/{lead_id}")
+        leaddb.add_notice(c, titel, (text or subject)[:200], f"/chat/{lead_id}")
     nach_eingang(c, lead_id, mid_db)
     return True
 
@@ -405,7 +408,7 @@ def nach_eingang(c, lead_id, message_db_id):
     p = projekte.get(c, pid)
     if p and p["verantwortlich"]:
         aufgaben.melden(c, p["verantwortlich"], f"Möglicher Änderungswunsch: {p['kunde']}", (m["text"] or "")[:160],
-                        f"/crm/postfach/{lead_id}#m{message_db_id}")
+                        f"/chat/{lead_id}")
 
 
 def wunsch_entscheiden(c, wer, message_db_id, ja):
@@ -468,3 +471,77 @@ def antwortzeit(c, von, bis, person=None):
 
 def kpi_wartend(c, von, bis, person=None):
     return len(wartend(c, person))
+
+
+# ---------------------------------------------------------------- Kanäle über die Agents (Slack, WhatsApp, LinkedIn)
+
+
+def agent_nachricht(c, agent_wer, lead_id, kanal, richtung, text, am=None, extern_id=None, von_name=None):
+    """Ein Agent trägt eine Nachricht aus Slack (oder WhatsApp, LinkedIn) ein. Dieselbe `extern_id` nur einmal.
+    Eingehende Nachrichten sind ungelesen: Sie erscheinen im Chat und im Aufgabenstapel („Antwort“)."""
+    from . import firma, leaddb, mailbox
+    lead = leaddb.get_lead(c, lead_id)
+    if not lead:
+        raise PosteingangError("Diesen Kontakt gibt es nicht (erst mit leads_suchen oder lead_anlegen).")
+    if kanal not in UEBER_AGENTS:
+        raise PosteingangError("Kanal: " + ", ".join(UEBER_AGENTS) + ".")
+    if richtung not in ("in", "out"):
+        raise PosteingangError("richtung: in (vom Kontakt) oder out (von uns).")
+    text = (text or "").strip()
+    if not text:
+        raise PosteingangError("Die Nachricht ist leer.")
+    extern_id = (extern_id or "").strip()[:200] or None
+    if extern_id and c.execute("SELECT 1 FROM messages WHERE lead_id=? AND message_id=?",
+                               (lead_id, f"{kanal}:{extern_id}")).fetchone():
+        return None
+    am = (am or "").strip()
+    if am:
+        try:
+            am = datetime.fromisoformat(am.replace("Z", "+00:00")).replace(tzinfo=None).isoformat(timespec="seconds")
+        except ValueError as exc:
+            raise PosteingangError("Zeitpunkt bitte als JJJJ-MM-TTTHH:MM.") from exc
+    name = (von_name or "").strip()[:120]
+    mid = mailbox.add(c, lead_id, richtung, text[:8000], subject=KANAELE[kanal],
+                      from_name=(name or lead.get("contact_name") or lead["name"]) if richtung == "in" else None,
+                      sent_by=(name or firma.name_von(c, agent_wer)) if richtung == "out" else None,
+                      read=richtung == "out", at=am or None, kanal=kanal, erfasst_von=agent_wer,
+                      message_id=f"{kanal}:{extern_id}" if extern_id else None)
+    if richtung == "in":
+        leaddb.update_lead(c, lead_id, unread=1)
+        nach_eingang(c, lead_id, mid)
+    return mid
+
+
+def zum_senden(c, wer, lead_id, kanal, text):
+    """Antwort aus dem Chat auf einem Kanal, den das OS nicht selbst bedient: wartet, bis ein Agent sie verschickt."""
+    from . import firma, leaddb, mailbox
+    lead = leaddb.get_lead(c, lead_id)
+    if not lead:
+        raise PosteingangError("Diesen Kontakt gibt es nicht.")
+    if kanal not in UEBER_AGENTS:
+        raise PosteingangError("Über diesen Kanal verschicken die Agents nichts.")
+    text = (text or "").strip()
+    if len(text) < 2:
+        raise PosteingangError("Bitte eine Antwort schreiben.")
+    mid = mailbox.add(c, lead_id, "out", text[:8000], subject=KANAELE[kanal], sent_by=firma.name_von(c, wer),
+                      read=True, kanal=kanal, erfasst_von=wer)
+    c.execute("UPDATE messages SET versand='wartet' WHERE id=?", (mid,))
+    firma.log(c, wer, "lead", "lead", lead_id, f"Antwort über {KANAELE[kanal]} wartet auf Versand durch einen Agent")
+    return mid
+
+
+def offene_sendungen(c, kanal=None):
+    rows = c.execute("SELECT m.id, m.lead_id, m.kanal, m.text, m.at, m.sent_by, l.name, l.contact_name, l.email "
+                     "FROM messages m JOIN leads l ON l.id = m.lead_id WHERE m.versand='wartet'"
+                     + (" AND m.kanal=?" if kanal else "") + " ORDER BY m.at", (kanal,) if kanal else ()).fetchall()
+    return [dict(r) for r in rows]
+
+
+def gesendet_melden(c, agent_wer, mid, ok=True, fehler=""):
+    from . import firma
+    row = c.execute("SELECT lead_id, kanal, versand FROM messages WHERE id=?", (mid,)).fetchone()
+    if not row or row["versand"] != "wartet":
+        raise PosteingangError("Diese Nachricht wartet nicht auf Versand.")
+    c.execute("UPDATE messages SET versand=? WHERE id=?", ("gesendet" if ok else "fehler", mid))
+    firma.log(c, agent_wer, "lead", "lead", row["lead_id"],
+              f"{KANAELE.get(row['kanal'], row['kanal'])}-Nachricht {'verschickt' if ok else 'nicht verschickt: ' + (fehler or '')[:200]}")

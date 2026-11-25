@@ -2,7 +2,7 @@
 an und gibt Oskar das Passwort „vorschau123“. Nie auf dem Server benutzen.
 
     python tests/vorschau.py <ordner>
-    DATA_DIR=<ordner> SECRET_KEY=x LEADS_WORKER=false OUTREACH_EMAIL=false flask --app app.main run -p 8097
+    DATA_DIR=<ordner> SECRET_KEY=x LEADS_WORKER=false OUTREACH_EMAIL=false python -m flask --app app.main run -p 8097
 
 Dann /login → „Mit Namen“ → Oskar, Passwort vorschau123. Ohne Postfach in den Einstellungen geht keine Mail raus.
 """
@@ -25,6 +25,7 @@ import beispieldaten  # noqa: E402
 
 c = leaddb.connect(ordner / "mailer.db")
 beispieldaten.seed(c)
+beispieldaten.seed_os(c)
 team.set_password(c, "oskar", "vorschau123")
 c.commit()
 print(f"Fertig: {ordner}. Anmelden als Oskar mit vorschau123.")

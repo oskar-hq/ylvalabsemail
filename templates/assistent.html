@@ -39,7 +39,7 @@
   {% endfor %}
 </main>
 <div class="os-float">
-  <a class="os-back" href="{{ url_for('aufgaben.mein_tag') }}" aria-label="Zurück">{{ i('back') }}</a>
+  <a class="os-back" href="{{ url_for('stapel.start') }}" aria-label="Zurück">{{ i('back') }}</a>
   {% if bereit %}<button type="submit" form="frageForm" class="os-btn"><span>Fragen</span>{{ i('pfeil') }}</button>{% endif %}
 </div>
 {% endblock %}

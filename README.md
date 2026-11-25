@@ -28,23 +28,12 @@ Damit gehen aufwendige HTML-Designs, die normale Mailprogramme nicht bauen könn
 - Optional wird eine Kopie im IMAP-Ordner „Gesendet“ abgelegt.
 - Jede Mail enthält auch eine Textversion. Das ist gut für die Zustellbarkeit und für Leute, die nur Text lesen.
 
-## Akquise und CRM (Bereiche „Leads“ und „CRM“)
+## Akquise und CRM (Bereiche „CRM“ und „Chat“)
 
-Die App findet Betriebe, die zu Ylva Labs passen, bewertet sie **nach festen Regeln ohne KI**, und ihr verwaltet
-alles in einem CRM. Die KI ist nur noch ein optionales Werkzeug zum Schreiben.
-
-**Leads: finden und bewerten.** Ein Lauf startet von Hand oder, wenn ihr es unter **Neue Betriebe finden → Automatisch suchen** einschaltet, nach Zeitplan (Tage, von–bis, alle X Minuten, mindestens 10; für die KI mit Tagesgrenze in Euro). Er macht:
-
-| Schritt | Was passiert | Kosten |
-|---|---|---|
-| 1 · Suchen und Grobfilter | Die gewählten Nischen aus OpenStreetMap, nur in Schleswig-Holstein (`LEADS_REGION=DE-SH`). Unter Neue Betriebe finden → Nischen und Gewichtung wählt ihr aus rund 100 Nischen (Handwerk, Pflege, Praxen, Landwirtschaft, Büros, Design und Werbung, IT, Industrie, Handel, Gastgewerbe, Bildung) und verteilt 100 % auf sie; ein Lauf bewertet dann in diesem Verhältnis. Ohne Auswahl: Heizung/Sanitär, Elektro, Tischlerei, Metallbau, Dach, Bau, Garten- und Landschaftsbau, Pflege, Landwirtschaft, Hausverwaltungen, Ingenieurbüros, Speditionen, Werften, gleich verteilt. Ketten, Betriebe ohne Webseite und gesperrte Adressen fallen raus | kostenlos |
-| 2 · Bewertung nach Regeln | Startseite plus Impressum, Kontakt, Über uns, Karriere lesen. Die stärksten Punkte: sucht Personal fürs Büro (+25), Kernbranche (+20), 10–100 Mitarbeitende (+15), wächst (+10), Inhaber im Impressum und persönliche Mail (je +5), Fax, PDF-Formulare, Touren, Doku (je +5); schon digital −10. Ausgeschlossen: keine E-Mail-Adresse, unter 5 Leute, Kette/Franchise, IT-Firma, Behörde. Ab `LEADS_RULE_MIN` (50) passt es, ins CRM kommen pro Lauf nur die besten `LEADS_RUN_TOP` (25) | kostenlos |
-| 3 · Entwurf (optional) | Für die Besten ohne Nachricht schreibt die KI einen Entwurf, mit Budget in Euro | ca. 5 Cent pro Entwurf |
-
-Jede Regel, die gegriffen hat, steht mit ihren Punkten in der Akte. Die Tabelle aller Regeln zeigt die Seite
-**So wird bewertet**, die Punkte stehen in `app/scoring.py`. Der Algorithmus lernt aus euren Ergebnissen, ohne KI:
-Branchen mit Interesse, Gesprächen und Kunden bekommen bis zu 10 Punkte Zuschlag, Branchen mit Absagen bis zu
-10 Punkte Abzug.
+Leads (Betriebe) tragen die KI-Agents ein (Outreach recherchiert und legt sie per MCP an, siehe
+[docs/AGENTEN.md](docs/AGENTEN.md)), dazu CSV-Import und „+ Firma“ im CRM. Die frühere automatische Lead-Suche
+(OpenStreetMap-Läufe, Nischen, Zeitplan, Claude-Recherche, Prüf-Stapel) gibt es seit Stufe 13 nicht mehr.
+Die Regel-Bewertung (`app/scoring.py`) ordnet weiter Antworten ein und bewertet importierte Betriebe.
 
 **Nachricht schreiben**, in der Akte eines Betriebs, drei Wege:
 
@@ -95,7 +84,7 @@ gestaltete Mails erst nach einer Antwort des Betriebs.
 Die Leads-Seite ist eine installierbare Web-App mit Push-Benachrichtigungen. Dafür braucht ihr
 kein Apple-Entwicklerkonto.
 
-- **iPhone (ab iOS 16.4):** `https://mail.ylvalabs.de/leads` in Safari öffnen → *Teilen* → *Zum Home-Bildschirm*.
+- **iPhone (ab iOS 16.4):** `https://mail.ylvalabs.de` in Safari öffnen → *Teilen* → *Zum Home-Bildschirm*.
   Die App „Ylva Leads“ öffnen, anmelden, **Benachrichtigungen an** tippen und erlauben.
 - **Android / Desktop:** Seite öffnen und **Benachrichtigungen an** klicken. Installieren geht über das Browser-Menü.
 - Voraussetzung ist HTTPS, also der Zugriff über das Internet (Cloudflare Tunnel, siehe unten).
@@ -110,8 +99,8 @@ kein Apple-Entwicklerkonto.
 3. Ein eigenes Postfach für die Akquise anlegen (z. B. `kontakt@ylvalabs.de`) und als `OUTREACH_USER` /
    `OUTREACH_PASSWORD` eintragen. `IMAP_HOST` muss gesetzt sein, damit Antworten gelesen werden.
 4. `NOTIFY_EMAILS` und `BASE_URL` setzen, Dienst neu starten.
-5. Unter **Leads → Gehirn und Vorlage** die Texte und die Vorlage prüfen und anpassen, dann den ersten **Lauf starten**,
-   am besten klein (z. B. 20 Betriebe bewerten, 0 Entwürfe). Danach unter **CRM** die passenden Betriebe ansehen.
+5. Unter **Gehirn und Vorlage** (Schnellsuche) die Texte und die Vorlage prüfen und anpassen. Danach die Agents
+   verbinden (Einstellungen → Agents → Einrichten); sie tragen Leads ein und legen Entwürfe zur Freigabe vor.
 
 Alle Einstellungen stehen kommentiert in `.env.example`. Einen Demo-Modus gibt es nicht mehr; zum Entwickeln legt
 `python tests/vorschau.py <ordner>` eine lokale Datenbank mit erfundenen Beispieldaten an.
@@ -131,35 +120,28 @@ in der App unter „Konto-Menü (Kreis oben rechts) → Systemcheck“. Sicherun
 
 ## Aufbau der Oberfläche
 
-Gestaltet wie das Outreach Cockpit (ruhig, eine Sache pro Bildschirm). Hell, Dunkel oder automatisch wie das Gerät: im Konto-Menü unter „Darstellung“. Oben bzw. am Handy unten vier Bereiche:
+Gestaltet wie das Outreach Cockpit (ruhig, eine Sache pro Bildschirm). Hell oder dunkel wie das Gerät (oder fest
+im Konto-Menü unter „Darstellung“). Seit Stufe 13 oben bzw. am Handy unten vier Bereiche:
 
-- **Heute**: eine Zahl, was heute ansteht (Wiedervorlagen, Freigaben, Nachfassen, Interessenten), und „Starten“
-  führt direkt zur ersten Aufgabe.
-- **Leads**: Kennzahlen, die Liste nach „Zu tun“, „Läuft“ und „Abgeschlossen“. „Neue Betriebe finden“ startet einen
-  Lauf oder die Recherche mit Claude.
-- **CRM**: die Pipeline als Board mit Karten (mit Maus oder Finger in eine andere Spalte ziehen), als Tabelle
-  über „···“. Jede Karte zeigt, was der Betrieb macht, Ort, Größe und Ansprechperson; „KI nötig“ heißt, das hat
-  die kostenlose Suche nicht gefunden.
-- **Neue Betriebe prüfen** (auf „Heute“): passende Betriebe als Karte, nach rechts wischen = gut (ins CRM), nach links
-  = nicht gut. Auch per Knopf oder Pfeiltasten, „Rückgängig“ holt die letzte Entscheidung zurück.
-- **✉ auf jeder Karte** (Heute und CRM): öffnet die fertige Mail aus der Vorlage (persönlich, mit einem Satz zum
-  Alltag der Branche und einem konkreten Beispiel). Design wählbar (Kurz-Mail oder Newsletter, Grafik, Symbol) mit
-  Live-Vorschau. Kurz ändern oder direkt senden. Ist der Erstkontakt per Mail aus, gibt es dort „Als Brief drucken“,
-  „Brief ist raus“ und „Angerufen“.
-- **Postfach** (im CRM): alle Betriebe, die geantwortet haben, nach Kunden. „Offen zum Antworten“ (die letzte
-  Nachricht kam vom Betrieb) und „Gesendet, wartet auf Antwort“. Gespräch öffnen, direkt antworten (im selben
-  Mailverlauf, mit Zitat), danach rutscht es nach „Gesendet“. Ein Punkt zeigt, wie es läuft (grün gut, gelb mittel,
-  rot eher schlecht, weiß neutral): kostenlos nach Stichworten in der letzten Antwort, von euch jederzeit änderbar.
-- **Mailer**: gestaltete Mails verfassen und versenden.
+- **Aufgaben** (Startseite): eine Zahl, was heute ansteht (Freigaben der Agents, Antworten von Kunden, Anfragen,
+  fällige Aufgaben), und „Starten“ zeigt eine Karte nach der anderen. Ja oder Nein mit einem Tipp oder einer Taste
+  (Enter freigeben, ← ablehnen, 1–3 Option, J jetzt nicht, W später). Die ganze Liste unter „Alle Aufgaben“.
+- **Pipeline**: was die Agents heute tun (Status, Stundenbalken, farbige Punkte je Aktion, „wartet auf …“) und die
+  Projekte als Board nach Phase, dazu fünf Kennzahlen.
+- **CRM**: die Pipeline der Leads als Board mit Karten (mit Maus oder Finger in eine andere Spalte ziehen), als
+  Tabelle über „···“, Akte je Betrieb.
+- **Chat**: alle Gespräche, links die Liste („Wartet auf euch“ zuerst), rechts der Verlauf als Sprechblasen. Mail,
+  Slack, WhatsApp, LinkedIn und Telefonnotizen eines Kontakts in einem Verlauf. Antworten per Mail gehen direkt
+  raus; Slack, WhatsApp und LinkedIn verschickt ein Agent und meldet, wenn sie raus sind.
 
-Einstellungen, Verlauf, Kosten und Systemcheck liegen im Konto-Menü (Kreis oben rechts). Die Einstellungen sind wie
-in einer App aufgebaut: Bereich → Unterseite mit wenigen Werten.
+Kalender, Kunden und Projekte, Finanzen, Entscheidungs-Log, Mailer und Einstellungen liegen im Konto-Menü (Kreis
+oben rechts) und in der Schnellsuche (Strg K). Die Einstellungen sind wie im Cockpit aufgebaut: Suche, „Auf einen Blick“, Kategorien, je Bereich wenige Werte.
 
 ## Firmen-OS: Mein Tag, Aufgaben, Personen und Rechte (Stufe 1)
 
 Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/DESIGN.md).
 
-- **Mein Tag** (Startseite): Anfragen an meinen Bereich, überfällige, heutige und diese Woche fällige Aufgaben,
+- **Mein Tag** (seit Stufe 13 die Seite **Aufgaben** mit Stapel, siehe oben): Anfragen an meinen Bereich, überfällige, heutige und diese Woche fällige Aufgaben,
   Erwähnungen, Akquise in Kürze. Unten „Aufgabe“ und „Anfrage“.
 - **Aufgaben**: Pflicht sind Titel, Bereich, Person und Termin (ohne Person: verantwortlich für den Bereich).
   Ansichten *Meine*, *Bereich*, *Vergeben*, *Alle*, Filter je Bereich, erledigte der letzten 30 Tage. Abhaken direkt
@@ -177,18 +159,9 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
   Recht selbst nehmen oder sich selbst sperren. Notfall auf dem Server: siehe Einstellungen → Zugang und Sicherheit.
 - **Anmeldung mit dem Postfach**: nur noch Mailer, und wählbar sind nur Personen, die noch kein Passwort haben.
 
-## Branchentest (Stufe 2)
+## Branchentest (Stufe 2, entfernt mit Stufe 13)
 
-- **Branchentest** (Leads → Branchentest, oder aus „Mein Tag“): je Testbranche Betriebe (Ziel 50), Kontakte,
-  Antworten, Gespräche, ernsthafte Preisgespräche, Abschlüsse, nur kalte Kontakte; Ampel ab 3 Preisgesprächen.
-  Warme Kontakte (Oskars Bekannte) werden in der Akte markiert und stehen getrennt.
-- **Testbranchen** anlegen und ändern (Name, Nischen, wer recherchiert, Ziel). Leads aus diesen Nischen landen
-  automatisch in der Branche, passende lassen sich in der Branche mit einem Klick übernehmen.
-- **Lead-Prüfung**: Wer einen Lead ins CRM bringt, ist die recherchierende Person. Je nach Lernstufe wird er
-  geprüft (Stufe 1 jeder, 2 jeder 5., 3 jeder 10.); Omids Leads prüft Hamza, Hamzas Leads Oskar, und jeder 5.
-  bestandene Lead geht als Stichprobe eine Ebene höher. Ablehnen nur mit Grund; bis zur Prüfung kein Kontakt.
-- **In der Akte**: Testbranche und warm/kalt, „Kontakt protokollieren“ (Telefon, Brief, LinkedIn, vor Ort),
-  „Ernsthaftes Preisgespräch geführt“.
+Branchentest und Lead-Prüfung gibt es nicht mehr; die Daten bleiben in der Datenbank.
 
 ## Kalender und Termine (Stufe 3)
 
@@ -225,7 +198,7 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
 
 - **Cockpit**: alle KPIs je Bereich für die Woche, Verlauf über acht Wochen, Ampel gegen den Zielwert. Team oder
   eine Person (persönliche Zahlen sieht die Person selbst und wer sie führt).
-- **Wochenziele**: bis zu drei je Person und Woche, auf „Mein Tag“. Mit Kennzahl zeigt das OS den Stand live.
+- **Wochenziele**: bis zu drei je Person und Woche, bei den Aufgaben. Mit Kennzahl zeigt das OS den Stand live.
 - **Wochengespräch**: Agenda mit Zahlen der Woche, je Person Ziele und wo es hängt, offene Entscheidungen.
   Aufgaben und Ziele für nächste Woche direkt dort festhalten. Vom Serientermin „Wochengespräch“ verlinkt.
 - **Lernstufen**: Das OS misst die Aufstiegsbedingung (angenommene Leads, Entwürfe ohne große Änderung,
@@ -245,7 +218,7 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
 
 - **Freigaben**: alles, was auf dich wartet, an einer Stelle (Lead-Prüfungen, Einladungen an Kunden, Aufstiege,
   Entscheidungen, Anforderungen im Projekt, Erstkontakt-Entwürfe mit Link zur Akte). Ablehnen nur mit Grund.
-  Zähler in der Navigation, auf Mein Tag ein Abschnitt. Wer verwaltet, sieht auch „Alle offenen“.
+  Zähler in der Navigation, auf der Aufgaben-Seite im Stapel. Wer verwaltet, sieht auch „Alle offenen“.
 - **Freigabe-Stufen A–D je Aktion** (Einstellungen → Freigaben und Entscheidungen): A automatisch, B mit Einspruch
   (geht nach der Frist von selbst raus, Standard 24 Stunden, „Stoppen“ jederzeit), C mit Freigabe, D nur Mensch.
   Umschaltbar ist heute die Einladung an Kunden; Nachrichten an Leads und Kunden gehen nie ohne Freigabe raus.
@@ -322,7 +295,7 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
 - **Assistent** (`/assistent`): Fragen an die Firmendaten auf Deutsch, z. B. „Welche Rechnungen sind überfällig?“.
   Er liest gezielt Akten, Projekte, Aufgaben, Termine, Kennzahlen und Rechnungen, aber nur, was die fragende Person
   sehen darf, und nennt die Quellen. Er verschickt und ändert nichts. Kosten zählen fürs KI-Budget der Person.
-- **Was zuerst?** auf Mein Tag: Reihenfolge nach festen Regeln, auf Knopfdruck von der KI geordnet und begründet.
+- **Was zuerst?** (bis Stufe 12 auf Mein Tag): seit Stufe 13 bestimmt die Reihenfolge des Aufgabenstapels, was zuerst kommt.
 - **Entwürfe** für Antworten im Gespräch, Briefings am Termin und Case Studys am Projekt.
 - **Angebote** (`/angebote`): Entwurf mit oder ohne KI, Preise aus Projekt oder Schätzung, PDF, Versand nur über
   die Freigabe (Stufe C: Mail mit PDF, Stufe D: persönlich übergeben), danach angenommen oder abgelehnt.
@@ -341,7 +314,7 @@ den Entscheidungsrechten selbst, wer entscheidet, und führt nach der Freigabe g
   Umzugs-Prompts für die Bots. Vor der App braucht es in Cloudflare Access einmalig einen Durchlass für `/mcp`,
   `/oauth` und `/.well-known` (die App prüft ihn).
 - **Freigaben:** Karten im Kurzformat (Titel, ein Satz, Empfehlung, ein Tipp), 🟥 zuerst, Bündel mit Einzelauswahl,
-  „Später“. Reine Infos stehen auf Mein Tag unter „Von den Agents“.
+  „Später“. Reine Infos stehen bei den Aufgaben unter „Von den Agents“.
 - **Einstellungen → Agents:** Rechte je Modul (höchstens „Bearbeiten“), Bereich, Tageslimits, Verbindungen trennen,
   Agent sperren (wirkt sofort), erlaubte Rücksprung-Adressen, wer welche Art entscheidet.
 - Alles Weitere, auch die Werkzeug-Liste: [docs/AGENTEN.md](docs/AGENTEN.md).
@@ -353,7 +326,7 @@ den Entscheidungsrechten selbst, wer entscheidet, und führt nach der Freigabe g
   eine verantwortliche Person, Postfach verbunden, Erstkontakt per Mail an, Adresse der App, Firmendaten und IBAN für Rechnungen, Sicherung
   in den letzten 30 Tagen (oder automatisch auf dem Server). Empfohlen: KI-Schlüssel, Google-Kalender, Meldungen
   aufs Handy. Prüft nur Gespeichertes; echte Verbindungen testet der Systemcheck.
-- Wer Einstellungen verwaltet, sieht auf **Mein Tag** einen Hinweis, solange Pflicht-Punkte offen sind.
+- Wer Einstellungen verwaltet, sieht bei den **Aufgaben** einen Hinweis, solange Pflicht-Punkte offen sind.
 - **Meldungen aufs Handy** lassen sich jetzt für jede Person unter **Mein Profil** einschalten (bisher nur auf Leads).
 
 ## Team: Konten, eigenes CRM, Vorlage, Zahlen
@@ -370,17 +343,6 @@ den Entscheidungsrechten selbst, wer entscheidet, und führt nach der Freigabe g
   per „Bearbeiten | Vorschau“). Ohne eigene Vorlage gilt die gemeinsame aus dem Gehirn.
 - **Team und Zahlen**: je Person und gesamt: im CRM, angeschrieben, Antworten (mit Quote), Interesse, Gespräche,
   Kunden mit Umsatz, geschriebene Mails.
-
-## Recherche mit Claude (ohne API-Schlüssel)
-
-Unter **Leads → Mit Claude recherchieren** baut die App einen Prompt aus dem Gehirn („Über uns“, „Wen wir suchen“),
-dem Suchgebiet und den Platzhaltern der Vorlage. Den Prompt in Claude Code oder auf claude.ai mit Websuche eingeben:
-Claude sucht passende Betriebe, liest ihre Webseiten und liefert `ylva-recherche.csv` mit festen Spalten (Firma,
-Webseite, E-Mail, Ansprechperson, Anrede, Ort, Branche, Kategorie, Mitarbeitende, Zeitfresser, Aufhänger …).
-Die Datei (oder den Codeblock aus dem Chat) dort hochladen. Die Betriebe werden Kandidaten, im nächsten Lauf zuerst
-nach den Regeln bewertet (kostenlos), und die herausgesuchten Angaben füllen die Vorlage: `{anrede}`, `{zeitfresser}`,
-`{aufhaenger}` (ein Satz über genau diesen Betrieb; ohne Angabe fällt der Absatz weg), `{firma}`, `{ort}`,
-`{kategorie}`. Das läuft über das eigene Claude-Abo; die App verbraucht dabei keine Tokens.
 
 ## Einstellungen und Updates in der App
 
@@ -499,15 +461,16 @@ Einrichtung, einmalig:
 app/main.py            Web-App: Login, Vorschau, Upload, Versand, Verlauf
 app/emailbuild.py      Formularfelder → HTML-Mail + Textversion (MIME)
 app/pixel.py           Pixel-Band und Pixel-Icons als mailtaugliche Tabellen
-app/leads_views.py     Akquise: Übersicht, Akte mit Chat, Regeln, Gehirn, Web-App und Push
-app/crm_views.py       CRM: Pipeline-Board, Wiedervorlagen, Kontaktdaten, Firma anlegen, CSV
+app/leads_views.py     Akte mit KI-Chat, Gehirn, Kosten, Systemcheck, Web-App und Push
+app/crm_views.py       CRM: Pipeline-Board, Wiedervorlagen, Kontaktdaten, Firma anlegen, CSV, Chat
 app/crm.py             Pipeline-Stufen, Wiedervorlagen, Import/Export, Versand aus „Verfassen“ in der Akte
 app/firma.py           Firmen-OS: Protokoll (log), Personen, Rollen und Rechte, Bereiche, Einladung, Notfall
 app/aufgaben.py        Aufgaben, Anfragen, Kommentare mit @-Erwähnung, Meldungen an eine Person
-app/aufgaben_views.py  Seiten „Mein Tag“, „Aufgaben“, Kommentare
+app/aufgaben_views.py  Seite „Alle Aufgaben“, Aufgabe, Kommentare
+app/stapel.py          Aufgabenstapel: was heute auf eine Person wartet, in fester Reihenfolge
+app/stapel_views.py    Seiten „Aufgaben“ (Start) und Fokus (eine Karte pro Bildschirm)
+app/pipeline_views.py  Seite „Pipeline“: Agents heute und Projekte nach Phase
 app/personen_views.py  Einstellungen → Personen, Rollen, Bereiche, Protokoll; Einladungslink
-app/branchentest.py    Testbranchen, Lead-Prüfung (Freigaben), Kontakte, Preisgespräche, Auswertung
-app/branchentest_views.py  Seiten Branchentest, Testbranche, Leads prüfen; Knöpfe in der Akte
 app/kalender.py        Termine, Freigabe der Einladung, Vorschläge, Erinnerungen, Ergebnis, Briefing, Serien, ICS
 app/google_kalender.py Google OAuth, frei/belegt, Termine mit Meet (ohne Zusatzbibliothek)
 app/kalender_views.py  Seiten Kalender, Termin, Mein Kalender, Einstellungen → Kalender
@@ -517,10 +480,9 @@ app/projekte.py        Projekte, Anforderung, Abnahme, Änderungswünsche, Zeite
 app/projekte_views.py  Seiten Kunden, Projekt, Zeiterfassung, Einstellungen → Projekte
 app/scoring.py         Bewertung nach Regeln und Einordnen von Antworten, beides ohne KI
 app/arbeitsbereiche.py Arbeitsbereiche (Stufe 11): aktiver Bereich, Einstellungen je Kunde, Zahlen für Kunden
-app/agent.py           Hintergrund-Arbeiter: suchen, bewerten, Antworten lesen, Entwürfe auf Wunsch
+app/agent.py           Hintergrund-Arbeiter: Postfach lesen, nachfassen, Takte der Module, Entwürfe auf Wunsch
 app/ai.py              KI (Claude) nur zum Schreiben: Entwurf, Chat, Erinnerung, Lernen
-app/finder.py          Betriebe aus OpenStreetMap, Webseiten lesen
-app/niches.py          Nischen für die Suche (OSM-Merkmale, Namensmuster) und ihre Gewichtung
+app/finder.py          Webseiten lesen (Mail, Telefon, Social-Links)
 app/leaddb.py          Datenbank der Leads und das Gehirn (Startfassung: app/brain_seed.md)
 app/webpush.py         Push-Benachrichtigungen (VAPID, ohne App Store)
 app/agenten.py         Agenten-Konten, OAuth, Entwürfe, Zuständigkeit und Ausführung von Agent-Freigaben

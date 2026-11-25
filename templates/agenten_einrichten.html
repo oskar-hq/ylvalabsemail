@@ -99,7 +99,7 @@
   {% if verwalten %}
   <form method="post" action="{{ url_for('agenten.einrichten_fertig') }}" data-os-fetch="{{ url_for('agenten.einstellungen') }}" style="margin-top:40px">
     <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
-    {% if stand.fertig %}<input type="hidden" name="wieder" value="1"><button class="os-btn small quiet">Hinweis auf Mein Tag wieder zeigen</button>
+    {% if stand.fertig %}<input type="hidden" name="wieder" value="1"><button class="os-btn small quiet">Hinweis bei den Aufgaben wieder zeigen</button>
     {% else %}<button class="os-btn ink"><span>Fertig eingerichtet</span>{{ i('check') }}</button>{% endif %}
   </form>
   {% endif %}

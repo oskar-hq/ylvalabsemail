@@ -28,9 +28,8 @@ class ConfigStoreTest(unittest.TestCase):
         self.assertEqual(config_store.normalize("OUTREACH_EMAIL", "on"), "true")
         self.assertEqual(config_store.normalize("NOTIFY_EMAILS", "a@x.de; b@y.de"), "a@x.de, b@y.de")
         self.assertEqual(config_store.normalize("BASE_URL", "https://mail.ylvalabs.de/"), "https://mail.ylvalabs.de")
-        self.assertEqual(config_store.normalize("LEADS_REGION", ""), "")
         for key, bad in [("SMTP_PORT", "abc"), ("NOTIFY_EMAILS", "kein-at"), ("BASE_URL", "mail.ylvalabs.de"),
-                         ("AI_EFFORT", "max"), ("LEADS_CENTER", "Kappeln"), ("ORG_NAME", "zwei\nZeilen")]:
+                         ("AI_EFFORT", "max"), ("LEADS_FOLLOWUP_DAYS", "bald"), ("ORG_NAME", "zwei\nZeilen")]:
             with self.assertRaises(config_store.ValidationError, msg=key):
                 config_store.normalize(key, bad)
 
