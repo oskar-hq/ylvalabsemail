@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Agents einrichten · Einstellungen{% endblock %}
+{% block content %}
+{% set durch_ok = check and check.ok %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Agents einrichten</span>
+    <h1 class="os-title-l">In 5 Schritten verbunden</h1>
+    <p class="os-sub os-lead">Danach legen die Grok-Bots Aufgaben, Notizen und Freigaben direkt im OS an. Ihr entscheidet unter „Freigaben“, Slack und Second Brain braucht es dafür nicht mehr.</p>
+  </header>
+
+  <ol class="os-schritte">
+    <li class="{{ 'fertig' if base_gesetzt }}">
+      <span class="os-schritt-nr">{% if base_gesetzt %}{{ i('check') }}{% else %}1{% endif %}</span>
+      <div class="os-schritt-txt">
+        <h2 class="os-headline">Adresse der App</h2>
+        {% if base_gesetzt %}<p class="os-sub">{{ basis }}</p>
+        {% else %}<p class="os-sub">Die öffentliche Adresse mit https:// fehlt. Grok und Claude brauchen sie.</p>
+        <a class="os-btn small ink" href="{{ url_for('settings.group', gid='hinweise') }}">Adresse eintragen</a>{% endif %}
+      </div>
+    </li>
+
+    <li class="{{ 'fertig' if durch_ok }}" id="durchlass">
+      <span class="os-schritt-nr">{% if durch_ok %}{{ i('check') }}{% else %}2{% endif %}</span>
+      <div class="os-schritt-txt">
+        <h2 class="os-headline">Durchlass für die Agents</h2>
+        <p class="os-sub">Grok und Claude rufen das OS von ihren Servern aus auf. Vor der App steht Cloudflare Access mit Einmal-Code; daran kommen sie nicht vorbei. Darum einmalig drei Pfade freigeben. Die Anmeldung selbst (wer verbinden darf) schützt weiter das OS.</p>
+        {% if check %}<p class="os-hinweis" style="margin-top:16px">{{ '✓ ' if check.ok else '' }}{{ check.text }} <span class="os-caption">Geprüft {{ check.am|kurzdatum }} {{ check.am[11:16] }}</span></p>{% endif %}
+        <details class="os-akarte-details" {{ 'open' if not durch_ok }}><summary class="os-link">So geht es in Cloudflare (2 Minuten)</summary>
+          <ol class="os-anleitung">
+            <li>Auf <b>one.dash.cloudflare.com</b> anmelden → <b>Access → Applications</b> → <b>Add an application</b> → <b>Self-hosted</b>.</li>
+            <li>Name „Ylva OS Agents“. Bei <b>Application domain</b> drei Einträge mit der Domain der App und je einem Pfad: <code>mcp</code>, <code>oauth</code>, <code>.well-known</code>.</li>
+            <li>Bei <b>Policies</b> eine Regel anlegen: Action <b>Bypass</b>, Include <b>Everyone</b>. Speichern.</li>
+            <li>Hier auf „Jetzt prüfen“ tippen. Die übrige App bleibt hinter dem Einmal-Code.</li>
+          </ol>
+        </details>
+        <form method="post" action="{{ url_for('agenten.einrichten_pruefen') }}" data-os-fetch="reload" style="margin-top:16px">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button class="os-btn small {{ 'quiet' if durch_ok else 'ink' }}">Jetzt prüfen</button></form>
+      </div>
+    </li>
+
+    <li class="{{ 'fertig' if stand.agents }}">
+      <span class="os-schritt-nr">{% if stand.agents %}{{ i('check') }}{% else %}3{% endif %}</span>
+      <div class="os-schritt-txt">
+        <h2 class="os-headline">Agents und ihre Rechte</h2>
+        <p class="os-sub">Die vier Bots sind schon angelegt, mit passenden Rechten (höchstens „Bearbeiten“). Bei Bedarf anpassen.</p>
+        <ul class="os-list" style="margin-top:8px">{% for a in stand.agents %}
+          <li><a class="os-row" href="{{ url_for('agenten.detail', key=a.key) }}"><span class="os-ico">{{ a.name[:1] }}</span>
+            <span class="os-txt"><b>{{ a.name }}</b><span>{{ a.beschreibung or '' }}</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
+        </ul>
+      </div>
+    </li>
+
+    <li class="{{ 'fertig' if stand.n_verbunden and stand.n_verbunden == stand.agents|length }}">
+      <span class="os-schritt-nr">{% if stand.n_verbunden and stand.n_verbunden == stand.agents|length %}{{ i('check') }}{% else %}4{% endif %}</span>
+      <div class="os-schritt-txt">
+        <h2 class="os-headline">In Grok verbinden</h2>
+        <p class="os-sub">Für jeden Bot einen eigenen Connector mit seiner Adresse. So weiß das OS, welcher Bot was tut.</p>
+        <ol class="os-anleitung">
+          <li>In Grok die <b>Einstellungen → Connectors</b> öffnen → <b>Connector hinzufügen</b> (eigener / Custom MCP).</li>
+          <li>Name „Ylva OS Ops“ (usw.), Adresse von unten einfügen, speichern. Grok öffnet die Anmeldung des OS.</li>
+          <li>Dort mit deinem OS-Konto anmelden und auf <b>Verbinden</b> tippen. Der Agent ist schon vorausgewählt.</li>
+          <li>Im jeweiligen Bot den Connector einschalten und den Umzugs-Prompt aus Schritt 5 einfügen.</li>
+        </ol>
+        <ul class="os-list" style="margin-top:8px">{% for a in stand.agents %}{% set v = verbindungen.get(a.key) %}
+          <li class="os-row" style="flex-wrap:wrap;gap:8px 16px">
+            <span class="os-ico {{ '' if v else 'off' }}">{% if v %}{{ i('check') }}{% else %}{{ a.name[:1] }}{% endif %}</span>
+            <span class="os-txt" style="min-width:140px"><b>{{ a.name }}</b><span>{% if v %}Verbunden{% if v.zuletzt %} · zuletzt {{ v.zuletzt[11:16] }}{% endif %}{% else %}Noch nicht verbunden{% endif %}</span></span>
+            <div class="os-copy" style="flex:1 1 280px"><input class="os-input" id="url-{{ a.key }}" value="{{ basis }}/mcp/{{ a.key }}" readonly aria-label="Adresse für {{ a.name }}">
+              <button type="button" class="os-btn small quiet" data-os-copy="url-{{ a.key }}" data-os-copy-toast="Adresse kopiert.">Kopieren</button></div></li>{% endfor %}
+        </ul>
+        <details class="os-akarte-details"><summary class="os-link">Auch Claude verbinden</summary>
+          <ol class="os-anleitung">
+            <li>Unter <b>Einstellungen → Agents</b> einen Agent „Claude“ anlegen und Rechte setzen.</li>
+            <li>In claude.ai: <b>Einstellungen → Connectors → Benutzerdefinierten Connector hinzufügen</b>, Adresse <code>{{ basis }}/mcp/&lt;key&gt;</code> (steht beim Agent).</li>
+            <li>Auf <b>Verbinden</b> tippen, im OS anmelden, bestätigen.</li>
+          </ol>
+          <p class="os-caption">Erlaubte Rücksprung-Adressen: {{ redirects|join(', ') }}. Ändern unter Agents → Regeln.</p>
+        </details>
+      </div>
+    </li>
+
+    <li class="{{ 'fertig' if stand.fertig }}">
+      <span class="os-schritt-nr">{% if stand.fertig %}{{ i('check') }}{% else %}5{% endif %}</span>
+      <div class="os-schritt-txt">
+        <h2 class="os-headline">Umzugs-Prompt in jeden Bot</h2>
+        <p class="os-sub">Kopieren und in die Anweisungen des jeweiligen Grok-Bots setzen. Danach entscheidet ihr nur noch im OS; Slack ist höchstens Benachrichtigung.</p>
+        {% for p in prompts %}
+        <details class="os-akarte-details"><summary class="os-link">Prompt für {{ p.name }}</summary>
+          <textarea class="os-input os-prompt" id="prompt-{{ p.key }}" rows="12" readonly>{{ p.text }}</textarea>
+          <button type="button" class="os-btn small ink" style="margin-top:12px" data-os-copy="prompt-{{ p.key }}" data-os-copy-toast="Prompt kopiert.">Prompt kopieren</button>
+        </details>{% endfor %}
+      </div>
+    </li>
+  </ol>
+
+  {% if verwalten %}
+  <form method="post" action="{{ url_for('agenten.einrichten_fertig') }}" data-os-fetch="{{ url_for('agenten.einstellungen') }}" style="margin-top:40px">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    {% if stand.fertig %}<input type="hidden" name="wieder" value="1"><button class="os-btn small quiet">Hinweis auf Mein Tag wieder zeigen</button>
+    {% else %}<button class="os-btn ink"><span>Fertig eingerichtet</span>{{ i('check') }}</button>{% endif %}
+  </form>
+  {% endif %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('agenten.einstellungen') }}" aria-label="Zurück zu den Agents">{{ i('back') }}</a>
+</div>
+{% endblock %}

@@ -126,7 +126,10 @@ def settings():
             return render_template("restarting.html", account=g.account, what=f"Gespeichert: {names}.")
         flash(f"Gespeichert: {names}. Wirksam nach einem Neustart der App.")
         return redirect(back)
-    return render_template("settings.html", account=g.account, menu=config_store.menu(data_dir),
+    from . import agenten
+    from .leads_views import db
+    agenten_offen = not agenten.einrichtung(db())["fertig"]
+    return render_template("settings.html", account=g.account, menu=config_store.menu(data_dir), agenten_offen=agenten_offen,
                            admin=is_admin(g.account), admins_set=bool(SETTINGS["ADMIN_USERS"]),
                            up=updater.state(SETTINGS["CONTROL_DIR"]),
                            startklar=startklar.zusammenfassung(_startklar_punkte()))

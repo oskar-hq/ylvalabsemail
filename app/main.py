@@ -278,11 +278,14 @@ MODUL_JE_SEITE = {"compose": "mailer", "preview": "mailer", "send": "mailer", "u
                   # zu den Aufgaben (jede Art prüft selbst, wer entscheiden darf)
                   "freigaben.log": "entscheidungen", "freigaben.festhalten": "entscheidungen",
                   "freigaben.einstellungen": "entscheidungen", "freigaben.stufen_speichern": "entscheidungen",
-                  "freigaben.recht_speichern": "entscheidungen", "freigaben.notfall_speichern": "entscheidungen"}
+                  "freigaben.recht_speichern": "entscheidungen", "freigaben.notfall_speichern": "entscheidungen",
+                  # Stufe 11: Agent-Freigaben entscheidet man wie alle Freigaben (die Funktion prüft, wer darf)
+                  "agenten.entscheiden": "aufgaben", "agenten.buendel": "aufgaben"}
 MODUL_JE_BEREICH = {"leads": "leads", "crm": "crm", "settings": "einstellungen", "aufgaben": "aufgaben",
                     "personen": "personen", "branchentest": "leads", "kalender": "kalender", "cockpit": "cockpit",
                     "kunden": "kunden", "freigaben": "aufgaben", "finanzen": "finanzen",
-                    "posteingang": "einstellungen", "assistent": "assistent", "angebote": "kunden"}
+                    "posteingang": "einstellungen", "assistent": "assistent", "angebote": "kunden",
+                    "agenten": "personen"}
 
 
 def modul_der_seite(endpoint):
@@ -343,8 +346,17 @@ app.jinja_env.globals["csrf_token"] = csrf_token
 app.jinja_env.globals["darf"] = lambda modul, stufe=1: darf(modul, stufe)
 
 
+# Öffentlich, ohne Anmeldung und ohne Formular-Token: die Schnittstelle für KI-Agents (Stufe 11). Dort schützt das
+# OAuth-Token (MCP) bzw. PKCE und die Client-Prüfung (Token, Registrierung).
+OEFFENTLICH = {"agenten.resource_metadata", "agenten.server_metadata", "agenten.register", "agenten.token",
+               "agenten.revoke", "agenten.mcp", "agenten.authorize"}
+OHNE_CSRF = {"agenten.register", "agenten.token", "agenten.revoke", "agenten.mcp"}
+
+
 @app.before_request
 def check_csrf():
+    if request.endpoint in OHNE_CSRF:
+        return None
     if request.method == "POST":
         token = request.form.get("_csrf") or request.headers.get("X-CSRF-Token")
         if not token or token != session.get("csrf"):
@@ -909,6 +921,8 @@ from .assistent_views import bp as assistent_bp, bp_angebote  # noqa: E402
 
 app.register_blueprint(assistent_bp)
 app.register_blueprint(bp_angebote)
+from .agenten_views import bp as agenten_bp  # noqa: E402  Stufe 11: MCP, OAuth, Einstellungen → Agenten
+app.register_blueprint(agenten_bp)
 
 
 @app.errorhandler(403)

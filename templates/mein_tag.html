@@ -15,6 +15,7 @@
       {%- if offen %}{{ offen }} {{ 'Aufgabe' if offen == 1 else 'Aufgaben' }} für heute{% if t.ueberfaellig %}, {{ t.ueberfaellig|length }} davon überfällig{% endif %}.
       {%- elif not t.anfragen %}Heute ist nichts fällig. Plane die Woche oder hilf einem anderen Bereich.{% endif %}</p>
   </header>
+  {% if agenten_einrichten %}<p class="os-hinweis">Neu: Die Agents (Ops, Delivery, Outreach, Content) arbeiten jetzt direkt im OS und legen dir hier Freigaben vor. <a href="{{ url_for('agenten.einrichten') }}">In 5 Schritten einrichten</a></p>{% endif %}
   {% if startklar_offen %}<p class="os-hinweis">Noch {{ startklar_offen }} Punkt{{ 'e' if startklar_offen != 1 }} bis zum Start. <a href="{{ url_for('settings.startklar_seite') }}">Startklar ansehen</a></p>{% endif %}
 
   {% set zl = zeit_laeuft() %}
@@ -26,7 +27,8 @@
     <a class="os-tile {{ 'alert' if t.ueberfaellig else 'zero' }}" href="#ueberfaellig"><span>Überfällig</span><b>{{ t.ueberfaellig|length }}</b></a>
     <a class="os-tile {{ 'zero' if not t.heute }}" href="#heute"><span>Heute</span><b>{{ t.heute|length }}</b></a>
     <a class="os-tile {{ 'zero' if not t.anfragen }}" href="#anfragen"><span>Anfragen</span><b>{{ t.anfragen|length }}</b></a>
-    {% if freigaben %}<a class="os-tile alert" href="{{ url_for('freigaben.zentrale') }}"><span>Freigaben</span><b>{{ freigaben|length }}</b></a>{% endif %}
+    {% set n_agent = agent_gruppen|sum(attribute='eintraege', start=[])|length %}
+    {% if freigaben or n_agent %}<a class="os-tile alert" href="{{ url_for('freigaben.zentrale') }}"><span>Freigaben</span><b>{{ freigaben|length + n_agent }}</b></a>{% endif %}
     <a class="os-tile {{ 'zero' if not n_spaeter }}" href="#woche"><span>Diese Woche</span><b>{{ n_spaeter }}</b></a>
     {% if akquise and darf('crm') %}<a class="os-tile {{ 'zero' if not akquise.wiedervorlagen }}" href="{{ url_for('crm.board') }}"><span>Wieder&shy;vorlagen</span><b>{{ akquise.wiedervorlagen }}</b></a>
     <a class="os-tile {{ 'zero' if not akquise.antworten }}" href="{{ url_for('crm.inbox') }}"><span>Antworten</span><b>{{ akquise.antworten }}</b></a>{% endif %}
@@ -97,16 +99,32 @@
   </section>
   {% endif %}
 
-  {% if freigaben %}
+  {% if freigaben or agent_gruppen %}
   <section class="os-section" id="freigaben">
     <h2 class="os-headline">Freigaben</h2>
     <p class="os-sub">Bis du entscheidest, passiert nichts davon. Alles an einer Stelle in der Freigabe-Zentrale.</p>
-    <ul class="os-list anim">{% for f in freigaben[:5] %}
+    <ul class="os-list anim">{% for gr in agent_gruppen[:5] %}{% set k = gr.erste %}
+      <li style="--i:{{ loop.index0 }}"><a class="os-row" href="{{ url_for('freigaben.zentrale') }}#{{ 'b' if gr.buendel and gr.eintraege|length > 1 else 'a' }}{{ k.id }}"><span class="os-ico" aria-hidden="true">{{ gr.symbol }}</span>
+        <span class="os-txt"><b>{% if gr.buendel and gr.eintraege|length > 1 %}{{ gr.eintraege|length }} × {{ gr.buendel }}{% else %}{{ k.titel }}{% endif %}</b><span>{{ k.agent }}{% if gr.frist %} · bis {{ gr.frist[8:10] }}.{{ gr.frist[5:7] }}.{% endif %} · {{ k.was }}</span></span>
+        <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
+    {% for f in freigaben[:5] %}
       <li style="--i:{{ loop.index0 }}"><a class="os-row" href="{{ url_for('freigaben.zentrale') }}#f-{{ f.art }}-{{ f.oid }}">{% if f.von_name %}{{ avatar(f.von_name) }}{% else %}<span class="os-ico">{{ i('check') }}</span>{% endif %}
         <span class="os-txt"><b>{{ f.titel }}</b><span>{{ f.eyebrow }}{% if f.frist %} · geht von selbst raus am {{ f.frist[8:10] }}.{{ f.frist[5:7] }}. um {{ f.frist[11:16] }}{% elif f.text %} · {{ f.text }}{% endif %}</span></span>
         <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
     </ul>
-    {% if freigaben|length > 5 %}<a class="os-btn small quiet" style="margin-top:12px" href="{{ url_for('freigaben.zentrale') }}">Alle {{ freigaben|length }} ansehen</a>{% endif %}
+    {% if freigaben|length + agent_gruppen|length > 5 %}<a class="os-btn small quiet" style="margin-top:12px" href="{{ url_for('freigaben.zentrale') }}">Alle ansehen</a>{% endif %}
+  </section>
+  {% endif %}
+
+  {% if agent_infos %}
+  <section class="os-section" id="agents">
+    <h2 class="os-headline">Von den Agents</h2>
+    <p class="os-sub">Tagesüberblick: reine Infos, nichts zu entscheiden.</p>
+    <ul class="os-list">{% for x in agent_infos[:8] %}
+      <li>{% if x.url %}<a class="os-row" href="{{ x.url }}">{% else %}<div class="os-row">{% endif %}{{ avatar(x.agent_name or x.agent) }}
+        <span class="os-txt"><b>{{ x.titel }}</b><span>{{ x.agent_name or x.agent }} · {{ x.at[11:16] }}{% if x.text %} · {{ x.text }}{% endif %}</span></span>
+        {% if x.url %}<span class="os-chev">{{ i('chev') }}</span></a>{% else %}</div>{% endif %}</li>{% endfor %}
+    </ul>
   </section>
   {% endif %}
 

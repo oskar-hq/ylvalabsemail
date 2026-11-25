@@ -314,6 +314,24 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
   die Freigabe (Stufe C: Mail mit PDF, Stufe D: persönlich übergeben), danach angenommen oder abgelehnt.
 - **Einstellungen → Assistent:** ein/aus, Modell, Denk-Aufwand, Schritte, Gültigkeit und Nummern der Angebote.
 
+## Agenten-Schnittstelle: KI-Agents arbeiten im OS (Stufe 11)
+
+Die KI-Agents (die Grok-Bots Ops, Delivery, Outreach, Content, später Claude) verbinden sich per **MCP** mit dem OS
+und arbeiten dort: Aufgaben anlegen, ändern, abhaken (mit Dubletten-Prüfung), Notizen, Leads, Entwürfe für Mails,
+Nachrichten, Posts und Angebote, Freigaben anfragen, Infos melden. Freigeben kann ein Agent nie. Das OS bestimmt aus
+den Entscheidungsrechten selbst, wer entscheidet, und führt nach der Freigabe genau den freigegebenen Inhalt aus
+(Mail über das Postfach, Lead-Stufe, Projekt-Schritt); den Rest meldet es dem Agent als „bitte ausführen“.
+
+- **Verbinden:** je Agent eine Adresse `https://<app>/mcp/<key>`, Anmeldung per OAuth (Grok und Claude als eigener
+  Connector). Einrichten unter **Einstellungen → Agents → Einrichten** in 5 Schritten, mit fertigen
+  Umzugs-Prompts für die Bots. Vor der App braucht es in Cloudflare Access einmalig einen Durchlass für `/mcp`,
+  `/oauth` und `/.well-known` (die App prüft ihn).
+- **Freigaben:** Karten im Kurzformat (Titel, ein Satz, Empfehlung, ein Tipp), 🟥 zuerst, Bündel mit Einzelauswahl,
+  „Später“. Reine Infos stehen auf Mein Tag unter „Von den Agents“.
+- **Einstellungen → Agents:** Rechte je Modul (höchstens „Bearbeiten“), Bereich, Tageslimits, Verbindungen trennen,
+  Agent sperren (wirkt sofort), erlaubte Rücksprung-Adressen, wer welche Art entscheidet.
+- Alles Weitere, auch die Werkzeug-Liste: [docs/AGENTEN.md](docs/AGENTEN.md).
+
 ## Startklar: was vor dem Start fehlt
 
 - **Einstellungen → Startklar** (`/einstellungen/startklar`): Checkliste für den echten Betrieb, jeder Punkt mit Link
@@ -491,6 +509,9 @@ app/finder.py          Betriebe aus OpenStreetMap, Webseiten lesen
 app/niches.py          Nischen für die Suche (OSM-Merkmale, Namensmuster) und ihre Gewichtung
 app/leaddb.py          Datenbank der Leads und das Gehirn (Startfassung: app/brain_seed.md)
 app/webpush.py         Push-Benachrichtigungen (VAPID, ohne App Store)
+app/agenten.py         Agenten-Konten, OAuth, Entwürfe, Zuständigkeit und Ausführung von Agent-Freigaben
+app/mcp_server.py      MCP-Protokoll (Streamable HTTP, JSON) und die Werkzeuge der Agents
+app/agenten_views.py   /mcp, /oauth/*, /.well-known/*, Einstellungen → Agents, Freigabe-Karten
 tests/                 python -m unittest discover tests
 email_templates/       Die Mail-Vorlagen (Jinja2), Original-Band und Logo
 templates/, static/    Oberfläche nach docs/DESIGN.md (os.css/os.js: Bausteine des Firmen-OS)

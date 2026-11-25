@@ -1,6 +1,7 @@
 """Tests für das Firmen-OS, Stufe 1: Personen, Rollen und Rechte, Schutz gegen Aussperren, Bereiche,
 Firmen-Protokoll, Aufgaben und Anfragen, Wiedervorlagen, Kommentare mit @-Erwähnung, Mein Tag.
 Aufruf: python -m unittest discover tests"""
+import json
 import os
 import sys
 import tempfile
@@ -383,7 +384,7 @@ class WebTest(WebBasis):
             ep = rule.endpoint
             if ep.startswith("portal."):  # Kunden-Bereich: eigene Anmeldung per Einmal-Link, kein Team-Modul
                 continue
-            if ep in main.FREI or ep in frei_ohne_modul or ep in ("static", "login", "logout",
+            if ep in main.FREI or ep in main.OEFFENTLICH or ep in frei_ohne_modul or ep in ("static", "login", "logout",
                                                                   "forget_device", "healthz", "personen.einladung"):
                 continue
             self.assertIsNotNone(main.modul_der_seite(ep), ep)
@@ -2688,3 +2689,372 @@ class ZusammenfassungWebTest(WebBasis):
         html = self.client.get(f"/kalender/{tid}").get_data(as_text=True)
         self.assertIn("Alles besprochen.", html)
         self.assertEqual(self.post(f"/kalender/{tid}/zusammenfassung", {"text": "x"}).status_code, 403)  # war nicht dabei
+
+
+# ---------------------------------------------------------------- Stufe 11: Agenten-Schnittstelle (MCP)
+
+
+def _agent_freigabe(c, agent="outreach", **kw):
+    from app import agenten
+    werte = dict(art="entscheidung", titel="Welle 3 starten", was="Sollen wir Welle 3 an Agenturen schicken?",
+                 optionen=[{"key": "A", "text": "Ja, Montag"}, {"key": "B", "text": "Später"}], empfehlung="A")
+    werte.update(kw)
+    return agenten.anfragen(c, agent, **werte)["freigabe_ids"]
+
+
+class AgentenTest(unittest.TestCase):
+    def setUp(self):
+        self.c = frische_db()
+        from app import agent
+        self.postfach = PostfachMock(self)
+        self.assertTrue(agent.CFG.get("settings"))
+
+    def test_startwerte_und_rechte_nie_ueber_bearbeiten(self):
+        from app import agenten
+        c = self.c
+        self.assertEqual([a["key"] for a in agenten.liste(c)], ["ops", "delivery", "outreach", "content"])
+        self.assertEqual(firma.rechte(c, "agent:outreach")["leads"], 2)
+        self.assertEqual(firma.name_von(c, "agent:ops"), "Ops (Agent)")
+        form = {f"r_{k}": "4" for k in firma.MODUL_KEYS}
+        agenten.speichern(c, "oskar", "ops", form)
+        self.assertEqual(set(firma.rechte(c, "agent:ops").values()), {2})  # nie Freigeben oder Verwalten
+        self.assertFalse(firma.darf(c, "agent:ops", "entscheidungen", firma.FREIGEBEN))
+        agenten.status_setzen(c, "oskar", "ops", "gesperrt")
+        self.assertEqual(set(firma.rechte(c, "agent:ops").values()), {0})
+
+    def test_agent_kann_nie_freigeben(self):
+        from app import agenten, freigaben, mcp_server
+        c = self.c
+        fid = _agent_freigabe(c)[0]
+        for fn in (lambda: agenten.entscheiden(c, "agent:outreach", fid, True, option="A"),
+                   lambda: agenten.entscheiden(c, "agent:ops", fid, True, option="A"),
+                   lambda: agenten.ausfuehren(c, "agent:ops", fid)):
+            with self.assertRaises(agenten.AgentError):
+                fn()
+        with self.assertRaises(freigaben.FreigabeError):
+            freigaben.entscheiden(c, "agent:outreach", "agent", fid, True)
+        with self.assertRaises(freigaben.FreigabeError):
+            freigaben.entscheiden_festhalten(c, "agent:ops", "Selbst entschieden", "Weil", recht_key="eigener_bereich")
+        # andere Arten ebenso (z. B. eine Entscheidung, die auf Zustimmung wartet)
+        eid = freigaben.entscheiden_festhalten(c, "hamza", "Neue Nische", "Test", recht_key="gruenderteam")
+        f = c.execute("SELECT id FROM freigaben WHERE art='entscheidung' AND objekt_id=?", (str(eid),)).fetchone()
+        with self.assertRaises(freigaben.FreigabeError):
+            freigaben.entscheiden(c, "agent:ops", "entscheidung", f["id"], True)
+        # Es gibt kein Werkzeug zum Freigeben
+        namen = {t["name"] for t in mcp_server.tools_liste(c, "agent:ops")}
+        self.assertFalse(any(n in namen for n in ("freigeben", "entscheiden", "freigabe_entscheiden")))
+        self.assertEqual(c.execute("SELECT status FROM freigaben WHERE id=?", (fid,)).fetchone()[0], "offen")
+
+    def test_freigabe_landet_bei_der_richtigen_person(self):
+        from app import agenten
+        c = self.c
+        hamza_lead = lead_anlegen(c, "Videoagentur Nord", stage="neu", owner="hamza", email="a@nord.de")
+        finn_lead = lead_anlegen(c, "Studio Süd", stage="neu", owner="finn", email="b@sued.de")
+        # Hamza (Recherche) darf nicht freigeben: es geht den Bereich hinauf zu Oskar, egal was der Agent vorschlägt
+        e1 = agenten.entwurf_anlegen(c, "agent:outreach", "mail", "Hallo Nord", lead_id=hamza_lead, betreff="Idee")
+        f1 = agenten.anfragen(c, "outreach", "mail", "Erstmail Videoagentur Nord", "Erstkontakt zur Freigabe.",
+                              entwurf_id=e1, vorschlag_person="hamza")["freigabe_ids"]
+        self.assertEqual(c.execute("SELECT pruefer FROM freigaben WHERE id=?", (f1[0],)).fetchone()[0], "oskar")
+        # Finns Lead: Finn entscheidet im eigenen Bereich selbst
+        e2 = agenten.entwurf_anlegen(c, "agent:outreach", "mail", "Hallo Süd", lead_id=finn_lead, betreff="Idee")
+        f2 = agenten.anfragen(c, "outreach", "mail", "Erstmail Studio Süd", "Erstkontakt zur Freigabe.", entwurf_id=e2)
+        self.assertEqual(c.execute("SELECT pruefer FROM freigaben WHERE id=?", (f2["freigabe_ids"][0],)).fetchone()[0],
+                         "finn")
+        # Kundenversprechen: Markt und Technik müssen beide freigeben; erst danach passiert etwas
+        ids = agenten.anfragen(c, "delivery", "kundenversprechen", "Sonderexport für Nord", "Export als CSV zusagen?",
+                               lead_id=hamza_lead)["freigabe_ids"]
+        pruefer = sorted(r[0] for r in c.execute(f"SELECT pruefer FROM freigaben WHERE id IN ({ids[0]}, {ids[1]})"))
+        self.assertEqual(pruefer, ["finn", "oskar"])
+        fo = next(i for i in ids if c.execute("SELECT pruefer FROM freigaben WHERE id=?", (i,)).fetchone()[0] == "oskar")
+        self.assertEqual(agenten.entscheiden(c, "oskar", fo, True)["status"], "wartet_auf_weitere")
+        with self.assertRaises(agenten.AgentError):  # Hamza ist nicht zuständig
+            agenten.entscheiden(c, "hamza", next(i for i in ids if i != fo), True)
+        self.assertEqual(agenten.entscheiden(c, "finn", next(i for i in ids if i != fo), True)["status"], "entschieden")
+        # Grundsatz: Gründerteam, landet im Entscheidungs-Log
+        gid = _agent_freigabe(c, "ops", art="grundsatz", titel="Zielnische festlegen")[0]
+        erg = agenten.entscheiden(c, "oskar", gid, True, option="A")
+        self.assertEqual(erg["status"], "entschieden")
+        from app import freigaben
+        self.assertIn("Zielnische festlegen: Ja, Montag", freigaben.entscheidung_get(c, erg["entscheidung_id"])["titel"])
+        self.assertEqual(freigaben.entscheidung_get(c, erg["entscheidung_id"])["status"], "wartet")  # Finn fehlt noch
+        self.assertIn("finn", [f["pruefer"] for f in freigaben.offen(c, "finn") if f["art"] == "entscheidung"])
+
+    def test_ausfuehrung_nur_mit_freigegebenem_inhalt(self):
+        from app import agenten
+        c = self.c
+        lid = lead_anlegen(c, "Cutter Kiel", stage="antwort", owner="oskar", email="info@cutter.de", replied_at=HEUTE)
+        eid = agenten.entwurf_anlegen(c, "agent:outreach", "mail", "Danke für die Antwort!", lead_id=lid, betreff="Re")
+        fid = agenten.anfragen(c, "outreach", "mail", "Antwort an Cutter Kiel", "Kurze Antwort.", entwurf_id=eid)["freigabe_ids"][0]
+        # Agent ändert danach: Freigabe hinfällig, nichts geht raus
+        agenten.entwurf_aendern(c, "agent:outreach", eid, text="Anderer Text mit neuem Preis")
+        with self.assertRaises(agenten.AgentError):
+            agenten.entscheiden(c, "oskar", fid, True)
+        self.assertEqual(self.postfach.mails, [])
+        # Heimlich in der Datenbank geändert (ohne neuen Hash): das OS rechnet nach und verschickt nichts
+        fid = agenten.anfragen(c, "outreach", "mail", "Antwort an Cutter Kiel", "Kurze Antwort.", entwurf_id=eid)["freigabe_ids"][0]
+        c.execute("UPDATE agent_entwuerfe SET text='Manipuliert' WHERE id=?", (eid,))
+        c.commit()
+        with self.assertRaises(agenten.AgentError):
+            agenten.entscheiden(c, "oskar", fid, True)
+        self.assertEqual(self.postfach.mails, [])
+        # Sauber: neu anfragen, Oskar ändert beim Freigeben, genau seine Fassung geht raus
+        c.execute("UPDATE agent_entwuerfe SET text='Danke für die Antwort!', status='entwurf' WHERE id=?", (eid,))
+        c.commit()
+        agenten.entwurf_aendern(c, "agent:outreach", eid, text="Danke für die schnelle Antwort!")
+        fid = agenten.anfragen(c, "outreach", "mail", "Antwort an Cutter Kiel", "Kurze Antwort.", entwurf_id=eid)["freigabe_ids"][0]
+        erg = agenten.entscheiden(c, "oskar", fid, True, text="Danke für die schnelle Antwort! Passt Dienstag?")
+        self.assertEqual(erg["status"], "ausgefuehrt", erg)
+        self.assertEqual(len(self.postfach.mails), 1)
+        self.assertIn("Passt Dienstag?", self.postfach.text())
+        self.assertEqual(str(self.postfach.mails[0]["To"]), "info@cutter.de")
+        # Nach der Freigabe lässt sich nichts mehr ändern, und der Agent sieht die geänderte Fassung
+        with self.assertRaises(agenten.AgentError):
+            agenten.entwurf_aendern(c, "agent:outreach", eid, text="Noch anders")
+        st = agenten.status_fuer_agent(c, "outreach")
+        eintrag = next(x for x in st["entschieden"] if x["freigabe_id"] == fid)
+        self.assertEqual(eintrag["ausfuehrung"], "ausgefuehrt")
+        self.assertIn("Passt Dienstag?", eintrag["freigegebene_fassung"]["text"])
+        self.assertEqual(agenten.status_fuer_agent(c, "outreach")["entschieden"], [])  # nur Neues
+        # Sperrliste gilt immer
+        leaddb.kv_set(c, "blocklist", ["info@cutter.de"])
+        e2 = agenten.entwurf_anlegen(c, "agent:outreach", "mail", "Noch eine", lead_id=lid, betreff="Re")
+        f2 = agenten.anfragen(c, "outreach", "mail", "Zweite Mail Cutter", "Noch eine.", entwurf_id=e2)["freigabe_ids"][0]
+        self.assertEqual(agenten.entscheiden(c, "oskar", f2, True)["status"], "fehler")
+        self.assertEqual(len(self.postfach.mails), 1)
+
+    def test_status_kontaktloses_und_manuelles(self):
+        from app import agenten, crm
+        c = self.c
+        lid = lead_anlegen(c, "Studio West", stage="neu", owner="oskar")
+        from app import mcp_server
+        daten, fehler = mcp_server.aufrufen(c, "agent:outreach", "lead_stufe_setzen",
+                                            {"lead_id": lid, "stufe": "gespraech", "begruendung": "Termin steht."})
+        self.assertFalse(fehler, daten)
+        fid = daten["als_freigabe"]["freigabe_ids"][0]
+        self.assertEqual(leaddb.get_lead(c, lid)["stage"], "neu")  # erst nach der Freigabe
+        agenten.entscheiden(c, "oskar", fid, True)
+        self.assertEqual(leaddb.get_lead(c, lid)["stage"], "gespraech")
+        self.assertEqual(crm.STAGE_LABELS["gespraech"], "Gespräch")
+        # Content-Post: OS kann es nicht selbst, Agent bekommt „bitte ausführen“ und meldet erledigt
+        eid = agenten.entwurf_anlegen(c, "agent:content", "content", "Post über Automationen", kanal="linkedin")
+        fid = agenten.anfragen(c, "content", "content", "LinkedIn-Post KW 48", "Post zur Freigabe.",
+                               entwurf_id=eid)["freigabe_ids"][0]
+        self.assertEqual(agenten.entscheiden(c, "oskar", fid, True)["status"], "bitte_ausfuehren")
+        self.assertIn(fid, agenten.status_fuer_agent(c, "content")["bitte_ausfuehren"])
+        with self.assertRaises(agenten.AgentError):
+            agenten.erledigt_melden(c, "ops", fid)  # nicht seine
+        agenten.erledigt_melden(c, "content", fid, "veröffentlicht")
+        self.assertEqual(agenten.entwurf_get(c, eid)["status"], "ausgefuehrt")
+
+    def test_kurzformat_limit_und_buendel(self):
+        from app import agenten
+        c = self.c
+        with self.assertRaises(agenten.AgentError):
+            _agent_freigabe(c, titel="Dieser Titel hat ganz eindeutig mehr als fünf Wörter")
+        with self.assertRaises(agenten.AgentError):
+            _agent_freigabe(c, empfehlung="C")
+        c.execute("UPDATE agenten SET max_karten_tag=2 WHERE key='outreach'")
+        c.commit()
+        for n in range(3):  # ein Bündel zählt einmal
+            lid = lead_anlegen(c, f"Agentur {n}", stage="neu", owner="oskar", email=f"x{n}@a.de")
+            eid = agenten.entwurf_anlegen(c, "agent:outreach", "mail", f"Hallo {n}", lead_id=lid, betreff="Idee")
+            agenten.anfragen(c, "outreach", "mail", f"Erstmail Agentur {n}", "Erstkontakt.", entwurf_id=eid,
+                             buendel="Welle 2")
+        _agent_freigabe(c)
+        with self.assertRaises(agenten.AgentError):  # dritte Karte
+            _agent_freigabe(c, titel="Noch eine Frage")
+        karten, _ = agenten.karten(c, "oskar")
+        buendel = next(k for k in karten if k["buendel"] == "Welle 2")
+        self.assertEqual(len(buendel["eintraege"]), 3)
+        # Später: verschwindet bis morgen früh aus Zähler und Liste
+        fid = buendel["eintraege"][0]["id"]
+        n = agenten.offen_zaehlen(c, "oskar")
+        agenten.spaeter(c, "oskar", fid)
+        self.assertEqual(agenten.offen_zaehlen(c, "oskar"), n - 1)
+
+    def test_werkzeuge_dubletten_und_protokoll(self):
+        from app import mcp_server
+        c = self.c
+        d, f = mcp_server.aufrufen(c, "agent:ops", "aufgabe_anlegen", {"titel": "Rechnung Nr. 11 prüfen",
+                                                                        "person": "oskar", "faellig": MORGEN})
+        self.assertTrue(d["angelegt"], d)
+        d2, _ = mcp_server.aufrufen(c, "agent:ops", "aufgabe_anlegen", {"titel": "Rechnung 11 prüfen", "person": "oskar"})
+        self.assertFalse(d2["angelegt"])
+        self.assertEqual(d2["dubletten"][0]["id"], d["aufgabe_id"])
+        e = c.execute("SELECT wer FROM ereignisse WHERE objekt_typ='aufgabe' AND objekt_id=?",
+                      (str(d["aufgabe_id"]),)).fetchone()
+        self.assertEqual(e["wer"], "agent:ops")
+        self.assertEqual(aufgaben.get(c, d["aufgabe_id"])["erstellt_von_name"], "Ops (Agent)")
+        self.assertIn("Neue Aufgabe von Ops (Agent)", leaddb.notices(c, "o", 5, "oskar")[0][0]["title"])
+        # Lead-Dubletten
+        d, _ = mcp_server.aufrufen(c, "agent:outreach", "lead_anlegen", {"name": "Filmstudio Ost", "email": "o@ost.de"})
+        self.assertTrue(d["angelegt"])
+        d2, _ = mcp_server.aufrufen(c, "agent:outreach", "lead_anlegen", {"name": "Anders", "email": "o@ost.de"})
+        self.assertEqual((d2["angelegt"], d2["vorhandener_lead_id"]), (False, d["lead_id"]))
+        # Ohne Recht: Werkzeug unsichtbar und gesperrt, Daten nicht über die Suche
+        from app import agenten
+        key = agenten.anlegen(c, "oskar", "Test-Bot", rechte_neu={"aufgaben": 1})
+        namen = {t["name"] for t in mcp_server.tools_liste(c, f"agent:{key}")}
+        self.assertNotIn("lead_akte", namen)
+        self.assertNotIn("aufgabe_anlegen", namen)  # nur Sehen
+        daten, fehler = mcp_server.aufrufen(c, f"agent:{key}", "lead_akte", {"lead_id": d["lead_id"]})
+        self.assertTrue(fehler)
+        self.assertIn("Berechtigung", daten["fehler"])
+        daten, fehler = mcp_server.aufrufen(c, f"agent:{key}", "suche", {"stichwort": "Filmstudio"})
+        self.assertNotIn("leads", daten)
+        # Infos landen im Tagesüberblick, nicht als Freigabe
+        mcp_server.aufrufen(c, "agent:content", "info_melden", {"titel": "Markt-Scan fertig", "text": "3 Chancen"})
+        self.assertEqual(agenten.infos_fuer(c, "finn")[0]["titel"], "Markt-Scan fertig")
+
+
+class AgentenWebTest(WebBasis):
+    """OAuth wie bei Grok und Claude, dann MCP-Aufrufe über HTTP."""
+
+    def _aufraeumen(self):
+        c = self.c
+        for t in ("oauth_clients", "oauth_codes", "agent_tokens", "agent_entwuerfe", "agent_infos"):
+            c.execute(f"DELETE FROM {t}")
+        c.execute("DELETE FROM freigaben WHERE art='agent'")
+        c.execute("DELETE FROM aufgaben WHERE erstellt_von LIKE 'agent:%'")
+        c.execute("UPDATE agenten SET status='aktiv'")
+        c.commit()
+
+    def setUp(self):
+        super().setUp()
+        self.addCleanup(self._aufraeumen)
+
+    def _verbinden(self, agent="outreach", redirect="https://grok.com/connectors-oauth-exchange-code/"):
+        import base64
+        import hashlib
+        from urllib.parse import parse_qs, urlparse
+        r = self.client.post("/oauth/register", json={"redirect_uris": [redirect], "client_name": "Grok",
+                                                      "token_endpoint_auth_method": "none"})
+        self.assertEqual(r.status_code, 201, r.get_data(as_text=True))
+        cid = r.get_json()["client_id"]
+        verifier = "v" * 50
+        challenge = base64.urlsafe_b64encode(hashlib.sha256(verifier.encode()).digest()).rstrip(b"=").decode()
+        q = {"client_id": cid, "redirect_uri": redirect, "response_type": "code", "state": "xyz",
+             "code_challenge": challenge, "code_challenge_method": "S256",
+             "resource": f"https://os.example.de/mcp/{agent}"}
+        r = self.client.get("/oauth/authorize", query_string=q)
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("verbinden", r.get_data(as_text=True))
+        r = self.post("/oauth/authorize", {**q, "agent": agent})
+        self.assertEqual(r.status_code, 302, r.get_data(as_text=True))
+        ziel = urlparse(r.headers["Location"])
+        params = parse_qs(ziel.query)
+        self.assertEqual(params["state"], ["xyz"])
+        r = self.client.post("/oauth/token", data={"grant_type": "authorization_code", "code": params["code"][0],
+                                                   "client_id": cid, "redirect_uri": redirect, "code_verifier": verifier})
+        self.assertEqual(r.status_code, 200, r.get_data(as_text=True))
+        return cid, r.get_json()
+
+    def _mcp(self, token, methode, params=None, pfad="/mcp", rid=1):
+        return self.client.post(pfad, json={"jsonrpc": "2.0", "id": rid, "method": methode, "params": params or {}},
+                                headers={"Authorization": f"Bearer {token}", "Accept": "application/json, text/event-stream"})
+
+    def test_discovery_und_ohne_anmeldung(self):
+        r = self.client.get("/.well-known/oauth-authorization-server")
+        self.assertEqual(r.get_json()["token_endpoint"].rsplit("/", 2)[-2:], ["oauth", "token"])
+        self.assertEqual(r.get_json()["code_challenge_methods_supported"], ["S256"])
+        r = self.client.get("/.well-known/oauth-protected-resource/mcp/ops")
+        self.assertTrue(r.get_json()["resource"].endswith("/mcp/ops"))
+        r = self.client.post("/mcp", json={"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+        self.assertEqual(r.status_code, 401)
+        self.assertIn("resource_metadata=", r.headers["WWW-Authenticate"])
+        # Fremde Rücksprung-Adresse wird nicht registriert
+        r = self.client.post("/oauth/register", json={"redirect_uris": ["https://boese.example/cb"]})
+        self.assertEqual(r.status_code, 400)
+
+    def test_verbinden_aufrufen_sperren(self):
+        c = self.c
+        cid, tok = self._verbinden("outreach")
+        r = self._mcp(tok["access_token"], "initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                                                          "clientInfo": {"name": "grok", "version": "1"}})
+        self.assertEqual(r.get_json()["result"]["protocolVersion"], "2025-06-18")
+        self.assertIn("nie selbst frei", r.get_json()["result"]["instructions"])
+        r = self.client.post("/mcp", json={"jsonrpc": "2.0", "method": "notifications/initialized"},
+                             headers={"Authorization": f"Bearer {tok['access_token']}"})
+        self.assertEqual(r.status_code, 202)
+        namen = {t["name"] for t in self._mcp(tok["access_token"], "tools/list").get_json()["result"]["tools"]}
+        self.assertIn("freigabe_anfragen", namen)
+        self.assertNotIn("kunden_und_projekte", namen)  # Outreach hat kein Recht auf Kunden
+        r = self._mcp(tok["access_token"], "tools/call", {"name": "kunden_und_projekte", "arguments": {}})
+        self.assertTrue(r.get_json()["result"]["isError"])
+        r = self._mcp(tok["access_token"], "tools/call", {"name": "aufgabe_anlegen", "arguments": {
+            "titel": "Welle 3 recherchieren", "person": "hamza", "faellig": MORGEN}}, pfad="/mcp/outreach")
+        daten = json.loads(r.get_json()["result"]["content"][0]["text"])
+        self.assertTrue(daten["angelegt"], daten)
+        self.assertEqual(c.execute("SELECT wer FROM ereignisse WHERE objekt_typ='aufgabe' AND objekt_id=? ORDER BY id",
+                                   (str(daten["aufgabe_id"]),)).fetchone()[0], "agent:outreach")
+        # Token eines Agents gilt nicht unter der Adresse eines anderen
+        self.assertEqual(self._mcp(tok["access_token"], "tools/list", pfad="/mcp/ops").status_code, 403)
+        # Neue Protokoll-Version ohne Handschlag
+        r = self._mcp(tok["access_token"], "server/discover", {"_meta": {
+            "io.modelcontextprotocol/protocolVersion": "2026-07-28"}})
+        self.assertIn("2026-07-28", r.get_json()["result"]["supportedVersions"])
+        # Erneuern rotiert: altes Erneuerungs-Token gilt danach nicht mehr
+        r = self.client.post("/oauth/token", data={"grant_type": "refresh_token", "refresh_token": tok["refresh_token"],
+                                                   "client_id": cid})
+        neu = r.get_json()
+        self.assertEqual(r.status_code, 200)
+        r = self.client.post("/oauth/token", data={"grant_type": "refresh_token", "refresh_token": tok["refresh_token"],
+                                                   "client_id": cid})
+        self.assertEqual(r.status_code, 400)
+        self.assertEqual(self._mcp(neu["access_token"], "ping").status_code, 200)
+        # Verbindung trennen wirkt sofort
+        fam = c.execute("SELECT familie FROM agent_tokens WHERE agent='outreach' LIMIT 1").fetchone()[0]
+        r = self.post(f"/einstellungen/agenten/verbindung/{fam}/trennen", headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"])
+        self.assertEqual(self._mcp(neu["access_token"], "tools/list").status_code, 401)
+        # Agent sperren wirkt sofort, auch für eine andere Verbindung
+        _, tok2 = self._verbinden("outreach")
+        self.assertEqual(self._mcp(tok2["access_token"], "ping").status_code, 200)
+        self.post("/einstellungen/agenten/outreach/status", {"status": "gesperrt"})
+        self.assertEqual(self._mcp(tok2["access_token"], "ping").status_code, 401)
+
+    def test_nur_verwalter_verbinden(self):
+        self.als("hamza")
+        r = self.client.post("/oauth/register", json={"redirect_uris": ["https://claude.ai/api/mcp/auth_callback"]})
+        cid = r.get_json()["client_id"]
+        r = self.client.get("/oauth/authorize", query_string={
+            "client_id": cid, "redirect_uri": "https://claude.ai/api/mcp/auth_callback", "response_type": "code",
+            "code_challenge": "x" * 43, "code_challenge_method": "S256"})
+        self.assertEqual(r.status_code, 403)
+
+    def test_seiten_und_freigabe_im_browser(self):
+        from app import agenten
+        c = self.c
+        for url in ("/einstellungen/agenten", "/einstellungen/agenten/ops", "/einstellungen/agenten/einrichten",
+                    "/einstellungen/protokoll?wer=agent:*", "/einstellungen"):
+            self.assertEqual(self.client.get(url).status_code, 200, url)
+        self.assertIn("/mcp/outreach", self.client.get("/einstellungen/agenten/einrichten").get_data(as_text=True))
+        self.assertIn("In 5 Schritten einrichten", self.client.get("/mein-tag").get_data(as_text=True))
+        fid = _agent_freigabe(c, "ops", art="entscheidung", titel="Rechnungs-Erinnerung schicken")[0]
+        agenten.info(c, "ops", "Rechnungen geprüft", "Nichts überfällig.")
+        html = self.client.get("/freigaben").get_data(as_text=True)
+        self.assertIn("Rechnungs-Erinnerung schicken", html)
+        self.assertIn("Empfohlen", html)
+        tag = self.client.get("/mein-tag").get_data(as_text=True)
+        self.assertIn("Rechnungen geprüft", tag)
+        self.assertIn("Rechnungs-Erinnerung schicken", tag)
+        r = self.post(f"/freigaben/agent/{fid}", {"aktion": "option", "option": "B"}, headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"], r.get_json())
+        self.assertEqual(json.loads(c.execute("SELECT geaendert FROM freigaben WHERE id=?", (fid,)).fetchone()[0])["option"], "B")
+        c.execute("DELETE FROM entscheidungen WHERE titel LIKE 'Rechnungs-Erinnerung%'")
+        c.commit()
+        # Bündel: mehrere auf einmal
+        ids = [_agent_freigabe(c, "ops", art="sonstiges", titel=f"Punkt {n}", optionen=None, empfehlung=None,
+                               buendel="Kleinkram")[0] for n in range(2)]
+        self.assertIn("2 × Kleinkram", self.client.get("/freigaben").get_data(as_text=True))
+        r = self.post("/freigaben/agent/buendel", {"ids": [str(i) for i in ids], "aktion": "freigeben"},
+                      headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"], r.get_json())
+        self.assertEqual({x[0] for x in c.execute(f"SELECT status FROM freigaben WHERE id IN ({ids[0]},{ids[1]})")},
+                         {"angenommen"})
+        # Hamza sieht Oskars Karten nicht und kann sie nicht entscheiden
+        fid = _agent_freigabe(c, "ops", titel="Nur für Oskar")[0]
+        self.als("hamza")
+        self.assertNotIn("Nur für Oskar", self.client.get("/freigaben").get_data(as_text=True))
+        r = self.post(f"/freigaben/agent/{fid}", {"aktion": "option", "option": "A"}, headers={"X-Requested-With": "fetch"})
+        self.assertEqual(r.status_code, 400)

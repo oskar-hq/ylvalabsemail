@@ -102,6 +102,18 @@ AKTIONEN = [
     _a("rechnung", "Rechnung ausstellen und verschicken", "C", ["B", "C"],
        "Bekommt erst mit der Freigabe ihre Nummer, dann PDF, Kunden-Bereich und Mail. Monatsrechnungen bereitet das OS "
        "am eingestellten Tag vor (Einstellungen → Finanzen)."),
+    # Stufe 11: was KI-Agents über die Schnittstelle (MCP) tun. Freigeben kann ein Agent nie (hart im Code).
+    _a("agent_nachricht", "Agent: Mail oder Nachricht an Leads und Kunden", "C",
+       hinweis="Hart im Code: nur nach Freigabe einer Person. Das OS verschickt genau den freigegebenen Text.",
+       bereich="Agents"),
+    _a("agent_lead_stufe", "Agent: Stufe eines Leads ändern", "C", ["A", "C"],
+       "Auf A setzt der Agent die Stufe selbst (steht im Protokoll), auf C wartet sie auf eine Freigabe.",
+       bereich="Agents"),
+    _a("agent_projekt", "Agent: Projekt weiterschalten", "C",
+       hinweis="Immer als Vorschlag; die Regeln je Schritt (Anforderung, Abnahme) gelten wie von Hand.",
+       bereich="Agents"),
+    _a("agent_aufgaben", "Agent: Aufgaben anlegen, ändern, abhaken, Notizen und Leads anlegen", "A",
+       hinweis="Mit Dubletten-Prüfung und Tageslimit; im Protokoll steht der Agent als Urheber.", bereich="Agents"),
 ]
 AKTION = {a["key"]: a for a in AKTIONEN}
 FRIST_STANDARD = 24  # Stunden, Einspruchsfrist auf Stufe B (Einstellungen → Freigabe-Stufen)
@@ -374,6 +386,7 @@ def entscheiden_festhalten(c, wer, titel, begruendung="", grundlage="", recht_ke
     """Eine Entscheidung festhalten. Reicht die Person allein (nach dem Recht), gilt sie sofort. Sonst wartet sie
     in der Freigabe-Zentrale auf die übrigen (bei „alle“ auf jede, bei „eine“ auf eine von ihnen)."""
     from . import aufgaben, firma
+    _nur_menschen(c, wer)
     titel = re.sub(r"\s+", " ", titel or "").strip()
     if not titel or len(titel) > 200:
         raise FreigabeError("Was wurde entschieden? Bitte in einem Satz (höchstens 200 Zeichen).")
@@ -419,6 +432,7 @@ def entscheiden_festhalten(c, wer, titel, begruendung="", grundlage="", recht_ke
 def entscheidung_bestaetigen(c, wer, fid, ok, grund=""):
     """Zustimmen oder ablehnen (mit Grund) als eine der nötigen Personen."""
     from . import aufgaben, firma
+    _nur_menschen(c, wer)
     f = c.execute("SELECT * FROM freigaben WHERE id=? AND art='entscheidung'", (fid,)).fetchone()
     if not f or f["status"] != "offen":
         raise FreigabeError("Diese Entscheidung wartet nicht (mehr) auf dich.")
@@ -649,7 +663,7 @@ ARTEN = {
 }
 # Aus den Daten abgeleitet (keine Zeile in `freigaben`): nur mit Link zum Ort, wo entschieden wird
 ABGELEITET = {"anforderung": "Anforderungen im Projekt", "erstkontakt": "Erstkontakt-Entwürfe"}
-ART_LABEL = {**{k: v["label"] for k, v in ARTEN.items()}, **ABGELEITET}
+ART_LABEL = {**{k: v["label"] for k, v in ARTEN.items()}, **ABGELEITET, "agent": "Von den Agents"}
 
 
 def _sichtbar(c, wer, f):
@@ -754,7 +768,9 @@ def zaehlen(c, person):
     """Für Navigation und Mein Tag: wie viele Freigaben warten auf die Person (ohne aufwändige Beschreibungen)."""
     if not person:
         return 0
-    n = c.execute(f"SELECT COUNT(*) FROM freigaben WHERE status='offen' AND pruefer=? AND art IN "
+    from . import agenten
+    n = agenten.offen_zaehlen(c, person)
+    n += c.execute(f"SELECT COUNT(*) FROM freigaben WHERE status='offen' AND pruefer=? AND art IN "
                   f"({','.join('?' * len(ARTEN))})", (person, *ARTEN)).fetchone()[0]
     return n + len(_projekte_offen(c, person)) + len(_entwuerfe_offen(c, person))
 
@@ -773,8 +789,26 @@ def offen_je_art(c):
     return out
 
 
+def _nur_menschen(c, wer):
+    """Hart im Code, nicht per Einstellung abschaltbar: Freigeben und Entscheiden können nur aktive Personen,
+    nie ein Agent (agent:<key>) und nie jemand ohne Personen-Konto."""
+    from . import firma
+    if isinstance(wer, str) and wer.startswith("agent:"):
+        raise FreigabeError("Ein Agent kann nie selbst freigeben.")
+    if wer != "System" and not firma.aktive_person(c, wer):
+        raise FreigabeError("Freigeben können nur aktive Personen.")
+
+
 def entscheiden(c, wer, art, oid, ok, grund=""):
     """Aus der Zentrale annehmen oder ablehnen. Jede Art prüft selbst, wer darf, und protokolliert."""
+    _nur_menschen(c, wer)
+    if art == "agent":
+        from . import agenten
+        try:
+            agenten.entscheiden(c, wer, oid, ok, grund=grund)
+        except agenten.AgentError as exc:
+            raise FreigabeError(str(exc)) from exc
+        return
     if art == "anforderung":
         if not ok:
             raise FreigabeError("Eine Anforderung lehnt man nicht ab: Im Projekt ändern, dann geben beide neu frei.")
@@ -792,6 +826,7 @@ def entscheiden(c, wer, art, oid, ok, grund=""):
 def stoppen(c, wer, fid):
     """Einspruch auf Stufe B: Die Aktion passiert nicht von selbst, sondern wartet auf eine normale Freigabe (C)."""
     from . import firma
+    _nur_menschen(c, wer)
     f = c.execute("SELECT * FROM freigaben WHERE id=?", (fid,)).fetchone()
     if not f or f["status"] != "offen" or f["stufe"] != "B":
         raise FreigabeError("Hier läuft keine Frist.")

@@ -20,6 +20,9 @@
       <span class="txt"><b>Personen</b><span>Anlegen, einladen, sperren, archivieren</span></span><span class="chev">›</span></a></li>
     <li><a href="{{ url_for('personen.rollen') }}"><span class="ico">{{ osi('schloss') }}</span>
       <span class="txt"><b>Rollen und Rechte</b><span>Wer was sehen, bearbeiten und verwalten darf</span></span><span class="chev">›</span></a></li>
+    {% if darf('personen') %}<li><a href="{{ url_for('agenten.einstellungen') }}"><span class="ico">{{ osi('link') }}</span>
+      <span class="txt"><b>Agents</b><span>KI-Agents (Grok, Claude) verbinden, Rechte, Limits, wer was freigibt</span></span>
+      {% if agenten_offen %}<span class="flag"><i></i>Einrichten</span>{% endif %}<span class="chev">›</span></a></li>{% endif %}
     {% if darf('kunden') %}<li><a href="{{ url_for('kunden.einstellungen') }}"><span class="ico">{{ osi('aufgabe') }}</span>
       <span class="txt"><b>Projekte</b><span>Abnahme-Checkliste, Änderungswünsche, Abrechnung, Zeit</span></span><span class="chev">›</span></a></li>{% endif %}
     {% if darf('kunden') %}<li><a href="{{ url_for('kunden.portal_einstellungen') }}"><span class="ico">{{ osi('person') }}</span>

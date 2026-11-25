@@ -118,16 +118,19 @@ ART_LABELS = {
     "person": "Person", "rolle": "Rolle", "bereich": "Bereich", "einladung": "Einladung", "anmeldung": "Anmeldung",
     "einstellung": "Einstellung", "aufgabe": "Aufgabe", "anfrage": "Anfrage", "kommentar": "Kommentar",
     "lead": "Lead", "software": "Software", "sicherung": "Sicherung", "freigabe": "Freigabe",
-    "entscheidung": "Entscheidung", "notfall": "Notfall",
+    "entscheidung": "Entscheidung", "notfall": "Notfall", "agent": "Agent",
 }
 
 
 def protokoll(c, art=None, wer=None, objekt=None, limit=200, vor=None):
+    """`wer="agent:*"` zeigt nur, was Agents getan haben."""
     where, args = ["1"], []
     if art:
         where.append("art = ?")
         args.append(art)
-    if wer:
+    if wer == "agent:*":
+        where.append("wer LIKE 'agent:%'")
+    elif wer:
         where.append("wer = ?")
         args.append(wer)
     if objekt:
@@ -167,7 +170,11 @@ def _rechte(raw):
 
 
 def rechte(c, key):
-    """Rechte einer Person: aus ihrer Rolle, einzelne Module können je Person abweichen. Nicht aktiv = keine."""
+    """Rechte einer Person: aus ihrer Rolle, einzelne Module können je Person abweichen. Nicht aktiv = keine.
+    Agents (`agent:<key>`) haben eigene Rechte und nie mehr als „Bearbeiten“ (siehe app/agenten.py)."""
+    if isinstance(key, str) and key.startswith("agent:"):
+        from . import agenten
+        return agenten.rechte(c, key)
     p = c.execute("SELECT rolle, rechte, status FROM team WHERE key=?", (key or "",)).fetchone()
     if not p or (p["status"] or "aktiv") != "aktiv":
         return {k: 0 for k in MODUL_KEYS}
@@ -361,6 +368,9 @@ def aktive_personen(c):
 
 
 def name_von(c, key):
+    if isinstance(key, str) and key.startswith("agent:"):
+        from . import agenten
+        return agenten.name_von(c, key)
     row = c.execute("SELECT name FROM team WHERE key=?", (key or "",)).fetchone()
     return row["name"] if row else (key or "")
 

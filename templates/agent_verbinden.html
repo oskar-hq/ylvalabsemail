@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% from "_os.html" import i %}
+{% block title %}Agent verbinden · Ylva Labs{% endblock %}
+{% block content %}
+<main class="os-page os-verbinden">
+  <header class="os-head">
+    <span class="os-eyebrow">Verbindung</span>
+    {% if fehler %}
+    <h1 class="os-title-l">Das geht so nicht</h1>
+    <p class="os-sub os-lead">{{ fehler }}</p>
+    {% else %}
+    <h1 class="os-title-l">{% if vorwahl and agents %}{{ agents[0].name }} mit dem OS verbinden?{% else %}Welcher Agent ist das?{% endif %}</h1>
+    <p class="os-sub os-lead">{{ client.name or 'Ein Client' }} möchte als Agent im Firmen-OS arbeiten: lesen und vorbereiten, was die Rechte des Agents erlauben. Freigeben kann ein Agent nie.</p>
+    {% endif %}
+  </header>
+  {% if not fehler %}
+  {% if not agents %}<p class="os-hinweis">Es gibt keinen aktiven Agent{% if vorwahl %} „{{ vorwahl }}“{% endif %}. Lege ihn unter Einstellungen → Agents an.</p>
+  {% else %}
+  <form method="post" action="{{ url_for('agenten.authorize') }}" style="margin-top:24px">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    {% for n, v in werte.items() %}<input type="hidden" name="{{ n }}" value="{{ v }}">{% endfor %}
+    <ul class="os-list">{% for a in agents %}
+      <li><label class="os-row" style="cursor:pointer"><input type="radio" name="agent" value="{{ a.key }}" {{ 'checked' if loop.first }} style="width:22px;height:22px;accent-color:var(--ink-solid)">
+        <span class="os-txt"><b>{{ a.name }}</b><span>{{ a.beschreibung or '' }}</span></span></label></li>{% endfor %}
+    </ul>
+    <p class="os-caption" style="margin-top:16px">Rückkehr zu: {{ werte.redirect_uri }}</p>
+    <div class="os-btns" style="margin-top:24px">
+      <button class="os-btn ink"><span>Verbinden</span>{{ i('check') }}</button>
+      <button class="os-btn quiet" name="abbrechen" value="1">Abbrechen</button>
+    </div>
+  </form>
+  {% endif %}
+  {% endif %}
+</main>
+{% endblock %}

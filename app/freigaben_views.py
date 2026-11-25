@@ -50,12 +50,18 @@ def zentrale():
     key = me()
     alle = request.args.get("alle") == "1"
     liste = freigaben.offen(c, key, alle=alle)
+    from . import agenten
+    einzeln = request.args.get("einzeln") == "1"
+    agent_karten, agent_spaeter = agenten.karten(c, key, alle=alle, buendeln=False if einzeln else None)
     gruppen = {}
     for f in liste:
         gruppen.setdefault(f["art_label"], []).append(f)
     darf_alle = any(darf(m, firma.VERWALTEN) for m in ("leads", "kalender", "personen", "kunden"))
-    return render_template("freigaben.html", account=g.account, gruppen=gruppen, n=len(liste), alle=alle,
-                           darf_alle=darf_alle, stufen=freigaben.STUFEN)
+    darf_alle = darf_alle or darf("entscheidungen", firma.VERWALTEN)
+    n_agent = sum(len(k["eintraege"]) for k in agent_karten)
+    return render_template("freigaben.html", account=g.account, gruppen=gruppen, n=len(liste) + n_agent, alle=alle,
+                           darf_alle=darf_alle, stufen=freigaben.STUFEN, agent_karten=agent_karten,
+                           agent_spaeter=agent_spaeter, me_key=key, einzeln=einzeln)
 
 
 @bp.post("/freigaben/<art>/<int:oid>")

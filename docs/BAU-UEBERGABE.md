@@ -1,19 +1,19 @@
-# Übergabe für den Weiterbau (Stufe 11: Outreach für Kunden)
+# Übergabe für den Weiterbau (Stufe 12: Outreach für Kunden)
 
-**Stand:** 25.11.2026 · Stufe 1 bis 10 gebaut und gemergt · nächste: **Stufe 11 (Outreach für Kunden)**, Plan abgestimmt
+**Stand:** 25.11.2026 · Stufe 1 bis 11 gebaut und gemergt (11: Agenten-Schnittstelle, [AGENTEN.md](AGENTEN.md)) · nächste: **Stufe 12 (Outreach für Kunden)**, Plan abgestimmt
 
 Diese Datei ist für die nächste Sitzung (Mensch oder KI), die am Firmen-OS weiterbaut. **Wer neu einsteigt:**
-erst `CLAUDE.md`, dann diese Datei ganz, dann Abschnitt 3 (Stufe 11, schon mit Oskar abgestimmt) bauen. Sie fasst zusammen, was
+erst `CLAUDE.md`, dann diese Datei ganz, dann Abschnitt 3 (Stufe 12, schon mit Oskar abgestimmt) bauen. Sie fasst zusammen, was
 steht, wie hier gearbeitet wird und was als Nächstes sinnvoll ist. Ausführlich steht alles in
 [FIRMEN-OS.md](FIRMEN-OS.md) (Bauplan, je Stufe „Umsetzung und Abweichungen“).
 
-## 1. Arbeitsweise (bewährt in Stufe 1 bis 10)
+## 1. Arbeitsweise (bewährt in Stufe 1 bis 11)
 
 1. `CLAUDE.md`, [FIRMEN-OS.md](FIRMEN-OS.md), [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md) und
    [DESIGN.md](DESIGN.md) lesen, dann den betroffenen Code.
 2. Kurzen Plan für die Stufe mit Oskar abstimmen. Oskar hat für Stufe 2 bis 10 gesagt: Plan kurz abstimmen, dann bauen,
    testen, im Browser ansehen, Doku nachziehen, Pull Request und mergen.
-3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 199 Tests, alle grün). Neue Tests für das OS
+3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 210 Tests, alle grün). Neue Tests für das OS
    kommen in `tests/test_os.py` (die Reihenfolge der Testdateien ist wichtig: `test_leads.py` setzt die
    Umgebung, Dateien davor dürfen `app.main` nicht importieren).
 4. Seiten im Browser ansehen (Playwright ist vorinstalliert): Handy 390 px und Desktop, hell und dunkel.
@@ -41,6 +41,7 @@ Requests gehen dorthin. Nach einem Merge den Arbeits-Branch neu von dort abzweig
 | 9 Posteingang | `posteingang.py` (weitere Postfächer, Kanäle, von Hand festhalten, Wünsche aus Nachrichten, Antwortzeit), `mailbox.py` | CRM → Postfach und Gespräch, Einstellungen → Postfächer, Einstellungen → Unipile |
 | Start | `startklar.py` (Checkliste für den echten Betrieb, nur gespeicherte Werte) | Einstellungen → Startklar, Hinweis auf Mein Tag, Mein Profil → Meldungen aufs Handy |
 | 10 Assistent | `assistent.py` (Fragen mit Werkzeugen und Rechteprüfung, „Was zuerst?“, Entwürfe, Angebote mit PDF und Freigabe), `ai.anfrage` | Assistent, Mein Tag → Was zuerst?, Angebote, Einstellungen → Assistent, Entwurf-Knöpfe in Gespräch/Termin/Projekt |
+| 11 Agents (MCP) | `agenten.py` (Agenten-Konten, OAuth, Entwürfe, Zuständigkeit, Freigaben mit Ausführung, Infos), `mcp_server.py` (Protokoll, Werkzeuge), `agenten_prompts.py` | `/mcp/<key>`, `/oauth/*`, Einstellungen → Agents (Einrichten), Freigaben-Karten, Mein Tag → Von den Agents, Boards unter Kunden und Aufgaben |
 
 Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module wieder nutzen sollten:
 
@@ -62,10 +63,10 @@ Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module
 - **Design:** Bausteine in `static/os.css`, `static/os.js`, `templates/_os.html` (Listenzeilen, Sheets mit
   `data-sheet`, schwebende Knöpfe `os-float`, Formulare mit `data-os-fetch="reload"`, Toasts per `flash`).
 
-## 3. Stufe 11: Outreach für Kunden (Arbeitsbereiche)
+## 3. Stufe 12: Outreach für Kunden (Arbeitsbereiche)
 
 **Auftrag (Oskar, 25.11.2026):** „Umbauen, sodass wir auf einem Server sowohl für uns als auch für mehrere Kunden
-Outreach machen können“; die Kunden bezahlen uns dafür. Mit Oskar abgestimmt (siehe auch FIRMEN-OS.md, Stufe 11):
+Outreach machen können“; die Kunden bezahlen uns dafür. Mit Oskar abgestimmt (siehe auch FIRMEN-OS.md, Stufe 12):
 
 | Frage | Entscheidung |
 | --- | --- |
@@ -105,7 +106,17 @@ Outreach machen können“; die Kunden bezahlen uns dafür. Mit Oskar abgestimmt
    Interesse, Termine je Woche und die interessierten Kontakte (ohne interne Notizen).
 6. **Abrechnung:** Arbeitsbereich mit Projekt verknüpfen; Monatsrechnung um eine Position „Outreach“ und optional
    KI-Kosten ergänzen.
-7. Doku: FIRMEN-OS.md Stufe 11 abhaken mit „Umsetzung und Abweichungen“, README, UEBERGABE („Nach dem Update“).
+7. Doku: FIRMEN-OS.md Stufe 12 abhaken mit „Umsetzung und Abweichungen“, README, UEBERGABE („Nach dem Update“).
+
+**Agents in Stufe 12:** Seit Stufe 11 arbeiten die Grok-Bots über MCP im OS ([AGENTEN.md](AGENTEN.md)). Für
+Arbeitsbereiche brauchen die Werkzeuge (`app/mcp_server.py`) den Arbeitsbereich: am einfachsten ein Feld
+„Arbeitsbereiche“ am Agenten-Konto (wie bei Personen) und jede Abfrage auf Leads über die neue Hilfsfunktion
+filtern. Test: Ein Agent eines Kunden sieht nie Leads aus dem Arbeitsbereich `ylva`.
+
+**Neue Werkzeuge für Agents:** Jede neue Funktion, die Agents brauchen, bekommt einen Eintrag in
+`mcp_server.WERKZEUGE` (deutsche Beschreibung, wann man es nutzt, Modul und Stufe). Schreibende Werkzeuge laufen
+über eine Funktion, die `firma.log` mit dem Agent als Urheber schreibt. Was nach außen geht, nie direkt: Entwurf +
+`agenten.anfragen`.
 
 **Achtung:** Rechtlich ist der Kunde der Absender. Vor dem ersten Kunden mit dem Anwalt klären: AV-Vertrag
 (wir verarbeiten Kontaktdaten im Auftrag), Erstkontakt per Mail im Namen des Kunden (§ 7 UWG), Impressum und

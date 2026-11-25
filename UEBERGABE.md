@@ -126,6 +126,28 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   Update: Steht in der `.env` noch `OUTREACH_EMAIL=false`, unter Einstellungen → Postfach und Versand → Versand
   „Erstkontakt per Mail erlauben“ einschalten (Startklar zeigt den Punkt rot). Der Demo-Modus ist entfernt; eine
   alte Zeile `DEMO_MODE=...` in der `.env` kann raus, sie wird ignoriert.
+- **Firmen-OS Stufe 11: Agenten-Schnittstelle (25.11.2026).** Die KI-Agents (die Grok-Bots Ops, Delivery,
+  Outreach, Content, später Claude) arbeiten über MCP direkt im OS: Aufgaben, Notizen, Leads, Entwürfe, Freigaben.
+  Ihr entscheidet nur noch unter **Freigaben** (Karten im Kurzformat, ein Tipp). Slack #entscheidungen und
+  Aufgaben-Notizen im Second Brain braucht es dafür nicht mehr. Doku: [docs/AGENTEN.md](docs/AGENTEN.md).
+  **Nach dem Update** (alles in der App, ca. 15 Minuten; Mein Tag zeigt einen Hinweis „In 5 Schritten einrichten“):
+  1. **Einstellungen → Agents → Einrichten** öffnen. Schritt 1 prüft die Adresse der App (muss `https://…` sein).
+  2. **Durchlass in Cloudflare** (einmalig, die einzige Einstellung außerhalb der App): auf one.dash.cloudflare.com
+     unter Access → Applications eine Self-hosted-Anwendung „Ylva OS Agents“ für die Domain der App mit den Pfaden
+     `mcp`, `oauth` und `.well-known` anlegen, Policy **Bypass / Everyone**. Dann im OS „Jetzt prüfen“. Die
+     übrige App bleibt hinter dem Einmal-Code.
+  3. **Agents und Rechte**: Ops, Delivery, Outreach und Content sind schon angelegt (höchstens „Bearbeiten“).
+     Bei Bedarf Rechte, Bereich und Tageslimits je Agent anpassen. Unter Agents → Regeln stehen die erlaubten
+     Rücksprung-Adressen (Grok mit und ohne Schrägstrich, Claude sind eingetragen) und wer welche Art entscheidet.
+  4. **In Grok verbinden**: je Bot in Grok unter Einstellungen → Connectors einen eigenen Connector anlegen
+     („Ylva OS Ops“ usw.) mit der Adresse aus dem Assistenten (`https://<app>/mcp/ops` usw.). Grok öffnet die
+     Anmeldung des OS: anmelden (Oskar oder Finn), „Verbinden“ tippen. Im Assistenten steht danach „Verbunden“.
+     **Claude**: unter Agents einen Agent „Claude“ anlegen, in claude.ai unter Einstellungen → Connectors →
+     Benutzerdefinierten Connector hinzufügen dessen Adresse eintragen, verbinden.
+  5. **Umzugs-Prompt** je Bot aus Schritt 5 kopieren und in die Anweisungen des Bots setzen. Danach „Fertig
+     eingerichtet“ tippen.
+  Neu außerdem: Board-Ansicht unter Kunden (Projekte nach Phase) und Aufgaben (nach Status), Filter „Agents“ im
+  Firmen-Protokoll. Sperren oder Trennen unter Einstellungen → Agents wirkt sofort.
 
 - Die automatischen Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.

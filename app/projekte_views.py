@@ -46,8 +46,10 @@ def uebersicht():
     gruppen = [(k, label, hint, [p for p in alle if p["status"] == k]) for k, label, hint in projekte.STATUS]
     ohne = [dict(r) for r in c.execute("SELECT id, name FROM leads WHERE stage='kunde' AND id NOT IN "
                                        "(SELECT lead_id FROM projekte) ORDER BY name")]
+    board = request.args.get("ansicht") == "board" and not beendet
     return render_template("kunden.html", account=g.account, gruppen=[gr for gr in gruppen if gr[3]], ohne=ohne,
-                           beendet=beendet, personen=firma.aktive_personen(c))
+                           beendet=beendet, personen=firma.aktive_personen(c), board=board,
+                           spalten=[gr for gr in gruppen if gr[0] != "beendet"])
 
 
 @bp.post("/kunden/neu")

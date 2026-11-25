@@ -128,7 +128,7 @@ def anlegen(c, wer, titel, bereich, faellig, person=None, prio=2, notiz="", obje
         if anfrage:
             melden(c, person, f"Anfrage von {von}", f"{titel} (an {b['name']}, Wunschtermin {tag(faellig)})",
                    f"/aufgaben/{aid}", push=True)
-        elif quelle == "hand":
+        elif quelle in ("hand", "agent"):
             melden(c, person, f"Neue Aufgabe von {von}", f"{titel} · fällig {tag(faellig)}", f"/aufgaben/{aid}")
     return aid
 
@@ -151,7 +151,9 @@ def _zeile(row):
     d["tag"] = tag(d["faellig"])
     d["prio_label"] = PRIO_LABEL.get(d["prio"], "Normal")
     d["status_label"] = STATUS_LABEL.get(d["status"], d["status"])
-    d["erstellt_von_name"] = d.get("erstellt_von_name") or d.get("erstellt_von") or ""
+    ev = d.get("erstellt_von") or ""
+    d["erstellt_von_name"] = d.get("erstellt_von_name") or (
+        f"{ev[6:].capitalize()} (Agent)" if ev.startswith("agent:") else ev)
     if d.get("objekt_typ") == "lead":
         d["objekt_url"] = f"/leads/{d['objekt_id']}"
         d["objekt_name"] = d.get("lead_name") or f"Lead {d['objekt_id']}"
@@ -405,7 +407,8 @@ def kommentieren(c, wer, typ, oid, text):
 def kommentare(c, typ, oid):
     rows = c.execute("SELECT k.*, t.name AS wer_name FROM kommentare k LEFT JOIN team t ON t.key = k.wer "
                      "WHERE k.objekt_typ=? AND k.objekt_id=? ORDER BY k.id", (typ, oid)).fetchall()
-    return [dict(r, wer_name=r["wer_name"] or r["wer"], erwaehnt=json.loads(r["erwaehnt"] or "[]")) for r in rows]
+    return [dict(r, wer_name=r["wer_name"] or firma.name_von(c, r["wer"]), erwaehnt=json.loads(r["erwaehnt"] or "[]"))
+            for r in rows]
 
 
 def erwaehnungen(c, me, tage=14):

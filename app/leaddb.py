@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import assistent, aufgaben, branchentest, firma, finanzen, freigaben, kalender, kpis, notfall, portal, posteingang, projekte  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
+from . import agenten, assistent, aufgaben, branchentest, firma, finanzen, freigaben, kalender, kpis, notfall, portal, posteingang, projekte  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
 
 ROOT = Path(__file__).resolve().parent.parent
 BRAIN_SEED = Path(__file__).resolve().parent / "brain_seed.md"
@@ -187,6 +187,9 @@ MIGRATIONS = [
     "ALTER TABLE termine ADD COLUMN zusammenfassung TEXT",
     "ALTER TABLE termine ADD COLUMN zusammenfassung_von TEXT",
     "ALTER TABLE termine ADD COLUMN zusammenfassung_am TEXT",
+    # Firmen-OS Stufe 11 (Agenten-Schnittstelle): „Später“ bei Agent-Freigaben und was das OS danach ausgeführt hat
+    "ALTER TABLE freigaben ADD COLUMN spaeter_bis TEXT",
+    "ALTER TABLE freigaben ADD COLUMN ausfuehrung TEXT",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.
@@ -246,6 +249,8 @@ DATA_MIGRATIONS = [
        AND json_extract(rechte, '$.assistent') IS NULL""",
     """UPDATE rollen SET rechte = json_set(rechte, '$.assistent', 2) WHERE key = 'recherche'
        AND json_extract(rechte, '$.assistent') IS NULL""",
+    # Stufe 11: die vier Grok-Bots als Agenten-Konten (Rechte, Bereich und Limits danach unter Einstellungen → Agenten)
+    *agenten.SEED,
 ]
 
 FOLLOWUP_DAYS = 7  # wird beim Start aus LEADS_FOLLOWUP_DAYS gesetzt, 0 = aus
@@ -285,6 +290,7 @@ def connect(path):
     conn.executescript(portal.SCHEMA)
     conn.executescript(finanzen.SCHEMA)
     conn.executescript(posteingang.SCHEMA)
+    conn.executescript(agenten.SCHEMA)
     for stmt in MIGRATIONS:
         try:
             conn.execute(stmt)
