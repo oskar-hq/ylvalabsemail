@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}{{ a.name }} · Arbeitsbereiche{% endblock %}
+{% block content %}
+{% set dis = 'disabled' if not verwalten %}{% set kunde = a.key != 'ylva' %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Arbeitsbereich{% if kunde %} · Kunde{% endif %}</span>
+    <h1 class="os-title-l">{{ a.name }}</h1>
+    <p class="os-sub os-lead">{% if kunde %}Outreach im Namen des Kunden: Mails gehen aus seinem Postfach raus, Antworten landen dort und hier im Postfach. Entwürfe gebt weiter ihr frei.{% else %}Unsere eigene Akquise. Postfach, Absender und Suchgebiet stehen unter Einstellungen → Postfach und Versand, Absender und Texte, Suche und Bewertung.{% endif %}</p>
+  </header>
+  <form method="post" action="{{ url_for('arbeitsbereiche.speichern', key=a.key) }}" data-os-fetch="reload">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <section class="os-section"><h2 class="os-headline">Allgemein</h2>
+      <div class="os-grid2" style="margin-top:12px">
+        <label class="os-field"><span>Name</span><input name="name" maxlength="80" value="{{ a.name }}" required {{ dis }}></label>
+        {% if kunde %}<label class="os-field"><span>Projekt des Kunden (Abrechnung, Kunden-Bereich)</span><select name="projekt_id" {{ dis }}><option value="">kein Projekt</option>{% for p in projekte %}<option value="{{ p.id }}" {{ 'selected' if a.projekt_id == p.id }}>{{ p.kunde ~ ' · ' if p.kunde }}{{ p.titel }}</option>{% endfor %}</select></label>
+        <label class="os-field"><span>Akquise-Postfach des Kunden</span><select name="postfach_id" {{ dis }}><option value="">noch keins (es geht nichts raus)</option>{% for p in postfaecher %}<option value="{{ p.id }}" {{ 'selected' if a.postfach_id == p.id }} {{ 'disabled' if p.id in belegt }}>{{ p.name }} · {{ p.adresse }}{% if p.id in belegt %} (gehört {{ belegt[p.id] }}){% endif %}</option>{% endfor %}</select></label>
+        <label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:28px"><span style="margin:0">Aktiv (Läufe, Postfach, Nachfassen)</span>
+          <span class="os-toggle"><input type="checkbox" name="aktiv" value="1" {{ 'checked' if a.aktiv }} {{ dis }}><span></span></span></label>{% endif %}
+      </div>
+      {% if kunde %}<p class="os-caption">Das Postfach legt ihr unter <a href="{{ url_for('posteingang.einstellungen') }}">Einstellungen → Postfächer</a> an (z. B. vertrieb@kunde.de). Als Akquise-Postfach gehört es nur diesem Kunden.</p>{% endif %}
+    </section>
+    <section class="os-section"><h2 class="os-headline">Wer hier arbeitet</h2>
+      <p class="os-caption">Keine Auswahl: alle mit Recht auf Leads oder CRM. Wer Personen und Rechte verwaltet, sieht immer alle Arbeitsbereiche.</p>
+      <div class="os-chips" style="margin-top:8px">{% for p in personen %}<label><input type="checkbox" name="personen" value="{{ p.key }}" {{ 'checked' if p.key in a.personen }} {{ dis }}> {{ p.name }}</label>{% endfor %}</div>
+    </section>
+    {% if kunde %}<section class="os-section"><h2 class="os-headline">Absender, Suche und Abrechnung</h2>
+      <div class="os-grid2" style="margin-top:12px">{% for k, label, typ, hint, fb in felder %}{% set v = a.einstellungen.get(k) %}
+        {% if typ == 'bool' %}<label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px"><span style="margin:0">{{ label }}{% if hint %}<small class="muted" style="display:block;font-weight:400">{{ hint }}</small>{% endif %}</span>
+          <span class="os-toggle"><input type="checkbox" name="{{ k }}" value="1" {{ 'checked' if v in (true, 'true', '1', 1) }} {{ dis }}><span></span></span></label>
+        {% elif typ.startswith('select:') %}<label class="os-field"><span>{{ label }}</span><select name="{{ k }}" {{ dis }}>{% for o in typ[7:].split('|') %}<option value="{{ o }}" {{ 'selected' if (v or '') == o }}>{{ o or 'Umkreis' }}</option>{% endfor %}</select>{% if hint %}<small class="muted">{{ hint }}</small>{% endif %}</label>
+        {% else %}<label class="os-field"><span>{{ label }}</span><input name="{{ k }}" value="{{ v if v is not none else '' }}" {{ 'inputmode=decimal' if typ in ('int', 'float') }} placeholder="{{ 'wie bei Ylva Labs' if fb else '' }}" {{ dis }}>{% if hint %}<small class="muted">{{ hint }}</small>{% endif %}</label>{% endif %}
+      {% endfor %}</div>
+    </section>{% endif %}
+    {% if verwalten %}<button class="os-btn">Speichern</button>{% endif %}
+  </form>
+  {% if kunde %}<p class="os-caption" style="margin-top:32px">Rechtlich ist der Kunde der Absender: AV-Vertrag, Erstkontakt per Mail in seinem Namen (§ 7 UWG), Impressum und Abmeldelink in seinen Mails vorher mit dem Anwalt klären. Gehirn, Nischen, Sperrliste und Vorlagen stellt ihr ein, während dieser Arbeitsbereich oben gewählt ist.</p>{% endif %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('arbeitsbereiche.einstellungen') }}" aria-label="Zurück zu den Arbeitsbereichen">{{ i('back') }}</a>
+</div>
+{% endblock %}

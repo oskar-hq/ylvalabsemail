@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}Arbeitsbereiche · Einstellungen{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Einstellungen</span>
+    <h1 class="os-title-l">Arbeitsbereiche</h1>
+    <p class="os-sub os-lead">Outreach für uns und für Kunden auf einem Server. Leads, CRM, Postfach, Gehirn, Suchgebiet, Nischen, Sperrliste, Läufe und KI-Kosten gehören immer zu genau einem Arbeitsbereich. Personen, Aufgaben, Kalender, Finanzen und Freigaben sind gemeinsam. Oben in der App wählt man, in welchem man arbeitet.</p>
+  </header>
+  {% if not verwalten %}<p class="os-caption">Ändern darf, wer „Einstellungen: Verwalten“ hat.</p>{% endif %}
+  <ul class="os-list">{% for a in liste %}{% set z = zahlen.get(a.key) or {} %}<li><a class="os-row" href="{{ url_for('arbeitsbereiche.bearbeiten', key=a.key) }}">
+    <span class="os-ampel {{ 'gruen' if a.aktiv and (a.key == 'ylva' or a.postfach_id) else ('grau' if not a.aktiv else 'gelb') }}"></span>
+    <span class="os-txt"><b>{{ a.name }}</b><span>{% if a.key == 'ylva' %}Unsere eigene Akquise{% else %}Kunde{% if not a.aktiv %} · pausiert{% elif not a.postfach_id %} · Akquise-Postfach fehlt{% endif %}{% endif %} · {{ z.leads or 0 }} Leads · {{ z.angeschrieben or 0 }} angeschrieben{% if a.personen %} · {{ a.personen|length }} Person{{ 'en' if a.personen|length != 1 }}{% endif %}</span></span>
+    <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}</ul>
+  {% if verwalten %}<section class="os-section"><h2 class="os-headline">Neuer Kunde</h2>
+    <form method="post" action="{{ url_for('arbeitsbereiche.anlegen') }}" style="margin-top:12px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <label class="os-field"><span>Name des Kunden</span><input name="name" maxlength="80" required placeholder="z. B. Tischlerei Hansen"></label>
+      <button class="os-btn small">Anlegen</button>
+    </form></section>{% endif %}
+  <p class="os-caption" style="margin-top:32px">Rechtlich ist der Kunde der Absender. Vor dem ersten Kunden mit dem Anwalt klären: AV-Vertrag, Erstkontakt per Mail in seinem Namen (§ 7 UWG), Impressum und Abmeldelink in seinen Mails.</p>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('settings.settings') }}" aria-label="Zurück zu den Einstellungen">{{ i('back') }}</a>
+</div>
+{% endblock %}

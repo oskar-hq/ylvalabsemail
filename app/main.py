@@ -262,7 +262,7 @@ def login_required(view):
 
 # ---------------------------------------------------------------- Rechte je Modul (Firmen-OS, Einstellungen → Rollen)
 # Seiten ohne eigenes Modul (Mein Tag, Profil, Glocke, Web-App) darf jede angemeldete Person öffnen.
-FREI = {"index", "leads.manifest", "leads.service_worker", "leads.push_key", "leads.push_subscribe",
+FREI = {"index", "arbeitsbereich_wechseln", "leads.manifest", "leads.service_worker", "leads.push_key", "leads.push_subscribe",
         "leads.push_unsubscribe", "leads.push_test", "crm.notices_json", "crm.notices_read", "palette.search",
         "uploaded", "band_svg", "leads.status_json"}
 # Mit dem Postfach angemeldet, aber noch keine Person gewählt: nur der Mailer und die Auswahl
@@ -282,7 +282,7 @@ MODUL_JE_SEITE = {"compose": "mailer", "preview": "mailer", "send": "mailer", "u
 MODUL_JE_BEREICH = {"leads": "leads", "crm": "crm", "settings": "einstellungen", "aufgaben": "aufgaben",
                     "personen": "personen", "branchentest": "leads", "kalender": "kalender", "cockpit": "cockpit",
                     "kunden": "kunden", "freigaben": "aufgaben", "finanzen": "finanzen",
-                    "posteingang": "einstellungen", "assistent": "assistent", "angebote": "kunden"}
+                    "posteingang": "einstellungen", "arbeitsbereiche": "einstellungen", "assistent": "assistent", "angebote": "kunden"}
 
 
 def modul_der_seite(endpoint):
@@ -315,6 +315,7 @@ def _zugang():
         flash("Dein Zugang ist gesperrt. Bitte wende dich an eine Person, die Personen und Rechte verwaltet.")
         return redirect(url_for("login"))
     g.rechte = firma.rechte(db(), key)
+    _arbeitsbereich_waehlen(key)
     modul = modul_der_seite(endpoint)
     if not modul:
         return None
@@ -326,6 +327,42 @@ def _zugang():
     if request.method != "GET" or request.accept_mimetypes.best == "application/json":
         return jsonify(error=text), 403
     abort(403, text)
+
+
+# ---------------------------------------------------------------- Arbeitsbereich (Stufe 11, app/arbeitsbereiche.py)
+AB_BEREICHE = {"leads", "crm", "branchentest"}  # Seiten, deren Leads zu einem Arbeitsbereich gehören
+
+
+@app.before_request
+def _arbeitsbereich_zuruecksetzen():
+    """Jede Anfrage beginnt bei Ylva Labs; erst nach der Anmeldung gilt die Auswahl der Person."""
+    from . import arbeitsbereiche
+    arbeitsbereiche.setzen(arbeitsbereiche.YLVA)
+    g.arbeitsbereich = arbeitsbereiche.YLVA
+
+
+def _arbeitsbereich_waehlen(person):
+    """Arbeitsbereich aus der Sitzung (falls die Person dort arbeiten darf). Gehört ein Lead der Seite zu einem
+    anderen Arbeitsbereich, wechselt ein Link (GET) dorthin, wenn die Person darf; sonst gibt es ihn hier nicht."""
+    from . import arbeitsbereiche
+    from .leads_views import db
+    c = db()
+    ab = session.get("ab")
+    if not ab or not arbeitsbereiche.darf(c, person, ab):
+        ab = arbeitsbereiche.standard_fuer(c, person)
+    lead_id = (request.view_args or {}).get("lead_id")
+    if lead_id and (request.endpoint or "").split(".", 1)[0] in AB_BEREICHE:
+        row = c.execute("SELECT arbeitsbereich FROM leads WHERE id=?", (lead_id,)).fetchone()
+        if row and row["arbeitsbereich"] != ab:
+            if request.method == "GET" and arbeitsbereiche.darf(c, person, row["arbeitsbereich"]):
+                ab = row["arbeitsbereich"]
+                session["ab"] = ab
+                flash(f"Arbeitsbereich gewechselt: {arbeitsbereiche.name(c, ab)}")
+            else:
+                abort(404)
+    arbeitsbereiche.setzen(ab)
+    g.arbeitsbereich = ab
+    g.arbeitsbereiche = arbeitsbereiche.fuer_person(c, person)
 
 
 def darf(modul, stufe=1):
@@ -909,6 +946,26 @@ from .assistent_views import bp as assistent_bp, bp_angebote  # noqa: E402
 
 app.register_blueprint(assistent_bp)
 app.register_blueprint(bp_angebote)
+from .arbeitsbereiche_views import bp as arbeitsbereiche_bp  # noqa: E402
+
+app.register_blueprint(arbeitsbereiche_bp)
+
+
+@app.post("/arbeitsbereich")
+@login_required
+def arbeitsbereich_wechseln():
+    """Oben in der App: in einem anderen Arbeitsbereich (Ylva Labs oder ein Kunde) weiterarbeiten."""
+    from . import arbeitsbereiche
+    from .leads_views import db
+    key = request.form.get("ab", "")
+    if not arbeitsbereiche.darf(db(), g.account.get("team"), key):
+        abort(403, "In diesem Arbeitsbereich arbeitest du nicht.")
+    session["ab"] = key
+    nxt = safe_next(request.form.get("next") or "") or url_for("leads.overview")
+    # Seiten eines einzelnen Leads gibt es im anderen Arbeitsbereich nicht: zur Übersicht des Bereichs
+    if re.search(r"^/(leads|crm/postfach|crm)/\d+", nxt):
+        nxt = "/crm/postfach" if nxt.startswith("/crm") else url_for("leads.overview")
+    return redirect(nxt)
 
 
 @app.errorhandler(403)
