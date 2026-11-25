@@ -643,9 +643,11 @@ WERKZEUGE = {
         "meldest es mit freigabe_erledigt_melden.", _obj({"nur_neue": B, "freigabe_id": I}), w_status, None, 0, False),
     "aufgabe_anlegen": (
         "Aufgabe anlegen",
-        "Neue Aufgabe für eine Person (oder den Bereich) mit Termin. Sucht vorher selbst nach ähnlichen offenen "
-        "Aufgaben und legt dann nichts an, sondern meldet sie (trotzdem=true legt trotzdem an). anfrage=true macht "
-        "eine Anfrage an einen anderen Bereich.",
+        "Neue Aufgabe für einen Menschen (person, z. B. oskar oder finn) mit Termin: alles, was ein Mensch tun muss und "
+        "was du weder selbst erledigen noch per Freigabe klären kannst (anrufen, Vertrag unterschreiben, vor Ort, "
+        "etwas bauen). Steht dann auf seiner Aufgaben-Liste zum Abhaken. Ja/Nein-Fragen gehören nicht hierher, sondern "
+        "in freigabe_anfragen. Sucht vorher selbst nach ähnlichen offenen Aufgaben und legt dann nichts an, sondern "
+        "meldet sie (trotzdem=true legt trotzdem an). anfrage=true macht eine Anfrage an einen anderen Bereich.",
         _obj({"titel": S, "person": S, "bereich": S, "faellig": S, "prio": I, "notiz": S, "anfrage": B, "trotzdem": B,
               **BEZUG}, ["titel"]), w_aufgabe_anlegen, "aufgaben", 2, True),
     "aufgabe_aendern": (

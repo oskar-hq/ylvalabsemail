@@ -316,7 +316,7 @@ class WebTest(WebBasis):
         self.assertIn("Oskar", html)
         self.assertIn("os.css", html)
         self.assertIn("Neue Aufgabe", html)
-        self.assertEqual(self.client.get("/").headers["Location"], "/aufgaben")
+        self.assertEqual(self.client.get("/").headers["Location"], "/freigaben")
         r = self.post("/aufgaben/neu", {"titel": "Website-Text prüfen", "bereich": "technik", "schnell": "heute"},
                       headers={"X-Requested-With": "fetch"})
         self.assertTrue(r.get_json()["ok"], r.get_data(as_text=True))
@@ -351,8 +351,8 @@ class WebTest(WebBasis):
         self.assertIn("Willkommen, Omid", page)
         csrf = page.split('name="csrf-token" content="')[1].split('"')[0]
         r = guest.post(path, data={"new": "omid-pass-12", "again": "omid-pass-12"}, headers={"X-CSRF-Token": csrf})
-        self.assertEqual(r.headers["Location"], "/aufgaben")
-        self.assertIn("Omid", guest.get("/aufgaben").get_data(as_text=True))
+        self.assertEqual(r.headers["Location"], "/freigaben")
+        self.assertIn("Omid", guest.get("/freigaben").get_data(as_text=True))
         self.assertEqual(guest.get("/einstellungen").status_code, 403)  # Recherche
         self.assertEqual(guest.get(path).status_code, 410)  # Link verbraucht
         # Sperren wirft die laufende Sitzung raus
@@ -2257,7 +2257,7 @@ class StartklarTest(WebBasis):
         self.assertIn("Für den Start", html)
         self.assertIn("Firmendaten für Rechnungen", html)
         self.assertIn("Startklar", self.client.get("/einstellungen").get_data(as_text=True))
-        self.assertIn("bis zum Start", self.client.get("/aufgaben").get_data(as_text=True))
+        self.assertIn("bis zum Start", self.client.get("/freigaben").get_data(as_text=True))
         self.assertIn("osPush", self.client.get("/profil").get_data(as_text=True))
         self.als("hamza")
         self.assertEqual(self.client.get("/einstellungen/startklar").status_code, 403)
@@ -3268,13 +3268,13 @@ class AgentenWebTest(WebBasis):
                     "/einstellungen/protokoll?wer=agent:*", "/einstellungen"):
             self.assertEqual(self.client.get(url).status_code, 200, url)
         self.assertIn("/mcp/outreach", self.client.get("/einstellungen/agenten/einrichten").get_data(as_text=True))
-        self.assertIn("Agents einrichten", self.client.get("/aufgaben").get_data(as_text=True))
+        self.assertIn("Agents einrichten", self.client.get("/freigaben").get_data(as_text=True))
         fid = _agent_freigabe(c, "ops", art="entscheidung", titel="Rechnungs-Erinnerung schicken")[0]
         agenten.info(c, "ops", "Rechnungen geprüft", "Nichts überfällig.")
-        html = self.client.get("/freigaben").get_data(as_text=True)
+        html = self.client.get("/freigaben/alle").get_data(as_text=True)
         self.assertIn("Rechnungs-Erinnerung schicken", html)
         self.assertIn("Empfohlen", html)
-        tag = self.client.get("/aufgaben").get_data(as_text=True)
+        tag = self.client.get("/freigaben").get_data(as_text=True)
         self.assertIn("Rechnungen geprüft", tag)
         self.assertIn("Rechnungs-Erinnerung schicken", tag)
         r = self.post(f"/freigaben/agent/{fid}", {"aktion": "option", "option": "B"}, headers={"X-Requested-With": "fetch"})
@@ -3340,7 +3340,35 @@ class SlackUeberAgentsTest(unittest.TestCase):
 
 
 class AufgabenstapelWebTest(WebBasis):
-    """Stufe 13: Aufgaben wie im Cockpit: eine Zahl, Starten, eine Karte pro Bildschirm."""
+    """Stufe 13: Freigaben wie im Cockpit (eine Zahl, Starten, eine Karte pro Bildschirm); seit 13b Aufgaben als
+    Erinnerungsliste auf eigener Seite."""
+
+    def test_aufgaben_wie_erinnerungen(self):
+        from app import mcp_server, stapel
+        c = self.c
+        d, f = mcp_server.aufrufen(c, "agent:ops", "aufgabe_anlegen", {"titel": "Vertrag Testkunde unterschreiben",
+                                                                        "person": "finn", "faellig": aufgaben.heute()})
+        self.assertFalse(f, d)
+        aid = d["aufgabe_id"]
+        self.addCleanup(lambda: (c.execute("DELETE FROM aufgaben WHERE id=? OR titel=?", (aid, "Server prüfen")),
+                                 c.commit()))
+        self.assertNotIn(f"aufgabe:{aid}", [x["key"] for x in stapel.stapel(c, "finn")])  # keine Freigabe
+        html = self.client.get("/aufgaben?fuer=finn").get_data(as_text=True)
+        self.assertIn("Vertrag Testkunde unterschreiben", html)
+        self.assertIn("von Ops (Agent)", html)
+        self.assertNotIn("Vertrag Testkunde unterschreiben", self.client.get("/aufgaben").get_data(as_text=True))
+        # schnell eintragen: nur Was, Für wen und Wann; der Bereich ergibt sich aus der Person
+        r = self.post("/aufgaben/neu", {"titel": "Server prüfen", "person": "finn", "schnell": "morgen"},
+                      headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"], r.get_data(as_text=True))
+        neu = c.execute("SELECT person, bereich FROM aufgaben WHERE titel='Server prüfen'").fetchone()
+        self.assertEqual(neu["person"], "finn")
+        self.assertTrue(neu["bereich"])
+        # abhaken
+        self.als("finn")
+        r = self.post(f"/aufgaben/{aid}/erledigt", {}, headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"])
+        self.assertIn("Erledigt", self.client.get("/aufgaben").get_data(as_text=True))
 
     def test_stapel_fokus_und_entscheiden(self):
         from app import stapel
@@ -3351,27 +3379,28 @@ class AufgabenstapelWebTest(WebBasis):
         items = stapel.stapel(c, "oskar")
         self.assertIn(f"agent:{fid}", [x["key"] for x in items])
         self.assertEqual(items[0]["typ"], "agent")  # Freigaben vor allem anderen
-        html = self.client.get("/aufgaben").get_data(as_text=True)
+        html = self.client.get("/freigaben").get_data(as_text=True)
         self.assertIn("Starten", html)
         self.assertIn("Stapel-Test entscheiden", html)
-        r = self.client.get("/aufgaben/fokus?neu=1")
-        self.assertEqual(r.headers["Location"], "/aufgaben/fokus")
-        karte = self.client.get("/aufgaben/fokus").get_data(as_text=True)
+        r = self.client.get("/freigaben/fokus?neu=1")
+        self.assertEqual(r.headers["Location"], "/freigaben/fokus")
+        karte = self.client.get("/freigaben/fokus").get_data(as_text=True)
         self.assertIn("Stapel-Test entscheiden", karte)
         self.assertIn('data-taste="1"', karte)  # Optionen per Taste 1–3
         # Jetzt nicht: die nächste Karte kommt, die übersprungene bleibt offen
-        self.post("/aufgaben/fokus/weiter", {"key": f"agent:{fid}"})
-        self.assertNotIn("Stapel-Test entscheiden", self.client.get("/aufgaben/fokus").get_data(as_text=True))
+        self.post("/freigaben/fokus/weiter", {"key": f"agent:{fid}"})
+        self.assertNotIn("Stapel-Test entscheiden", self.client.get("/freigaben/fokus").get_data(as_text=True))
         self.assertEqual(c.execute("SELECT status FROM freigaben WHERE id=?", (fid,)).fetchone()[0], "offen")
         # neu starten: wieder vorne, dann entscheiden
-        self.client.get("/aufgaben/fokus?neu=1")
-        r = self.post(f"/freigaben/agent/{fid}", {"aktion": "option", "option": "A", "next": "/aufgaben/fokus"},
+        self.client.get("/freigaben/fokus?neu=1")
+        r = self.post(f"/freigaben/agent/{fid}", {"aktion": "option", "option": "A", "next": "/freigaben/fokus"},
                       headers={"X-Requested-With": "fetch"})
         self.assertTrue(r.get_json()["ok"], r.get_json())
         self.assertNotIn(f"agent:{fid}", [x["key"] for x in stapel.stapel(c, "oskar")])
         # alte Links auf die Liste führen weiter
         self.assertEqual(self.client.get("/aufgaben?ansicht=alle").headers["Location"], "/aufgaben/alle?ansicht=alle")
-        self.assertEqual(self.client.get("/mein-tag").headers["Location"], "/aufgaben")
+        self.assertEqual(self.client.get("/mein-tag").headers["Location"], "/freigaben")
+        self.assertEqual(self.client.get("/aufgaben/fokus").headers["Location"], "/freigaben")
 
     def test_pipeline_und_chat(self):
         from app import posteingang

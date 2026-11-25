@@ -332,6 +332,41 @@ def offen_zaehlen(c, me):
     return n + len(anfragen_an(c, me))
 
 
+def bereich_fuer(c, person):
+    """Bereich für eine schnell eingetragene Aufgabe: was die Person verantwortet, sonst ihr erster Bereich, sonst
+    der Bereich für Wiedervorlagen. So reicht auf der Aufgaben-Seite „Was?“ und „Für wen?“."""
+    for keys in (firma.verantwortet(c, person or ""), firma.bereiche_von(c, person or "")):
+        if keys:
+            return keys[0]
+    return wiedervorlage_bereich(c)
+
+
+def erinnerungen(c, person=None, erledigt_tage=7):
+    """Die Aufgaben-Seite (Stufe 13b) wie eine Erinnerungsliste: offene Aufgaben einer Person (None = alle) nach
+    Termin gruppiert, dazu Anfragen an ihre Bereiche und zuletzt Erledigtes. Hier stehen Dinge, die Menschen tun
+    müssen; Agents tragen sie mit dem Werkzeug `aufgabe_anlegen` ein."""
+    h = date.today()
+    morgen, woche = (h + timedelta(days=1)).isoformat(), (h + timedelta(days=7)).isoformat()
+    t = h.isoformat()
+    wo, args = "a.status = 'offen'", []
+    if person:
+        wo += " AND a.person = ?"
+        args.append(person)
+    offen = [_zeile(r) for r in c.execute(f"{SELECT} WHERE {wo} {ORDER} LIMIT 500", args)]
+    gruppen = [("ueberfaellig", "Überfällig", [a for a in offen if a["faellig"] < t]),
+               ("heute", "Heute", [a for a in offen if a["faellig"] == t]),
+               ("morgen", "Morgen", [a for a in offen if a["faellig"] == morgen]),
+               ("woche", "Nächste 7 Tage", [a for a in offen if morgen < a["faellig"] <= woche]),
+               ("spaeter", "Später", [a for a in offen if a["faellig"] > woche])]
+    wo2, args2 = "a.status = 'erledigt' AND a.erledigt_am >= ?", [(h - timedelta(days=erledigt_tage)).isoformat()]
+    if person:
+        wo2 += " AND a.person = ?"
+        args2.append(person)
+    fertig = [_zeile(r) for r in c.execute(f"{SELECT} WHERE {wo2} ORDER BY a.erledigt_am DESC LIMIT 30", args2)]
+    return {"gruppen": [(k, label, liste) for k, label, liste in gruppen if liste], "offen": len(offen),
+            "anfragen": anfragen_an(c, person) if person else [], "erledigt": fertig}
+
+
 def mein_tag(c, me):
     t = heute()
     woche = (date.today() + timedelta(days=7)).isoformat()

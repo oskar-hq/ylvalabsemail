@@ -1,59 +1,29 @@
 {% extends "base.html" %}
 {% from "_os.html" import i, toasts, avatar %}
-{% from "_ziele.html" import ziele_liste, ziel_sheet %}
-{% block title %}Aufgaben · Ylva Labs{% endblock %}
+{% block title %}Freigaben · Ylva Labs{% endblock %}
 {% block content %}
 <main class="os-page st-start">
   {{ toasts() }}
   <h1 class="st-gruss"><span>{{ gruss.split(',')[0] }},</span> {{ gruss.split(', ')[1] }}.</h1>
-  <div class="st-zahl" aria-live="polite"><b>{{ n }}</b><span>{{ 'Aufgabe' if n == 1 else 'Aufgaben' }} für heute</span></div>
-  {% if zahlen %}<p class="st-teile">{% for z in zahlen %}<a href="#{{ z.key }}"><b>{{ z.n }}</b> {{ z.label }}</a>{% endfor %}</p>{% endif %}
-  {% if einrichten %}<a class="st-hinweis" href="{{ url_for('agenten.einrichten') }}">{{ i('link') }}<span><b>Agents einrichten</b> · in 5 Schritten verbunden</span></a>
-  {% endif %}{% if startklar_offen %}<a class="st-hinweis" href="{{ url_for('settings.startklar_seite') }}">{{ i('check') }}<span><b>Noch {{ startklar_offen }} Punkt{{ 'e' if startklar_offen != 1 }}</b> bis zum Start</span></a>
+  <div class="st-zahl" aria-live="polite"><b>{{ n }}</b><span>{{ 'Freigabe wartet' if n == 1 else 'Freigaben warten' }} auf dich</span></div>
+  {% if zahlen|length > 1 %}<p class="st-teile">{% for z in zahlen %}<span><b>{{ z.n }}</b> {{ z.label }}</span>{% endfor %}</p>{% endif %}
+  {% if einrichten %}<a class="st-hinweis" href="{{ url_for('agenten.einrichten') }}">{{ i('link') }}<span><b>Agents einrichten</b> · in 5 Schritten verbunden</span></a>{% endif %}
+  {% if startklar_offen %}<a class="st-hinweis" href="{{ url_for('settings.startklar_seite') }}">{{ i('check') }}<span><b>Noch {{ startklar_offen }} Punkt{{ 'e' if startklar_offen != 1 }}</b> bis zum Start</span></a>
   {% elif spaeter %}<p class="st-hinweis">{{ i('kalender') }}<span><b>{{ spaeter }}</b> auf später gelegt · kommen morgen früh wieder</span></p>{% endif %}
   {% if n %}<a class="st-start-knopf" href="{{ url_for('stapel.fokus', neu='1') }}" data-taste="Enter">Starten {{ i('pfeil') }}<kbd>↵</kbd></a>
-  {% else %}<p class="st-leer">Alles erledigt. Neue Freigaben und Aufgaben kommen von selbst hierher.</p>{% endif %}
+  {% else %}<p class="st-leer">Nichts zu entscheiden. Neue Freigaben der Agents kommen von selbst hierher.
+    <a class="os-link" href="{{ url_for('aufgaben.start') }}">Zu den Aufgaben</a></p>{% endif %}
 
-  {% set zl = zeit_laeuft() %}
-  {% if zl %}<div class="os-zeit-chip st-block"><span class="os-ico red">{{ i('kalender') }}</span>
-    <span class="os-txt"><b>Zeit läuft: {{ zl.titel }}</b><span class="os-caption">seit {{ zl.seit_min }} Minuten</span></span>
-    <form method="post" action="{{ url_for('kunden.zeit_stopp') }}" data-os-fetch="reload"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('stapel.start') }}"><button class="os-btn small ink">Stopp</button></form></div>{% endif %}
-
-  {% if termine %}
-  <section class="os-section st-block">
-    <h2 class="os-headline">Termine heute</h2>
-    <ul class="os-list">{% for k in termine %}<li class="os-meet"><a class="os-row" href="{{ url_for('kalender.detail', tid=k.id) }}" style="flex:1">
-      <span class="os-zeit">{{ k.start[11:16] }}<em>{{ k.ende[11:16] }}</em></span>
-      <span class="os-txt"><b>{{ k.titel }}</b><span>{{ k.lead_name or (k.personen|length ~ ' Personen') }}</span></span></a>
-      {% if k.meet_link %}<a class="os-btn small ink" href="{{ k.meet_link }}" target="_blank" rel="noopener">Meet</a>{% endif %}</li>{% endfor %}</ul>
-  </section>
-  {% endif %}
-
-  {% for key, label, typen in [('freigabe', 'Freigaben', ('agent', 'freigabe')), ('antwort', 'Antworten', ('antwort',)), ('aufgabe', 'Aufgaben', ('anfrage', 'aufgabe', 'ergebnis'))] %}
-  {% set liste = items|selectattr('typ', 'in', typen)|list %}
-  {% if liste %}
-  <section class="os-section st-block" id="{{ key }}">
-    <h2 class="os-headline">{{ label }}</h2>
-    <ul class="os-list">{% for x in liste[:8] %}
+  {% if items %}
+  <section class="os-section st-block" id="freigaben">
+    <h2 class="os-headline">Wartet auf dich</h2>
+    <ul class="os-list">{% for x in items[:12] %}
       <li><a class="os-row" href="{{ x.url }}">
         {% if x.typ == 'agent' %}<span class="os-ico st-sym" aria-hidden="true">{{ x.gruppe.symbol }}</span>{% else %}{{ avatar(x.eyebrow) }}{% endif %}
         <span class="os-txt"><b>{{ x.titel }}</b><span>{{ x.eyebrow }}{% if x.text %} · {{ x.text|truncate(90) }}{% endif %}</span></span>
         <span class="os-chev">{{ i('chev') }}</span></a></li>{% endfor %}
     </ul>
-    {% if liste|length > 8 %}<p class="os-caption">und {{ liste|length - 8 }} weitere im Stapel</p>{% endif %}
-  </section>
-  {% endif %}
-  {% endfor %}
-
-  {% if ziele is not none %}
-  <section class="os-section st-block" id="ziele">
-    <h2 class="os-headline">Meine Wochenziele</h2>
-    {% if ziele %}{{ ziele_liste(ziele, url_for('stapel.start')) }}
-    {% else %}<p class="os-empty">Noch keine Ziele für diese Woche. Drei reichen.</p>{% endif %}
-    <div class="os-btns" style="margin-top:12px">
-      {% if ziele|length < 3 %}<button type="button" class="os-btn small quiet" data-sheet="sheet-ziel">Ziel eintragen</button>{% endif %}
-      <a class="os-btn small quiet" href="{{ url_for('cockpit.cockpit', person=account.team) }}">Meine Zahlen</a>
-    </div>
+    {% if items|length > 12 %}<p class="os-caption">und {{ items|length - 12 }} weitere im Stapel</p>{% endif %}
   </section>
   {% endif %}
 
@@ -67,11 +37,7 @@
     </ul>
   </section>
   {% endif %}
-  <p class="st-alle"><a class="os-link" href="{{ url_for('aufgaben.liste') }}">Alle Aufgaben</a> · <a class="os-link" href="{{ url_for('freigaben.zentrale') }}">Alle Freigaben</a>
-    · <button type="button" class="os-link" data-sheet="sheet-neu" data-set-art="aufgabe">Neue Aufgabe</button></p>
+  <p class="st-alle"><a class="os-link" href="{{ url_for('freigaben.zentrale') }}">Alle Freigaben</a> · <a class="os-link" href="{{ url_for('freigaben.log') }}">Entscheidungs-Log</a></p>
 </main>
-{% from "_os.html" import sheet_neu %}
-{{ sheet_neu(bereiche, personen, meine_bereiche, account.team, heute, url_for('stapel.start')) }}
-{% if ziele is not none %}{{ ziel_sheet('sheet-ziel', account.team, woche, katalog, url_for('stapel.start')) }}{% endif %}
 <script src="{{ url_for('static', filename='stapel.js') }}"></script>
 {% endblock %}

@@ -811,7 +811,7 @@ def anfragen(c, agent, art, titel, was, optionen=None, empfehlung=None, frist=No
     c.commit()
     symbol = DRINGLICHKEIT[dringlichkeit][0]
     for p in pruefer:
-        aufgaben.melden(c, p, f"{symbol} {titel}", f"{a['name']}: {was}", f"/freigaben#a{ids[pruefer.index(p)]}",
+        aufgaben.melden(c, p, f"{symbol} {titel}", f"{a['name']}: {was}", f"/freigaben/alle#a{ids[pruefer.index(p)]}",
                         push=dringlichkeit == "dringend" and r["push_dringend"])
     return {"freigabe_ids": ids, "zustaendig": [firma.name_von(c, p) for p in pruefer], "recht": recht["titel"],
             "hinweis": "Das OS hat die zuständige Person aus den Entscheidungsrechten bestimmt. Antworten holst du "

@@ -275,9 +275,11 @@ Struktur wie im Outreach-Cockpit, Farben und Schrift bleiben „Clean Finance“
 Browser, fest wählbar im Konto-Menü). Neue Seiten nutzen die Tokens aus `os.css`, nie feste Farben ohne
 Dunkel-Variante.
 
-- **Vier Reiter** oben (Desktop) bzw. unten (Handy): Aufgaben, Pipeline, CRM, Chat. Alles andere ins Konto-Menü
+- **Fünf Reiter** oben (Desktop) bzw. unten (Handy): Freigaben, Aufgaben, Pipeline, CRM, Chat (seit 13b). Alles andere ins Konto-Menü
   und in die Schnellsuche (`app/palette.py`, neue Seiten dort eintragen).
-- **Aufgabenstapel** (`st-*`): Start mit einer großen Zahl und einem Knopf; Fokus mit einer Karte pro Bildschirm,
+- **Aufgaben** (`er-*`, seit 13b): Erinnerungsliste ohne Rahmen, Gruppen-Titel groß, Kreis zum Abhaken links,
+  Schnell-Eingabe als graue Fläche oben (Für wen und Wann erscheinen erst beim Tippen).
+- **Freigabe-Stapel** (`st-*`): Start mit einer großen Zahl und einem Knopf; Fokus mit einer Karte pro Bildschirm,
   Titel zentriert, Knöpfe fest unten (Haupt-Aktion dunkel, rechts). Jede Aktion hat eine Taste (`data-taste`,
   `static/stapel.js`). Keine `transform`-Animation an der Karte, sonst hängen die festen Knöpfe an ihr.
 - **Pipeline** (`pl-*`): Zustände als Farbe am Ring (grün arbeitet, orange wartet auf euch, mint heute aktiv,

@@ -691,3 +691,41 @@ body.os-sheet-open .os-page,body.os-sheet-open main.page{transform:scale(.94);bo
 .ein-kachel b{font:600 16px/20px var(--sans)}
 .ein-kachel span{font:500 13px/18px var(--sans);color:var(--text-secondary)}
 .ein-seite .menu-title{margin-top:32px}
+
+/* Aufgaben wie eine Erinnerungsliste (Stufe 13b): abhaken, schnell eintragen, nach Termin gruppiert */
+.er-kopf{display:flex;align-items:baseline;justify-content:space-between;gap:16px}
+.er-zahl{font:700 34px/40px var(--display);color:var(--text-secondary);font-variant-numeric:tabular-nums}
+.er-fuer{margin:16px 0 0;flex-wrap:wrap}
+.er-neu{display:flex;flex-wrap:wrap;align-items:center;gap:10px 12px;margin:24px 0 8px;padding:12px 14px;border-radius:var(--radius-md);
+  background:var(--surface-sunken)}
+.er-plus{flex:none;display:grid;place-items:center;width:28px;height:28px;border-radius:50%;background:var(--ink-solid);color:var(--on-ink)}
+.er-plus svg{width:16px;height:16px}
+.er-eingabe{flex:1;min-width:0;border:0;background:none;color:var(--text-primary);font:500 17px/24px var(--sans);padding:4px 0}
+.er-eingabe:focus{outline:none}
+.er-eingabe::placeholder{color:var(--text-secondary)}
+.er-neu-mehr{display:none;width:100%;gap:8px;align-items:center;padding-left:40px}
+.er-neu:focus-within .er-neu-mehr,.er-neu:has(.er-eingabe:not(:placeholder-shown)) .er-neu-mehr{display:flex}
+.er-neu-mehr select{flex:0 1 auto;min-width:0;height:36px;padding:0 10px;border:0;border-radius:var(--radius-sm);background:var(--surface);
+  color:var(--text-primary);font:500 14px/1 var(--sans)}
+.er-neu-mehr .os-btn{margin-left:auto}
+.er-gruppe{margin-top:32px}
+.er-titel{display:flex;align-items:baseline;gap:8px;margin:0 0 4px;font:700 20px/26px var(--display);letter-spacing:-.01em;color:var(--text-primary)}
+.er-titel span{font:500 15px/20px var(--sans);color:var(--text-secondary);font-variant-numeric:tabular-nums}
+.er-ueberfaellig .er-titel{color:var(--negative)}
+.er-zeile{gap:14px;align-items:flex-start;min-height:56px;padding:12px 0}
+.er-zeile form{margin:2px 0 0}
+.er-txt{text-decoration:none;color:inherit}
+.er-txt b{font:500 17px/23px var(--sans)!important;letter-spacing:0!important}
+.er-txt>span{font-size:14px!important;line-height:19px!important}
+.er-notiz{display:block;margin-top:2px;color:var(--text-secondary);font:400 14px/19px var(--sans);white-space:normal}
+.er-agent{color:var(--link)}
+.er-prio{flex:none;margin-top:3px;font:800 17px/23px var(--sans);color:var(--negative)}
+.er-zeile.fertig .er-txt b{color:var(--text-secondary);text-decoration:line-through}
+.er-erledigt summary{cursor:pointer;list-style:none}
+.er-erledigt summary::-webkit-details-marker{display:none}
+.er-erledigt summary::after{content:"›";margin-left:4px;color:var(--text-secondary);transition:transform var(--t-snappy)}
+.er-erledigt[open] summary::after{transform:rotate(90deg)}
+.er-leer{display:flex;flex-direction:column;align-items:center;gap:10px;margin:56px 0 0;text-align:center}
+.er-leer p{margin:6px 0 0;font:600 20px/26px var(--sans)}
+.er-leer .os-check{width:48px;height:48px}
+.er-leer .os-check svg{inset:8px;width:28px;height:28px}

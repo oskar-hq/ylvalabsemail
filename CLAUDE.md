@@ -25,4 +25,5 @@ Hintergrund-Arbeiter (`app/agent.py`). Tests: `python -m unittest discover tests
 Fachbegriffe auf Deutsch. Erstkontakt per Mail ist erlaubt (§ 7 UWG geklärt, 02.11.2026; Schalter
 `OUTREACH_EMAIL` unter Einstellungen → Postfach und Versand); nichts geht ohne Freigabe an Kunden. Einen Demo-Modus
 gibt es nicht mehr; lokale Vorschau mit `tests/vorschau.py`. Eine automatische Lead-Suche gibt es seit Stufe 13
-nicht mehr: Leads tragen die Agents per MCP ein. Oben nur vier Reiter (Aufgaben, Pipeline, CRM, Chat).
+nicht mehr: Leads tragen die Agents per MCP ein. Oben fünf Reiter (Freigaben, Aufgaben, Pipeline, CRM, Chat):
+Freigaben = nur Ja/Nein-Entscheidungen, Aufgaben = Erinnerungsliste für das, was Menschen tun müssen.

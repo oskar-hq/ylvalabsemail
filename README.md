@@ -121,11 +121,15 @@ in der App unter „Konto-Menü (Kreis oben rechts) → Systemcheck“. Sicherun
 ## Aufbau der Oberfläche
 
 Gestaltet wie das Outreach Cockpit (ruhig, eine Sache pro Bildschirm). Hell oder dunkel wie das Gerät (oder fest
-im Konto-Menü unter „Darstellung“). Seit Stufe 13 oben bzw. am Handy unten vier Bereiche:
+im Konto-Menü unter „Darstellung“). Seit Stufe 13b oben bzw. am Handy unten fünf Bereiche:
 
-- **Aufgaben** (Startseite): eine Zahl, was heute ansteht (Freigaben der Agents, Antworten von Kunden, Anfragen,
-  fällige Aufgaben), und „Starten“ zeigt eine Karte nach der anderen. Ja oder Nein mit einem Tipp oder einer Taste
-  (Enter freigeben, ← ablehnen, 1–3 Option, J jetzt nicht, W später). Die ganze Liste unter „Alle Aufgaben“.
+- **Freigaben** (Startseite): eine Zahl, was auf deine Entscheidung wartet (Karten der Agents, Termin-Einladungen,
+  Erstkontakte …), und „Starten“ zeigt eine Karte nach der anderen. Ja oder Nein mit einem Tipp oder einer Taste
+  (Enter freigeben, ← ablehnen, 1–3 Option, J jetzt nicht, W später). Die ausführliche Zentrale unter „Alle
+  Freigaben“.
+- **Aufgaben**: eine Erinnerungsliste wie Apple Erinnerungen. Agents tragen ein, was ein Mensch tun muss; abhaken
+  mit einem Tipp, oben schnell selbst eintragen (Was, Für wen, Wann), umschalten zwischen Meine, je Person, Alle.
+  Die ausführliche Liste mit Board unter „Alle Aufgaben“.
 - **Pipeline**: was die Agents heute tun (Status, Stundenbalken, farbige Punkte je Aktion, „wartet auf …“) und die
   Projekte als Board nach Phase, dazu fünf Kennzahlen.
 - **CRM**: die Pipeline der Leads als Board mit Karten (mit Maus oder Finger in eine andere Spalte ziehen), als
@@ -466,9 +470,9 @@ app/crm_views.py       CRM: Pipeline-Board, Wiedervorlagen, Kontaktdaten, Firma 
 app/crm.py             Pipeline-Stufen, Wiedervorlagen, Import/Export, Versand aus „Verfassen“ in der Akte
 app/firma.py           Firmen-OS: Protokoll (log), Personen, Rollen und Rechte, Bereiche, Einladung, Notfall
 app/aufgaben.py        Aufgaben, Anfragen, Kommentare mit @-Erwähnung, Meldungen an eine Person
-app/aufgaben_views.py  Seite „Alle Aufgaben“, Aufgabe, Kommentare
-app/stapel.py          Aufgabenstapel: was heute auf eine Person wartet, in fester Reihenfolge
-app/stapel_views.py    Seiten „Aufgaben“ (Start) und Fokus (eine Karte pro Bildschirm)
+app/aufgaben_views.py  Seiten „Aufgaben“ (Erinnerungsliste), „Alle Aufgaben“, Aufgabe, Kommentare
+app/stapel.py          Freigabe-Stapel: was eine Person entscheiden muss, in fester Reihenfolge
+app/stapel_views.py    Seiten „Freigaben“ (Start) und Fokus (eine Karte pro Bildschirm)
 app/pipeline_views.py  Seite „Pipeline“: Agents heute und Projekte nach Phase
 app/personen_views.py  Einstellungen → Personen, Rollen, Bereiche, Protokoll; Einladungslink
 app/kalender.py        Termine, Freigabe der Einladung, Vorschläge, Erinnerungen, Ergebnis, Briefing, Serien, ICS
