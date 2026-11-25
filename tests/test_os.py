@@ -3,6 +3,7 @@ Firmen-Protokoll, Aufgaben und Anfragen, Wiedervorlagen, Kommentare mit @-Erwäh
 Aufruf: python -m unittest discover tests"""
 import json
 import os
+import sqlite3
 import sys
 import tempfile
 import unittest
@@ -58,6 +59,23 @@ class StartwerteTest(unittest.TestCase):
         self.assertEqual((rows[0]["person"], rows[0]["status"], rows[0]["objekt_id"]), ("oskar", "offen", 1))
         self.assertEqual((rows[1]["person"], rows[1]["status"]), ("hamza", "erledigt"))  # ohne Zuständige: Bereich
         self.assertEqual([t["text"] for t in crm.open_tasks(c)], ["Anrufen"])
+
+
+class AlteSqliteTest(unittest.TestCase):
+    def test_trigger_ohne_qualifizierte_namen(self):
+        """Auf dem Server läuft SQLite 3.46: Dort sind im Rumpf eines Triggers keine Namen wie „main.leads“ erlaubt
+        (neuere Versionen erlauben es). Sonst lässt sich die Datenbank nicht öffnen und jede Seite zeigt Fehler 500."""
+        import re
+        c = frische_db()
+        for (sql,) in c.execute("SELECT sql FROM sqlite_temp_master WHERE type='trigger'"):
+            rumpf = sql.split("BEGIN", 1)[1]
+            self.assertIsNone(re.search(r"\b(main|temp)\.", rumpf), sql)
+
+    def test_healthz_oeffnet_die_datenbank(self):
+        from unittest import mock
+        self.assertEqual(main.app.test_client().get("/healthz").status_code, 200)
+        with mock.patch.object(leaddb, "connect", side_effect=sqlite3.OperationalError("kaputt")):
+            self.assertEqual(main.app.test_client().get("/healthz").status_code, 500)
 
 
 class AussperrenTest(unittest.TestCase):

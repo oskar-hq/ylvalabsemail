@@ -331,8 +331,10 @@ def connect(path):
             conn.execute(stmt)
         kv_set(conn, "data_version", len(DATA_MIGRATIONS))
     for tabelle in AB_TABELLEN:  # neue Zeilen gehören zum aktiven Arbeitsbereich
+        # Im Rumpf des Triggers ohne „main.“: SQLite bis 3.4x (z. B. 3.46 im Docker-Image) verbietet dort
+        # qualifizierte Tabellennamen; unqualifiziert findet der TEMP-Trigger die Tabelle in main.
         conn.execute(f"CREATE TEMP TRIGGER IF NOT EXISTS {tabelle}_ab AFTER INSERT ON main.{tabelle} "
-                     f"WHEN NEW.arbeitsbereich = 'ylva' AND ab() != 'ylva' BEGIN UPDATE main.{tabelle} SET arbeitsbereich = ab() "
+                     f"WHEN NEW.arbeitsbereich = 'ylva' AND ab() != 'ylva' BEGIN UPDATE {tabelle} SET arbeitsbereich = ab() "
                      f"WHERE rowid = NEW.rowid; END")
     with arbeitsbereiche.im(arbeitsbereiche.YLVA):
         known.backfill(conn)
