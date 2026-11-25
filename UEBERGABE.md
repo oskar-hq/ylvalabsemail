@@ -41,7 +41,6 @@ Der **Ylva Labs Mailer** ist eine kleine Web-App (Python/Flask), die gestaltete 
 **CRM: Kontakte im Blick**
 
 - Pipeline von Neu bis Kunde mit Ziehen und Ablegen, Akte je Betrieb, Auftragswert, Wiedervorlagen.
-- Karte mit Heatmap der passenden Betriebe und Wachstum je Kreis (Gewerbeanmeldungen, Baugenehmigungen).
 - Firmen von Hand anlegen, CSV-Import und -Export.
 
 **KI: nur zum Schreiben, nur auf Knopfdruck, optional**
@@ -101,6 +100,17 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   „Assistent“ eine Frage stellen und prüfen, ob die Quellen stimmen. Für Angebote unter Einstellungen → Finanzen die
   Firmendaten eintragen (stehen auch im Angebots-PDF); die Freigabe-Stufe für Angebote steht auf C (Freigabe, dann
   Mail mit PDF), auf D wird nur das PDF vorbereitet und persönlich übergeben.
+- **Firmen-OS Stufe 11 (25.11.2026):** Outreach für Kunden in Arbeitsbereichen. Nach dem Update: nichts zu tun, alles
+  Bisherige gehört zum Arbeitsbereich „Ylva Labs“; die Auswahl oben erscheint erst mit dem ersten Kunden. Für einen
+  Kunden: erst unter Einstellungen → Postfächer sein Postfach (z. B. vertrieb@kunde.de) anlegen, dann unter
+  Einstellungen → Arbeitsbereiche den Kunden anlegen, Postfach, Absender, Impressum, Suchgebiet, Projekt und Pauschale
+  eintragen. Oben den Kunden wählen und Gehirn, Nischen und Vorlage für ihn ausfüllen. Erstkontakt per Mail erst
+  einschalten, wenn der Kunde es schriftlich will und der Anwalt AV-Vertrag, § 7 UWG und Impressum geklärt hat.
+- **Postfach aufgeräumt, Karte weg (25.11.2026):** Zustellfehler und Abwesenheitsnotizen landen im Postfach unter
+  „Fehler“ und im Mailprogramm im Ordner „Fehler“ (abschaltbar: Einstellungen → Postfach und Versand → Posteingang).
+  Unbekannte Absender stehen still unter „Sonstige“; Glocke und Meldungen nur noch für angeschriebene Kontakte und
+  Kunden. Die Karte im CRM (Heatmap, Kreise, Wachstumszahlen) ist entfernt, die Kartensuche (OpenStreetMap) bleibt.
+  Nach dem Update: nichts zu tun. Wer den Ordner anders nennt (z. B. „Unzustellbar“), trägt den Namen dort ein.
 - **Startklar (02.11.2026):** Einstellungen → Startklar zeigt, was für den echten Betrieb noch fehlt: alle Personen mit Zugang, jeder Bereich mit verantwortlicher Person, Postfach, Erstkontakt per Mail an, Adresse der App, Firmendaten und
   IBAN für Rechnungen, eine Sicherung; empfohlen KI-Schlüssel, Google-Kalender und Meldungen aufs Handy (jetzt unter
   „Mein Profil“). Nach dem Update: die Liste von oben nach unten abarbeiten, danach einmal den Systemcheck. Wer
@@ -185,8 +195,6 @@ Bitte kurz beantworten, dann lässt sich die Installation passend vorbereiten.
       auf fremde Hardware und Zeit angewiesen.
 - [ ] **Gehirn und Vorlage prüfen:** In der App unter „Leads → Gehirn und Vorlage“ die Texte über Ylva Labs,
       Zielgruppe, Stil und die Vorlage ohne KI kontrollieren. Die Startfassung steht in `app/brain_seed.md`.
-- [ ] **Wachstumszahlen** (optional): Gewerbeanmeldungen und Baugenehmigungen je Kreis als CSV vom
-      Statistikamt Nord laden und unter „CRM → Karte“ importieren. Bis dahin gibt es keinen Wachstumszuschlag.
 - [ ] Optional: den Standard-Branch auf GitHub in `main` umbenennen (Settings → Branches), das ist
       übersichtlicher. Server holen sich dann einfach den neuen Namen per `git pull`.
 

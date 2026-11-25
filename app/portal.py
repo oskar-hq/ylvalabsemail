@@ -76,6 +76,7 @@ REGELN = {
                         "„{titel}“.{meet}\n\nBis morgen!", "Text der Termin-Erinnerung ({name}, {zeit}, {titel}, {meet})"),
     "zeige_abnahme": (True, "Kunde sieht die Abnahme-Checkliste"),
     "zeige_termine": (True, "Kunde sieht seine Termine"),
+    "zeige_outreach": (True, "Kunde sieht seine Outreach-Zahlen und interessierten Kontakte (Arbeitsbereich)"),
 }
 WOCHENTAGE = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
 
@@ -160,7 +161,7 @@ def mail_an_kunde(c, p, to, betreff, text, wer):
     """Über das Akquise-Postfach, im Namen der verantwortlichen Person, in der Akte vermerkt. Nie an gesperrte
     Betriebe. Das ist kein Erstkontakt (bestehender Kunde); ob es raus darf, entscheidet die Freigabe-Stufe."""
     from . import agent, leaddb
-    lead = leaddb.get_lead(c, p["lead_id"])
+    lead = leaddb.get_lead(c, p["lead_id"], alle=True)
     if not lead:
         raise PortalError("Zu diesem Projekt gibt es keinen Kunden in der Akte.")
     from . import posteingang
@@ -353,7 +354,15 @@ def ansicht(c, z):
         "dokumente": dokumente(c, p["id"], nur_sichtbar=True),
         "berichte": [b for b in berichte(c, p["id"]) if b["status"] == "verschickt"],
         "z": {"email": z["email"], "name": z["name"]},
+        "outreach": _outreach(c, p["id"]) if r["zeige_outreach"] else None,
     }
+
+
+def _outreach(c, projekt_id):
+    """Stufe 11: Machen wir für diesen Kunden Outreach (Arbeitsbereich mit seinem Projekt), seine Ergebnisse."""
+    from . import arbeitsbereiche
+    a = arbeitsbereiche.fuer_projekt(c, projekt_id)
+    return arbeitsbereiche.outreach_zahlen(c, a["key"]) if a and a["key"] != arbeitsbereiche.YLVA else None
 
 
 def bestaetigen(c, z):
@@ -492,6 +501,12 @@ def bericht_text(c, p, woche):
     if naechste:
         zeilen += ["", "Nächste Termine:"] + [
             f"- {datetime.fromisoformat(t['start']).strftime('%d.%m. %H:%M')} Uhr: {t['titel']}" for t in naechste]
+    o = _outreach(c, p["id"]) if regeln(c)["zeige_outreach"] else None
+    if o:
+        w = o["wochen"][1] if len(o["wochen"]) > 1 else o["wochen"][0]  # letzte volle Woche
+        zeilen += ["", f"Outreach (KW {w['kw']}): {w['angeschrieben']} angeschrieben, {w['antworten']} Antworten, "
+                   f"{w['interesse']} mit Interesse, {w['termine']} Termine. Insgesamt bisher {o['gesamt']['angeschrieben']} "
+                   f"angeschrieben, {o['gesamt']['interesse']} mit Interesse."]
     link = basis_url()
     if link:
         zeilen += ["", f"Alles im Detail in Ihrem Kunden-Bereich: {link}/portal"]
@@ -607,7 +622,7 @@ def erinnerung_entscheiden(c, wer, tid, ok, grund=""):
 
 def _erinnerung_senden(c, t, wer, projekte, leaddb):
     p = projekte.zum_lead(c, t["lead_id"]) or {"lead_id": t["lead_id"], "verantwortlich": t["verantwortlich"]}
-    lead = leaddb.get_lead(c, t["lead_id"])
+    lead = leaddb.get_lead(c, t["lead_id"], alle=True)
     r = regeln(c)
     for to in t["gaeste"]:
         text = _fuellen(r["text_erinnerung"], name=(lead or {}).get("contact_name") or "", zeit=t["zeit"],

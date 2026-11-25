@@ -24,7 +24,7 @@
     </section>
     <section class="os-section">
       <h2 class="os-headline">Was Kunden sehen</h2>
-      {% for k in ['zeige_termine', 'zeige_abnahme'] %}<label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:12px"><span style="margin:0">{{ labels[k][1] }}</span>
+      {% for k in ['zeige_termine', 'zeige_abnahme', 'zeige_outreach'] %}<label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px;margin-top:12px"><span style="margin:0">{{ labels[k][1] }}</span>
         <span class="os-toggle"><input type="checkbox" name="{{ k }}" value="1" {{ 'checked' if regeln[k] }} {{ dis }}><span></span></span></label>{% endfor %}
       <p class="os-caption">Immer sichtbar: Projektstand, Anforderung, Wünsche, freigegebene Dokumente und verschickte Berichte. Nie sichtbar: Zeiten, Kosten, interne Notizen.</p>
     </section>

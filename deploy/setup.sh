@@ -97,7 +97,7 @@ if [ -z "${SKIP_ENV:-}" ]; then
 
   echo
   bold "Suchgebiet"
-  echo "  DE-SH = ganz Schleswig-Holstein (mit Kreisen und Wachstumskarte)"
+  echo "  DE-SH = ganz Schleswig-Holstein"
   echo "  umkreis = Umkreis um Kappeln (Radius LEADS_RADIUS_KM, Standard 50 km)"
   ask REGION "Suchgebiet (DE-SH oder umkreis)" "DE-SH"
   case "$REGION" in [uU]mkreis) REGION="" ;; esac

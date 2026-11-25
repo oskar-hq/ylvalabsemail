@@ -79,7 +79,7 @@ def uebersicht():
     tage = {}
     for t in termine:
         tage.setdefault(t["start"][:10], []).append(t)
-    lead = leaddb.get_lead(c, request.args.get("lead", type=int)) if request.args.get("lead") else None
+    lead = leaddb.get_lead(c, request.args.get("lead", type=int), alle=True) if request.args.get("lead") else None
     return render_template("kalender.html", account=g.account, tage=sorted(tage.items()), ansicht=ansicht,
                            person=person, ab=ab, zurueck=(ab - timedelta(days=14)).isoformat(),
                            vor=bis.isoformat(), heute=date.today(), freigaben=kalender.freigaben_fuer(c, me()),

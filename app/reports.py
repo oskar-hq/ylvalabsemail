@@ -96,7 +96,7 @@ def run_report(c, run):
 
 
 def last_manual(c):
-    row = c.execute("SELECT * FROM runs WHERE IFNULL(started_by,'') NOT LIKE ? AND status NOT IN ('wartet','laeuft') "
+    row = c.execute("SELECT * FROM runs WHERE arbeitsbereich=ab() AND IFNULL(started_by,'') NOT LIKE ? AND status NOT IN ('wartet','laeuft') "
                     "ORDER BY id DESC LIMIT 1", (AUTO,)).fetchone()
     return run_report(c, row) if row else None
 
@@ -114,7 +114,7 @@ def manual_days(c, now=None):
     now = now or datetime.now()
     today = now.date()
     since = (today - timedelta(days=DAYS_BACK - 1)).isoformat()
-    rows = c.execute("SELECT * FROM runs WHERE IFNULL(started_by,'') NOT LIKE ? AND started_at >= ? "
+    rows = c.execute("SELECT * FROM runs WHERE arbeitsbereich=ab() AND IFNULL(started_by,'') NOT LIKE ? AND started_at >= ? "
                      "AND status NOT IN ('wartet','laeuft') ORDER BY id DESC", (AUTO, since)).fetchall()
     days = {}
     for r in rows:
@@ -140,7 +140,7 @@ def release_at(cfgs, d):
 
 def auto_day(c, d, cfgs, now=None):
     now = now or datetime.now()
-    rows = c.execute("SELECT * FROM runs WHERE started_by LIKE ? AND substr(started_at, 1, 10) = ? "
+    rows = c.execute("SELECT * FROM runs WHERE arbeitsbereich=ab() AND started_by LIKE ? AND substr(started_at, 1, 10) = ? "
                      "AND status NOT IN ('wartet','laeuft') ORDER BY id", (AUTO, d.isoformat())).fetchall()
     ready = release_at(cfgs, d)
     ids = [r["id"] for r in rows]

@@ -2,7 +2,7 @@
 
 Eine Liste von Punkten aus den Einstellungen und Daten, jeder mit Status und dem Link zur Stelle, an der man ihn
 erledigt (Einstellungen → Startklar). Prüft nur, was schon gespeichert ist; es wird nichts verschickt und keine KI
-gefragt. Verbindungen zu Postfach, KI und Karte testet der Systemcheck.
+gefragt. Verbindungen zu Postfach, KI und Kartensuche testet der Systemcheck.
 
 Wichtigkeit: „pflicht“ (ohne das läuft der Alltag nicht richtig) und „empfohlen“ (geht auch ohne, ist aber besser).
 """

@@ -307,7 +307,7 @@ def anlegen(c, wer, titel, start, ende=None, dauer=None, verantwortlich=None, pe
         if not firma.aktive_person(c, p):
             raise KalenderError("Eine der Personen ist nicht (mehr) aktiv.")
     gaeste = _gaeste(gaeste) if isinstance(gaeste, str) else list(gaeste)
-    lead = leaddb.get_lead(c, lead_id) if lead_id else None
+    lead = leaddb.get_lead(c, lead_id, alle=True) if lead_id else None
     if lead_id and not lead:
         raise KalenderError("Diesen Lead gibt es nicht.")
     from . import branchentest
@@ -814,7 +814,7 @@ def briefing(c, t):
     from . import aufgaben, crm, leaddb
     if not t.get("lead_id"):
         return None
-    lead = leaddb.get_lead(c, t["lead_id"])
+    lead = leaddb.get_lead(c, t["lead_id"], alle=True)
     if not lead:
         return None
     research = lead.get("research") or {}

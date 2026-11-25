@@ -38,7 +38,7 @@ Dann im Browser **http://localhost:8080** öffnen und mit deinem `@ylvalabs.de`-
 
 1. „Leads“ öffnen. Oben bei „Systemcheck →“ sollte alles grün oder gelb sein.
 2. Einen **kleinen** Lauf starten: 30 Betriebe bewerten, die besten 10 ins CRM, „Vorher neu suchen“ angehakt.
-   Die Bewertung läuft nach festen Regeln und kostet nichts. Der erste Lauf lädt außerdem einmalig die Kreisgrenzen.
+   Die Bewertung läuft nach festen Regeln und kostet nichts.
 3. Nach ein paar Minuten liegen die besten Betriebe im CRM („CRM“). In jeder Akte steht, welche Regel wie viele
    Punkte gegeben hat. Unter „So wird bewertet“ seht ihr alle Regeln.
 4. Für einen Betrieb einen Entwurf erstellen: mit der Vorlage (kostenlos) oder, falls ein KI-Schlüssel eingetragen
@@ -70,4 +70,3 @@ Die Daten (Leads, CRM, Gehirn, Kosten) bleiben dabei erhalten. Sie liegen in ein
 | Port 8080 belegt | Ein anderes Programm nutzt den Port. In `docker-compose.yml` `"8080:8080"` z. B. in `"8090:8080"` ändern und http://localhost:8090 öffnen. |
 | Systemcheck: Postausgang/Posteingang „Fehlt“ | Adresse und Passwort des Akquise-Postfachs prüfen. Mit `bash deploy/setup.sh` neu eingeben. |
 | Systemcheck: KI-Schlüssel „Hinweis“ | Normal ohne Schlüssel: Bewertung, CRM und Vorlage laufen trotzdem. Für KI-Entwürfe einen Schlüssel aus console.anthropic.com eintragen. |
-| Systemcheck: Kreise „Hinweis“ | Die Kreisgrenzen kommen mit dem ersten Lauf. Echte Wachstumszahlen unter „CRM → Karte“ importieren. |

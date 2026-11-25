@@ -45,24 +45,25 @@ def find(c, name="", city="", website="", email="", source_id=""):
               ("name_key", name_key(name, city))]
     for col, value in checks:
         if value:
-            row = c.execute(f"SELECT * FROM known_firms WHERE {col}=? ORDER BY id LIMIT 1", (value,)).fetchone()
+            row = c.execute(f"SELECT * FROM known_firms WHERE arbeitsbereich=ab() AND {col}=? ORDER BY id LIMIT 1", (value,)).fetchone()
             if row:
                 return dict(row)
     return None
 
 
 def remember(c, name, city="", website="", email="", source_id="", source="", found_by="", lead_id=None,
-             at=None, commit=True):
+             at=None, commit=True, ab=None):
     c.execute("INSERT INTO known_firms (name, city, host, email, name_key, source_id, first_seen_at, source, found_by,"
-              " lead_id) VALUES (?,?,?,?,?,?,?,?,?,?)",
+              " lead_id, arbeitsbereich) VALUES (?,?,?,?,?,?,?,?,?,?,IFNULL(?, ab()))",
               (name, city or None, host_of(website) or None, (email or "").strip().lower() or None,
                name_key(name, city) or None, source_id or None, at or leaddb.now(), source or None,
-               found_by or None, lead_id))
+               found_by or None, lead_id, ab))
     if commit:
         c.commit()
 
 
 def source_of(source_id):
+    source_id = (source_id or "").split("@ab:", 1)[0]
     prefix = (source_id or "").split(":", 1)[0]
     return {"osm": "osm", "claude": "claude", "hand": "hand", "import": "import"}.get(prefix, prefix or "")
 
@@ -71,31 +72,32 @@ def backfill(c):
     """Einmalig und danach bei jedem Start: Betriebe, die noch nicht auf der Merkliste stehen, nachtragen
     (z. B. aus der Zeit vor der Merkliste oder aus einer zurückgespielten Sicherung). Kontakte aus dem Postfach
     zählen nicht, die haben uns selbst geschrieben."""
-    rows = c.execute("""SELECT l.id, l.name, l.city, l.website, l.email, l.source_id, l.created_at FROM leads l
+    rows = c.execute("""SELECT l.id, l.name, l.city, l.website, l.email, l.source_id, l.created_at, l.arbeitsbereich
+                        FROM leads l
                         WHERE l.status != 'kontakt'
                           AND NOT EXISTS (SELECT 1 FROM known_firms k WHERE k.lead_id = l.id)""").fetchall()
     for r in rows:
         remember(c, r["name"], r["city"], r["website"], r["email"], r["source_id"], source_of(r["source_id"]), "",
-                 r["id"], at=r["created_at"], commit=False)
+                 r["id"], at=r["created_at"], commit=False, ab=r["arbeitsbereich"])
     c.commit()
     return len(rows)
 
 
 def count(c):
-    return c.execute("SELECT COUNT(*) FROM known_firms").fetchone()[0]
+    return c.execute("SELECT COUNT(*) FROM known_firms WHERE arbeitsbereich=ab()").fetchone()[0]
 
 
 def hosts(c, limit=3000):
-    return {r["host"] for r in c.execute("SELECT host FROM known_firms WHERE host IS NOT NULL ORDER BY id DESC LIMIT ?",
+    return {r["host"] for r in c.execute("SELECT host FROM known_firms WHERE arbeitsbereich=ab() AND host IS NOT NULL ORDER BY id DESC LIMIT ?",
                                          (limit,))}
 
 
 def listing(c, q="", limit=300):
     """Für die Seite „Schon gefunden“: neueste zuerst, mit dem heutigen Stand des Betriebs (falls es ihn noch gibt)."""
-    args, where = [], ""
+    args, where = [], "WHERE k.arbeitsbereich=ab()"
     if q:
         like = f"%{q.lower()}%"
-        where = "WHERE lower(k.name) LIKE ? OR lower(IFNULL(k.city,'')) LIKE ? OR IFNULL(k.host,'') LIKE ? OR IFNULL(k.email,'') LIKE ?"
+        where += " AND (lower(k.name) LIKE ? OR lower(IFNULL(k.city,'')) LIKE ? OR IFNULL(k.host,'') LIKE ? OR IFNULL(k.email,'') LIKE ?)"
         args = [like] * 4
     rows = c.execute(f"""SELECT k.*, l.status, l.stage, l.owner FROM known_firms k LEFT JOIN leads l ON l.id = k.lead_id
                          {where} ORDER BY k.id DESC LIMIT ?""", [*args, limit]).fetchall()

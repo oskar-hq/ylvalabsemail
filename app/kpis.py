@@ -135,13 +135,13 @@ def erstgespraeche(c, von, bis, person=None):
 
 def preisgespraeche(c, von, bis, person=None):
     extra, args = _person_sql("owner", person)
-    return _n(c, f"SELECT COUNT(*) FROM leads WHERE preisgespraech_am >= ? AND preisgespraech_am < ?{extra}",
+    return _n(c, f"SELECT COUNT(*) FROM leads WHERE arbeitsbereich='ylva' AND preisgespraech_am >= ? AND preisgespraech_am < ?{extra}",
               [von, bis, *args])
 
 
 def neue_kunden(c, von, bis, person=None):
     extra, args = _person_sql("owner", person)
-    return _n(c, f"SELECT COUNT(*) FROM leads WHERE stage='kunde' AND stage_at >= ? AND stage_at < ?{extra}",
+    return _n(c, f"SELECT COUNT(*) FROM leads WHERE arbeitsbereich='ylva' AND stage='kunde' AND stage_at >= ? AND stage_at < ?{extra}",
               [von, bis, *args])
 
 

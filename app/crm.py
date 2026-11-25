@@ -12,7 +12,7 @@ import re
 from datetime import date, datetime, timedelta
 from urllib.parse import urlparse
 
-from . import finder, known, leaddb, regions
+from . import finder, known, leaddb
 
 STAGES = [
     ("neu", "Neu", "Passt, noch nicht kontaktiert."),
@@ -85,14 +85,13 @@ def profile(lead):
     size = research.get("groesse") if research.get("groesse") not in (None, "", "unklar") else ""
     if not size and imp.get("groesse"):
         size = f"ca. {imp['groesse']} Mitarbeitende"
-    kreis = regions.KREISE.get(lead.get("kreis") or "", ("",))[0]
     ort = lead.get("city") or (lead.get("address") or "").split(",")[-1].strip()
     host = urlparse(lead.get("website") or "").netloc.removeprefix("www.")
     fehlt = [label for label, value in (("Was sie machen", desc), ("Größe", size),
                                          ("Ansprechperson", lead.get("contact_name")), ("E-Mail", lead.get("email")))
              if not value]
     return {"beschreibung": _first_sentences(desc, 220), "quelle": desc_src if desc else "", "groesse": size,
-            "ort": ort, "adresse": lead.get("address") or "", "kreis": kreis, "km": lead.get("distance_km"),
+            "ort": ort, "adresse": lead.get("address") or "", "km": lead.get("distance_km"),
             "kontakt": lead.get("contact_name") or "", "email": lead.get("email") or "", "telefon": lead.get("phone") or "",
             "web": host, "website": lead.get("website") or "",
             "zeitfresser": (research.get("zeitfresser") or imp.get("zeitfresser") or [])[:2],
@@ -131,7 +130,7 @@ def board(conn, who="alle", me=None):
     rows = conn.execute(f"""
         SELECT l.*, (SELECT MIN(t.faellig) {OPEN_TASK_SUB}) AS next_due,
                (SELECT COUNT(*) {OPEN_TASK_SUB}) AS open_tasks
-        FROM leads l WHERE l.stage IS NOT NULL AND {where}
+        FROM leads l WHERE l.arbeitsbereich=ab() AND l.stage IS NOT NULL AND {where}
         ORDER BY l.unread DESC, IFNULL(l.stage_at, l.updated_at) DESC""", args).fetchall()
     columns = {k: [] for k in STAGE_KEYS}
     for r in rows:
@@ -171,7 +170,7 @@ def complete_task(conn, task_id, author, wer=None):
 TASKS_SQL = """SELECT a.id, a.objekt_id AS lead_id, a.faellig AS due, a.titel AS text, a.person, a.erstellt_von AS created_by,
                       a.erstellt_am AS created_at, l.name, l.stage
                FROM aufgaben a JOIN leads l ON l.id = a.objekt_id
-               WHERE a.objekt_typ = 'lead' AND a.status = 'offen'"""
+               WHERE a.objekt_typ = 'lead' AND a.status = 'offen' AND l.arbeitsbereich = ab()"""
 OPEN_TASK_SUB = "FROM aufgaben t WHERE t.objekt_typ = 'lead' AND t.objekt_id = l.id AND t.status = 'offen'"
 
 
@@ -223,16 +222,16 @@ def website_url(url):
 
 def find_duplicate(conn, name, email, website):
     if email:
-        row = conn.execute("SELECT id, name FROM leads WHERE lower(email)=?", (email.lower(),)).fetchone()
+        row = conn.execute("SELECT id, name FROM leads WHERE arbeitsbereich=ab() AND lower(email)=?", (email.lower(),)).fetchone()
         if row:
             return row
     host = urlparse(website or "").netloc.lower().removeprefix("www.")
     if host:
-        for row in conn.execute("SELECT id, name, website FROM leads WHERE website LIKE ?", (f"%{host}%",)):
+        for row in conn.execute("SELECT id, name, website FROM leads WHERE arbeitsbereich=ab() AND website LIKE ?", (f"%{host}%",)):
             if urlparse(row["website"]).netloc.lower().removeprefix("www.") == host:
                 return row
     if name:
-        return conn.execute("SELECT id, name FROM leads WHERE lower(name)=?", (name.lower(),)).fetchone()
+        return conn.execute("SELECT id, name FROM leads WHERE arbeitsbereich=ab() AND lower(name)=?", (name.lower(),)).fetchone()
     return None
 
 
@@ -261,7 +260,7 @@ def create_lead(conn, data, author, source="hand"):
         "INSERT INTO leads (source_id, created_at, updated_at, name, branche, category, category_label, address, city,"
         " website, email, phone, contact_name, status, stage, stage_at, fit_reason)"
         " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (source_id, now, now, name, (data.get("branche") or "").strip().lower() or "sonstige", "",
+        (leaddb.source_id(source_id), now, now, name, (data.get("branche") or "").strip().lower() or "sonstige", "",
          (data.get("category_label") or data.get("branche") or "").strip() or "Betrieb", address, city,
          website or None, email or None, (data.get("phone") or "").strip() or None,
          (data.get("contact_name") or "").strip() or None, "passt", "neu", now,
@@ -353,7 +352,7 @@ def export_csv(conn, everything=False):
     """CSV für Excel (Semikolon, UTF-8 mit BOM). Standard: alle Betriebe in der Pipeline."""
     where = "1" if everything else "stage IS NOT NULL"
     rows = conn.execute(f"""SELECT l.*, (SELECT MIN(t.faellig) {OPEN_TASK_SUB})
-                            AS next_due FROM leads l WHERE {where} ORDER BY name""").fetchall()
+                            AS next_due FROM leads l WHERE l.arbeitsbereich=ab() AND {where} ORDER BY name""").fetchall()
     out = io.StringIO()
     writer = csv.writer(out, delimiter=";", quoting=csv.QUOTE_MINIMAL)
     writer.writerow([h for h, _ in EXPORT_COLUMNS])
@@ -396,60 +395,3 @@ def record_mail(conn, lead_id, msg, author):
 
 def today():
     return datetime.now().date().isoformat()
-
-# ---------------------------------------------------------------- Karte: wo liegen die passenden Betriebe?
-
-PASSEND = ("passt", "entwurf", "versendet", "beantwortet")
-
-
-def map_points(conn):
-    """Alle bewerteten Betriebe mit Koordinaten, für die Heatmap."""
-    rows = conn.execute("""SELECT id, name, lat, lon, fit_score, status, stage, interest, city, category_label, branche, kreis
-                           FROM leads WHERE lat IS NOT NULL AND lon IS NOT NULL AND NOT (lat = 0 AND lon = 0)
-                             AND fit_score IS NOT NULL""").fetchall()
-    points = []
-    for r in rows:
-        d = dict(r)
-        d["passend"] = (d["status"] in PASSEND or d["stage"] is not None) and d["stage"] != "verloren" \
-            and d["interest"] != "kein_interesse"
-        points.append(d)
-    return points
-
-
-def _km(a, b):
-    # In Schleswig-Holstein reicht die flache Näherung: 1° Breite ≈ 111 km, 1° Länge ≈ 65 km
-    return (((a["lat"] - b["lat"]) * 111) ** 2 + ((a["lon"] - b["lon"]) * 65) ** 2) ** 0.5
-
-
-def hotspots(points, radius_km=12, limit=8):
-    """Gegenden mit den meisten passenden Betrieben, benannt nach dem häufigsten Ort darin. Gedacht für
-    Vor-Ort-Tage: mehrere Termine an einem Tag. Immer die dichteste Stelle zuerst, dann alles im Umkreis von
-    radius_km dazu, dann die nächste dichteste Stelle unter den übrigen Betrieben."""
-    pts = {p["id"]: p for p in points if p["passend"]}
-    cell = lambda p: (int(p["lat"] * 111 // radius_km), int(p["lon"] * 65 // radius_km))  # noqa: E731
-    grid = {}
-    for p in pts.values():
-        grid.setdefault(cell(p), []).append(p)
-    near = {}  # Nachbarn im Umkreis (inklusive sich selbst), über die umliegenden Rasterzellen gesucht
-    for pid, p in pts.items():
-        ci, cj = cell(p)
-        near[pid] = [q["id"] for di in (-1, 0, 1) for dj in (-1, 0, 1) for q in grid.get((ci + di, cj + dj), [])
-                     if _km(p, q) <= radius_km]
-    count = {pid: len(ids) for pid, ids in near.items()}
-    alive, result = set(pts), []
-    while alive and len(result) < limit:
-        center = max(alive, key=lambda pid: (count[pid], pts[pid]["fit_score"] or 0, -pid))
-        items = sorted((pts[q] for q in near[center] if q in alive), key=lambda p: -(p["fit_score"] or 0))
-        for q in items:
-            alive.discard(q["id"])
-            for w in near[q["id"]]:
-                count[w] -= 1
-        towns = [p["city"] for p in items if p["city"]]
-        result.append({
-            "name": max(set(towns), key=towns.count) if towns else "ohne Ortsangabe", "count": len(items),
-            "avg": round(sum(p["fit_score"] or 0 for p in items) / len(items)),
-            "lat": sum(p["lat"] for p in items) / len(items), "lon": sum(p["lon"] for p in items) / len(items),
-            "in_pipeline": sum(1 for p in items if p["stage"]),
-            "top": [{"id": p["id"], "name": p["name"], "score": p["fit_score"]} for p in items[:5]],
-        })
-    return result

@@ -34,7 +34,6 @@ PAGES = [
     ("CRM als Tabelle", "CRM", "crm.board", {"ansicht": "tabelle"}, "tabelle liste sortieren"),
     ("Postfach", "CRM", "crm.inbox", {}, "antworten mails inbox nachrichten"),
     ("Neue Mail schreiben", "Postfach", "crm.compose_mail", {}, "mail senden schreiben email neue nachricht"),
-    ("Karte", "CRM", "crm.heatmap", {}, "map heatmap orte kreise"),
     ("CRM exportieren", "CRM", "crm.export_csv", {}, "export csv excel download"),
     ("Mailer", "Mailer", "compose", {}, "mail schreiben newsletter verschicken"),
     ("Verlauf des Mailers", "Mailer", "history", {}, "gesendet history verlauf"),
@@ -69,7 +68,7 @@ def search():
     like = f"%{q}%"
     rows = db().execute(
         "SELECT id, name, category_label, city, stage, status FROM leads "
-        "WHERE (name LIKE ? OR city LIKE ? OR email LIKE ?) AND IFNULL(rejected_by,'') != 'filter' "
+        "WHERE arbeitsbereich=ab() AND (name LIKE ? OR city LIKE ? OR email LIKE ?) AND IFNULL(rejected_by,'') != 'filter' "
         "ORDER BY stage IS NULL, name LIKE ? DESC, updated_at DESC LIMIT 6",
         (like, like, like, f"{q}%")).fetchall()
     leads = [{"t": r["name"], "s": " · ".join(x for x in ("Betrieb", r["category_label"], r["city"]) if x),

@@ -199,7 +199,7 @@ def anlegen(c, wer, lead_id, titel="", preis_einmal=None, pauschale_monat=None, 
     """Projekt für einen Kunden anlegen (Status „beauftragt“) mit den ersten Aufgaben: AV-Vertrag, Rechnung,
     Anforderungstermin."""
     from . import firma, leaddb
-    lead = leaddb.get_lead(c, lead_id)
+    lead = leaddb.get_lead(c, lead_id, alle=True)
     if not lead:
         raise ProjektError("Diesen Kunden gibt es nicht.")
     v_std, t_std = _verantwortliche(c)

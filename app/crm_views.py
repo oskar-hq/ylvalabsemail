@@ -4,7 +4,7 @@ from datetime import date
 
 from flask import Blueprint, Response, abort, g, jsonify, render_template, request
 
-from . import agent, branchentest, crm, leaddb, mailbox, regions, team
+from . import agent, arbeitsbereiche, branchentest, crm, leaddb, mailbox, team
 from .leads_views import db, lead_or_404, me, status_payload, who
 from .main import SETTINGS, darf, login_required
 
@@ -151,56 +151,6 @@ def export_csv():
                     headers={"Content-Disposition": f'attachment; filename="{name}"'})
 
 
-@bp.get("/crm/karte")
-@login_required
-def heatmap():
-    points = crm.map_points(db())
-    store = leaddb.kv_get(db(), "regionen", {}) or {}
-    kreise = regions.summary(store)
-    per_kreis = {}
-    for p in points:
-        if p["passend"] and p.get("kreis"):
-            per_kreis[p["kreis"]] = per_kreis.get(p["kreis"], 0) + 1
-    for k in kreise:
-        k["passend"] = per_kreis.get(k["key"], 0)
-    geo = leaddb.kv_get(db(), "kreise_geo") or {}
-    return render_template("karte.html", account=g.account, points=points, hotspots=crm.hotspots(points),
-                           kreise=kreise, geo=geo, stand=store.get("stand") or {}, kinds=regions.KINDS,
-                           has_stats=bool(store.get("gewerbe") or store.get("bau")), top=regions.TOP,
-                           stage_labels=crm.STAGE_LABELS, st=status_payload())
-
-
-@bp.post("/crm/regionen/import")
-@login_required
-def import_region_stats():
-    """CSV mit Werten je Kreis (Gewerbeanmeldungen, Baugenehmigungen oder Einwohner) übernehmen."""
-    kind = request.form.get("kind", "")
-    file = request.files.get("file")
-    if kind not in regions.KINDS or not file:
-        return jsonify(error="Bitte Art der Zahlen wählen und eine CSV-Datei anhängen."), 400
-    values = regions.parse_stats_csv(file.read())
-    if len(values) < 5:
-        return jsonify(error=f"Nur {len(values)} Kreise erkannt. Erwartet wird eine Zeile je Kreis mit Kreisschlüssel "
-                             "(z. B. 01058) oder Kreisname und dem Wert dahinter."), 400
-    store = leaddb.kv_get(db(), "regionen", {}) or {}
-    store[kind] = values
-    label = request.form.get("label", "").strip() or "ohne Zeitangabe"
-    store.setdefault("stand", {})[kind] = f"{label} · importiert {crm.fmt_day(crm.today())} von {who()}"
-    leaddb.kv_set(db(), "regionen", store)
-    return jsonify(ok=True, count=len(values), missing=[regions.KREISE[k][0] for k in regions.KREISE if k not in values])
-
-
-@bp.post("/crm/regionen/grenzen")
-@login_required
-def load_borders():
-    """Kreisgrenzen (neu) laden lassen; das macht der Hintergrund-Arbeiter."""
-    if not SETTINGS["LEADS_WORKER"]:
-        return jsonify(error="Der Hintergrund-Arbeiter ist aus (LEADS_WORKER=false)."), 400
-    leaddb.kv_set(db(), "request:kreise", True)
-    agent.wake()
-    return jsonify(ok=True, message="Die Kreisgrenzen werden geladen. Das dauert etwa eine Minute.")
-
-
 # ---------------------------------------------------------------- Postfach: Antworten lesen und direkt antworten
 
 
@@ -208,9 +158,15 @@ def load_borders():
 @login_required
 def inbox():
     wer = "alle" if request.args.get("wer") == "alle" or not me() else "meine"
+    ordner = request.args.get("ordner") if request.args.get("ordner") in mailbox.ORDNER else "haupt"
     from . import posteingang
-    return render_template("inbox.html", account=g.account, groups=mailbox.grouped(db(), me() if wer == "meine" else None),
-                           weitere=posteingang.postfaecher(db(), nur_aktive=True),
+    person = me() if wer == "meine" else None
+    return render_template("inbox.html", account=g.account, ordner=ordner, ordner_namen=mailbox.ORDNER,
+                           ordner_zahlen=mailbox.ordner_zahlen(db(), person),
+                           fehler=mailbox.fehler_liste(db()) if ordner == "fehler" else [],
+                           fehler_ordner=agent.S("FEHLER_ORDNER"),
+                           groups=mailbox.grouped(db(), person, ordner if ordner != "fehler" else "haupt"),
+                           weitere=posteingang.fuer_person(db(), me()) if me() and not arbeitsbereiche.ist_kunde() else [],
                            moods=mailbox.MOODS, wer=wer, people=team.names(db()),
                            inbox_status=leaddb.kv_get(db(), "inbox_status"), ready=_mail_ready(),
                            st=status_payload())
@@ -220,7 +176,7 @@ def _mail_ready():
     """Kann die App Mails schicken und abrufen? None = ja, sonst was fehlt."""
     if not agent.outreach_configured():
         return "Das Akquise-Postfach ist noch nicht eingetragen."
-    if not SETTINGS["IMAP_HOST"]:
+    if not agent.S("IMAP_HOST"):
         return "Der Posteingang (IMAP) fehlt, Antworten kommen dann nicht in die App."
     return None
 
@@ -294,7 +250,7 @@ def compose_mail():
         return jsonify(error="Bitte eine gültige E-Mail-Adresse eintragen (eine Adresse)."), 400
     if not subject or not text:
         return jsonify(error="Bitte Betreff und Text schreiben."), 400
-    row = c.execute("SELECT id FROM leads WHERE lower(email)=? ORDER BY id DESC LIMIT 1", (to,)).fetchone()
+    row = c.execute("SELECT id FROM leads WHERE arbeitsbereich=ab() AND lower(email)=? ORDER BY id DESC LIMIT 1", (to,)).fetchone()
     if row:
         lead = leaddb.get_lead(c, row["id"])
         if lead["status"] != "kontakt":
@@ -305,10 +261,10 @@ def compose_mail():
         now = leaddb.now()
         cur = c.execute("INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, "
                         "category_label, email, status, fit_reason) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                        (f"mail:{to}", now, now, request.form.get("name", "").strip() or to, "sonstige", "", "Kontakt",
+                        (leaddb.source_id(f"mail:{to}"), now, now, request.form.get("name", "").strip() or to, "sonstige", "", "Kontakt",
                          to, "kontakt", "Von euch angeschrieben."))
         c.commit()
-        lead_id = cur.lastrowid or c.execute("SELECT id FROM leads WHERE source_id=?", (f"mail:{to}",)).fetchone()["id"]
+        lead_id = cur.lastrowid or c.execute("SELECT id FROM leads WHERE source_id=?", (leaddb.source_id(f"mail:{to}"),)).fetchone()["id"]
         lead = leaddb.get_lead(c, lead_id)
     if lead["status"] == "gesperrt":
         return jsonify(error="Diese Adresse möchte keine Nachrichten mehr bekommen."), 400

@@ -68,7 +68,7 @@ def _kurzdatum(value):
 @bp.app_context_processor
 def _leads_globals():
     return {"lead_status_labels": leaddb.STATUS_LABELS, "interest_labels": leaddb.INTEREST_LABELS,
-            "tab_of": leaddb.tab_of, "is_due": leaddb.is_due, "followup_days": leaddb.FOLLOWUP_DAYS,
+            "tab_of": leaddb.tab_of, "is_due": leaddb.is_due, "followup_days": leaddb.followup_days(),
             "stages": crm.STAGES, "stage_labels": crm.STAGE_LABELS, "fmt_day": crm.fmt_day,
             "leads_todo": lambda: _todo_count(leaddb.tab_counts(db()))}
 
@@ -86,16 +86,16 @@ def status_payload():
     st = agent.status()
     c = db()
     costs = leaddb.cost_summary(c)
-    run = c.execute("SELECT * FROM runs WHERE status IN ('wartet','laeuft') ORDER BY id DESC LIMIT 1").fetchone()
+    run = c.execute("SELECT * FROM runs WHERE arbeitsbereich=ab() AND status IN ('wartet','laeuft') ORDER BY id DESC LIMIT 1").fetchone()
     run_cost = leaddb._sum(c, "run_id = ?", (run["id"],)) if run else None
     cap = SETTINGS["LEADS_MONTHLY_BUDGET_EUR"]
     return {
         "activity": st["activity"], "since": ago(st["since"]), "error": st["error"],
         "warnings": st["warnings"], "email_enabled": st["email_enabled"], "ai": ai.available(),
         "counts": leaddb.tab_counts(c),
-        "unread": c.execute("SELECT COUNT(*) FROM leads WHERE unread=1").fetchone()[0],
+        "unread": c.execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND unread=1").fetchone()[0],
         "due_tasks": crm.due_count(c),
-        "stages": {k: n for k, n in c.execute("SELECT stage, COUNT(*) FROM leads WHERE stage IS NOT NULL GROUP BY stage")}, "rule_min": my("LEADS_RULE_MIN"), "today": crm.today(),
+        "stages": {k: n for k, n in c.execute("SELECT stage, COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND stage IS NOT NULL GROUP BY stage")}, "rule_min": my("LEADS_RULE_MIN"), "today": crm.today(),
         "last_search": leaddb.kv_get(c, "last_search"),
         "run": dict(run, params=json.loads(run["params"])) if run else None,
         "run_eur": money(run_cost["usd"]) if run_cost else 0, "run_tokens": (run_cost["tin"] + run_cost["tout"]) if run_cost else 0,
@@ -236,7 +236,7 @@ def search():
     """Neue Betriebe finden: Lauf starten (Kartensuche und Bewertung) oder mit Claude recherchieren."""
     weights = niches.load(db())
     marks = ",".join("?" * len(weights))
-    waiting_mine = db().execute(f"SELECT COUNT(*) FROM leads WHERE status='kandidat' AND niche IN ({marks})",
+    waiting_mine = db().execute(f"SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND status='kandidat' AND niche IN ({marks})",
                                 list(weights)).fetchone()[0] if weights else 0
     return render_template("search.html", account=g.account, st=status_payload(), rd=run_defaults(),
                            waiting_mine=waiting_mine, report=reports.last_manual(db()),
@@ -299,7 +299,7 @@ def niche_page():
     from .settings_views import is_admin
     c, profile = db(), _profile()
     counts = {r["niche"]: r["n"] for r in c.execute(
-        "SELECT niche, COUNT(*) n FROM leads WHERE status='kandidat' AND niche IS NOT NULL GROUP BY niche")}
+        "SELECT niche, COUNT(*) n FROM leads WHERE arbeitsbereich=ab() AND status='kandidat' AND niche IS NOT NULL GROUP BY niche")}
     return render_template("niches.html", account=g.account, groups=niches.catalog(), weights=niches.load(c, profile),
                            custom=niches.is_custom(c, profile), default_keys=niches.DEFAULT_KEYS, counts=counts,
                            profile=profile, profiles=niches.PROFILE_LABELS, own=niches.has_own(c, profile),
@@ -440,7 +440,7 @@ def estimate():
 def costs():
     c = db()
     runs = []
-    for r in c.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 30").fetchall():
+    for r in c.execute("SELECT * FROM runs WHERE arbeitsbereich=ab() ORDER BY id DESC LIMIT 30").fetchall():
         runs.append({**dict(r), "counts": json.loads(r["counts"]) if r["counts"] else {},
                      "params": json.loads(r["params"]) if r["params"] else {},
                      "eur": money(leaddb._sum(c, "run_id = ?", (r["id"],))["usd"])})
@@ -714,7 +714,7 @@ def _reject(lead, reason):
 
 # ---------------------------------------------------------------- Prüfen per Wischen (gut / nicht gut)
 
-REVIEW_SQL = ("SELECT * FROM leads WHERE status='passt' AND stage IS NULL AND interest IS NULL "
+REVIEW_SQL = ("SELECT * FROM leads WHERE arbeitsbereich=ab() AND status='passt' AND stage IS NULL AND interest IS NULL "
               "AND IFNULL(rejected_by,'')='' ORDER BY fit_score DESC, distance_km LIMIT ?")
 
 
@@ -730,7 +730,7 @@ def review_queue(limit=30):
 
 
 def review_count():
-    return db().execute("SELECT COUNT(*) FROM leads WHERE status='passt' AND stage IS NULL AND interest IS NULL "
+    return db().execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND status='passt' AND stage IS NULL AND interest IS NULL "
                         "AND IFNULL(rejected_by,'')=''").fetchone()[0]
 
 
@@ -879,7 +879,7 @@ def claude():
     template = leaddb.brain_sections(brain, [agent.TEMPLATE_HEADING])
     prompt = claude_research.build_prompt(brain, SETTINGS, count, branche, claude_research.known_hosts(db()),
                                           template, niches.load(db()))
-    waiting = db().execute("SELECT COUNT(*) FROM leads WHERE status='kandidat' AND source_id LIKE 'claude:%'"
+    waiting = db().execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND status='kandidat' AND source_id LIKE 'claude:%'"
                            ).fetchone()[0]
     return render_template("claude.html", account=g.account, prompt=prompt, count=count, branche=branche,
                            branchen=claude_research.BRANCHEN, columns=claude_research.COLUMNS,
@@ -1002,8 +1002,8 @@ def brain():
                                     request.form.get("reason", "").strip() or "Von Hand bearbeitet")
         return redirect(url_for("leads.brain", saved=1 if changed else 0))
     versions = [dict(r) for r in db().execute(
-        "SELECT id, at, author, reason FROM brain_versions ORDER BY id DESC LIMIT 30")]
-    pending = db().execute("SELECT COUNT(*) FROM signals WHERE processed=0").fetchone()[0]
+        "SELECT id, at, author, reason FROM brain_versions WHERE arbeitsbereich=ab() ORDER BY id DESC LIMIT 30")]
+    pending = db().execute("SELECT COUNT(*) FROM signals WHERE arbeitsbereich=ab() AND processed=0").fetchone()[0]
     return render_template("brain.html", account=g.account, content=leaddb.brain(db()), versions=versions,
                            stats=leaddb.branche_stats(db()), pending=pending, saved=request.args.get("saved"),
                            st=status_payload())
@@ -1022,7 +1022,7 @@ def learn_now():
 @bp.get("/leads/gehirn/<int:version_id>")
 @login_required
 def brain_version(version_id):
-    row = db().execute("SELECT content FROM brain_versions WHERE id=?", (version_id,)).fetchone()
+    row = db().execute("SELECT content FROM brain_versions WHERE arbeitsbereich=ab() AND id=?", (version_id,)).fetchone()
     if not row:
         abort(404)
     return Response(row["content"], mimetype="text/plain; charset=utf-8")

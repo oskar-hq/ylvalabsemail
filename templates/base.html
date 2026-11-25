@@ -29,6 +29,15 @@
   <a class="brand" href="{{ url_for('index') }}" aria-label="Ylva Labs, Mein Tag">
     <span class="brand-tile"><span class="mark" aria-hidden="true"><i class="d"></i><i class="d"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i class="d"></i><i class="d"></i></span></span>
   </a>
+  {% set abs_ = g.get('arbeitsbereiche') or [] %}{% if mit_person and abs_|length > 1 %}{% set ab_jetzt = (abs_|selectattr('key', 'equalto', g.arbeitsbereich)|first) %}
+  <details class="ab-pick{{ ' kunde' if g.arbeitsbereich != 'ylva' }}">
+    <summary aria-label="Arbeitsbereich wählen, jetzt: {{ ab_jetzt.name if ab_jetzt else 'Ylva Labs' }}"><span class="ab-dot" aria-hidden="true"></span><span class="ab-name">{{ ab_jetzt.name if ab_jetzt else 'Ylva Labs' }}</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></summary>
+    <div class="account-menu ab-menu">
+      <span class="who-full">Arbeitsbereich: Leads, CRM, Postfach und Gehirn gehören immer zu genau einem.</span>
+      {% for a in abs_ %}<form method="post" action="{{ url_for('arbeitsbereich_wechseln') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="ab" value="{{ a.key }}"><input type="hidden" name="next" value="{{ request.full_path.rstrip('?') }}"><button class="{{ 'on' if a.key == g.arbeitsbereich }}" aria-current="{{ 'true' if a.key == g.arbeitsbereich else 'false' }}">{{ a.name }}{% if a.key != 'ylva' %} <span class="muted small">Kunde</span>{% endif %}</button></form>{% endfor %}
+      {% if darf('einstellungen') %}<a href="{{ url_for('arbeitsbereiche.einstellungen') }}">Arbeitsbereiche verwalten</a>{% endif %}
+    </div>
+  </details>{% endif %}
   <nav aria-label="Hauptnavigation">
     <span class="nav-main">
       {% if mit_person %}<a href="{{ url_for('aufgaben.mein_tag') }}" class="{{ 'on' if sec == 'tag' }}">Mein Tag</a>

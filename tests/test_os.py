@@ -2688,3 +2688,374 @@ class ZusammenfassungWebTest(WebBasis):
         html = self.client.get(f"/kalender/{tid}").get_data(as_text=True)
         self.assertIn("Alles besprochen.", html)
         self.assertEqual(self.post(f"/kalender/{tid}/zusammenfassung", {"text": "x"}).status_code, 403)  # war nicht dabei
+
+
+# ---------------------------------------------------------------- Stufe 11: Outreach für Kunden (Arbeitsbereiche)
+
+def kunde_anlegen(c, name="Kunde A", postfach=True, **werte):
+    """Arbeitsbereich für einen Kunden, mit Akquise-Postfach (vertrieb@kunde-a.de) und Werten aus FELDER."""
+    from app import arbeitsbereiche, posteingang
+    key = arbeitsbereiche.anlegen(c, "oskar", name)
+    pid = None
+    if postfach:
+        pid = posteingang.postfach_speichern(c, "oskar", None, {
+            "name": f"Vertrieb {name}", "adresse": f"vertrieb@{key}.de", "passwort": "geheim",
+            "imap_host": "imap.kunde.de", "smtp_host": "smtp.kunde.de", "aktiv": "1"})
+    form = {"name": name, "aktiv": "1", "postfach_id": str(pid or ""), **werte}
+    arbeitsbereiche.speichern(c, "oskar", key, form)
+    return key
+
+
+class ArbeitsbereicheTest(unittest.TestCase):
+    def setUp(self):
+        from app import arbeitsbereiche, known
+        self.ab, self.known = arbeitsbereiche, known
+        self.c = frische_db()
+        self.addCleanup(arbeitsbereiche.cache_leeren)
+        self.kunde = kunde_anlegen(self.c, "Kunde A", LEADS_SENDER_NAME="Maria Muster", DEFAULT_FOOTER="Kunde A GmbH, Hamburg")
+        self.ylva_lead = lead_anlegen(self.c, "Tischlerei Ylva", email="info@tischlerei-ylva.de", stage="neu")
+        with arbeitsbereiche.im(self.kunde):
+            self.kunden_lead = lead_anlegen(self.c, "Bäckerei Kunde", email="info@baeckerei-kunde.de", stage="neu")
+
+    def test_neue_zeilen_gehoeren_zum_aktiven_arbeitsbereich(self):
+        ab = dict(self.c.execute("SELECT id, arbeitsbereich FROM leads").fetchall())
+        self.assertEqual(ab[self.ylva_lead], "ylva")
+        self.assertEqual(ab[self.kunden_lead], self.kunde)
+        with self.ab.im(self.kunde):
+            leaddb.add_signal(self.c, "gut", "passt gut", self.kunden_lead)
+            leaddb.save_brain(self.c, "# Gehirn Kunde A\n", "Oskar", "Start")
+        self.assertEqual(self.c.execute("SELECT arbeitsbereich FROM signals").fetchone()[0], self.kunde)
+        self.assertEqual(self.c.execute("SELECT arbeitsbereich FROM brain_versions").fetchone()[0], self.kunde)
+
+    def test_lead_aus_a_ist_in_b_nie_sichtbar(self):
+        from app import mailbox
+        mailbox.add(self.c, self.kunden_lead, "in", "Klingt gut", subject="Re: Hallo", from_addr="info@baeckerei-kunde.de",
+                    read=False)
+        mailbox.add(self.c, self.ylva_lead, "in", "Gern", subject="Re: Hallo", from_addr="info@tischlerei-ylva.de",
+                    read=False)
+        for ab, eigen, fremd in (("ylva", self.ylva_lead, self.kunden_lead), (self.kunde, self.kunden_lead, self.ylva_lead)):
+            with self.ab.im(ab):
+                self.assertIsNotNone(leaddb.get_lead(self.c, eigen))
+                self.assertIsNone(leaddb.get_lead(self.c, fremd))
+                self.assertIsNotNone(leaddb.get_lead(self.c, fremd, alle=True))  # Firmen-OS darf alle
+                ids = [l["id"] for col in crm.board(self.c) for l in col[3]]
+                self.assertEqual(ids, [eigen])
+                self.assertEqual([x["id"] for x in mailbox.conversations(self.c)], [eigen])
+                self.assertEqual(mailbox.unread_count(self.c), 1)
+                self.assertEqual(sum(1 for _ in crm.export_csv(self.c, everything=True).splitlines()) - 1, 1)
+                self.assertEqual(leaddb.tab_counts(self.c)["passt"], 1)
+
+    def test_derselbe_betrieb_darf_in_zwei_arbeitsbereichen_sein(self):
+        daten = {"name": "Malerei Blau", "city": "Kiel", "email": "info@malerei-blau.de", "website": "malerei-blau.de"}
+        a = crm.create_lead(self.c, dict(daten), "Oskar")
+        with self.ab.im(self.kunde):
+            self.assertIsNone(self.known.find(self.c, daten["name"], daten["city"], email=daten["email"]))
+            b = crm.create_lead(self.c, dict(daten), "Oskar")
+        self.assertNotEqual(a, b)
+        sids = [r[0] for r in self.c.execute("SELECT source_id FROM leads WHERE name='Malerei Blau' ORDER BY id")]
+        self.assertTrue(sids[1].endswith(f"@ab:{self.kunde}"))
+        self.assertEqual(self.known.source_of(sids[1]), "hand")
+
+    def test_gespeicherte_werte_und_gehirn_je_arbeitsbereich(self):
+        leaddb.kv_set(self.c, "blocklist", ["konkurrenz.de"])
+        with self.ab.im(self.kunde):
+            self.assertEqual(leaddb.kv_get(self.c, "blocklist", []), [])
+            self.assertIn("Gehirn für einen Kunden", leaddb.brain(self.c))
+            self.assertNotIn("Ylva Labs ist", leaddb.brain(self.c))
+        self.assertEqual(leaddb.kv_get(self.c, "blocklist"), ["konkurrenz.de"])
+        self.assertIn("Ylva Labs", leaddb.brain(self.c))
+
+    def test_einstellungen_des_kunden(self):
+        from app import agent
+        with self.ab.im(self.kunde):
+            self.assertEqual(agent.S("OUTREACH_USER"), "vertrieb@kunde-a.de")
+            self.assertEqual(agent.S("OUTREACH_PASSWORD"), "geheim")
+            self.assertEqual(agent.S("SMTP_HOST"), "smtp.kunde.de")
+            self.assertEqual(agent.S("ORG_NAME"), "Kunde A")
+            self.assertEqual(agent.S("LEADS_SENDER_NAME"), "Maria Muster")
+            self.assertFalse(agent.S("OUTREACH_EMAIL"))  # Standard aus, bis der Kunde es bestätigt
+            self.assertEqual(agent.S("LEADS_RULE_MIN"), agent.CFG["settings"]["LEADS_RULE_MIN"])  # Rückfall
+        ohne = kunde_anlegen(self.c, "Kunde ohne Postfach", postfach=False)
+        with self.ab.im(ohne):
+            self.assertEqual(agent.S("OUTREACH_USER"), "")  # nie das Postfach von Ylva Labs
+            self.assertFalse(agent.outreach_configured())
+
+    def test_versand_aus_dem_postfach_des_kunden(self):
+        from unittest import mock
+        from app import agent, posteingang
+        gesendet = []
+        smtp = mock.Mock(send_message=gesendet.append)
+        self.ab.speichern(self.c, "oskar", self.kunde, {
+            "name": "Kunde A", "aktiv": "1", "postfach_id": str(self.ab.get(self.c, self.kunde)["postfach_id"]),
+            "LEADS_SENDER_NAME": "Maria Muster", "DEFAULT_FOOTER": "Kunde A GmbH, Hamburg", "OUTREACH_EMAIL": "1"})
+        with self.ab.im(self.kunde), mock.patch.object(posteingang, "SMTP", lambda p: smtp), \
+                mock.patch.object(posteingang, "IMAP", side_effect=Exception("kein IMAP")), \
+                mock.patch.dict(agent.CFG, {"smtp_connect": mock.Mock(side_effect=AssertionError("Ylva-Postfach"))}):
+            leaddb.update_lead(self.c, self.kunden_lead, status="entwurf", subject="Hallo", greeting="Guten Tag,",
+                               body="Kurze Frage.", owner="oskar")
+            agent.send_outreach(self.c, leaddb.get_lead(self.c, self.kunden_lead), "Oskar")
+        self.assertEqual(len(gesendet), 1)
+        msg = gesendet[0]
+        self.assertIn("vertrieb@kunde-a.de", msg["From"])
+        self.assertNotIn("Ylva", msg["From"])
+        self.assertNotIn("Oskar", msg.as_string())
+        self.assertIn("Maria Muster", msg.as_string())
+
+    def test_ohne_erlaubnis_kein_erstkontakt_per_mail(self):
+        from app import agent
+        with self.ab.im(self.kunde):
+            leaddb.update_lead(self.c, self.kunden_lead, status="entwurf", subject="Hallo", body="x")
+            with self.assertRaises(RuntimeError):
+                agent.send_outreach(self.c, leaddb.get_lead(self.c, self.kunden_lead), "Oskar")
+
+    def test_zugriff_je_person(self):
+        self.assertTrue(self.ab.darf(self.c, "finn", self.kunde))  # leere Liste: alle mit Leads oder CRM
+        self.ab.speichern(self.c, "oskar", self.kunde, {"name": "Kunde A", "aktiv": "1", "personen": ["finn"]})
+        self.assertTrue(self.ab.darf(self.c, "finn", self.kunde))
+        self.assertFalse(self.ab.darf(self.c, "hamza", self.kunde))
+        self.assertTrue(self.ab.darf(self.c, "oskar", self.kunde))  # verwaltet Personen: sieht alle
+        self.assertEqual([a["key"] for a in self.ab.fuer_person(self.c, "hamza")], ["ylva"])
+
+    def test_akquise_postfach_des_kunden_nicht_im_posteingang(self):
+        from app import posteingang
+        pid = self.ab.get(self.c, self.kunde)["postfach_id"]
+        self.assertNotIn(pid, [p["id"] for p in posteingang.fuer_person(self.c, "oskar")])
+        with self.ab.im(self.kunde):
+            self.assertEqual([p["id"] for p in posteingang.fuer_person(self.c, "oskar")], [pid])
+        abgerufen = []
+        from unittest import mock
+        with mock.patch.object(posteingang, "abrufen", lambda c, p: abgerufen.append(p) or 0):
+            posteingang.takt(self.c)
+        self.assertNotIn(pid, abgerufen)
+
+    def test_freigaben_nennen_den_kunden(self):
+        from app import freigaben
+        with self.ab.im(self.kunde):
+            leaddb.update_lead(self.c, self.kunden_lead, status="entwurf", owner="oskar")
+        offen = [f for f in freigaben._entwuerfe_offen(self.c, "oskar") if f["oid"] == self.kunden_lead]
+        self.assertEqual(len(offen), 1)
+        self.assertIn("Kunde A", offen[0]["eyebrow"])
+
+
+class ArbeitsbereicheWebTest(WebBasis):
+    def setUp(self):
+        super().setUp()
+        from app import arbeitsbereiche
+        self.ab = arbeitsbereiche
+        self.kunde = kunde_anlegen(self.c, "Kunde Web")
+        with arbeitsbereiche.im(self.kunde):
+            self.lid = lead_anlegen(self.c, "Gärtnerei Kunde Web", stage="neu")
+
+        def aufraeumen():
+            self.c.execute("DELETE FROM leads WHERE arbeitsbereich=?", (self.kunde,))
+            self.c.execute("DELETE FROM postfaecher WHERE id=(SELECT postfach_id FROM arbeitsbereiche WHERE key=?)",
+                           (self.kunde,))
+            self.c.execute("DELETE FROM arbeitsbereiche WHERE key=?", (self.kunde,))
+            self.c.commit()
+            arbeitsbereiche.cache_leeren()
+        self.addCleanup(aufraeumen)
+
+    def test_auswahl_und_wechsel(self):
+        html = self.client.get("/leads").get_data(as_text=True)
+        self.assertIn("ab-pick", html)
+        self.assertIn("Kunde Web", html)
+        self.assertNotIn("Gärtnerei Kunde Web", self.client.get("/crm?wer=alle").get_data(as_text=True))
+        r = self.post("/arbeitsbereich", {"ab": self.kunde, "next": "/crm?wer=alle"})
+        self.assertEqual(r.headers["Location"], "/crm?wer=alle")
+        self.assertIn("Gärtnerei Kunde Web", self.client.get("/crm?wer=alle").get_data(as_text=True))
+        self.post("/arbeitsbereich", {"ab": "ylva", "next": f"/leads/{self.lid}"})
+        self.assertEqual(self.client.get("/crm").status_code, 200)
+
+    def test_link_auf_lead_wechselt_den_arbeitsbereich(self):
+        r = self.client.get(f"/leads/{self.lid}")
+        self.assertEqual(r.status_code, 200)
+        with self.client.session_transaction() as sess:
+            self.assertEqual(sess["ab"], self.kunde)
+
+    def test_ohne_zugang_kein_lead_und_kein_wechsel(self):
+        self.ab.speichern(self.c, "oskar", self.kunde, {"name": "Kunde Web", "aktiv": "1", "personen": ["finn"]})
+        self.als("hamza")
+        self.assertEqual(self.client.get(f"/leads/{self.lid}").status_code, 404)
+        self.assertEqual(self.post("/arbeitsbereich", {"ab": self.kunde}).status_code, 403)
+        self.assertEqual(self.post(f"/crm/{self.lid}/stufe", {"stage": "kunde"}).status_code, 404)
+
+    def test_einstellungen_seite(self):
+        self.assertIn("Kunde Web", self.client.get("/einstellungen/arbeitsbereiche").get_data(as_text=True))
+        html = self.client.get(f"/einstellungen/arbeitsbereiche/{self.kunde}").get_data(as_text=True)
+        self.assertIn("Akquise-Postfach des Kunden", html)
+        r = self.post(f"/einstellungen/arbeitsbereiche/{self.kunde}", {"name": "Kunde Web", "aktiv": "1",
+                                                                         "LEADS_RULE_MIN": "abc"},
+                      headers={"X-Requested-With": "fetch"})
+        self.assertEqual(r.status_code, 400)
+
+
+class OutreachKundeTest(unittest.TestCase):
+    """Stufe 11, Schritt 5 und 6: Ergebnisse im Kunden-Bereich und auf der Monatsrechnung."""
+
+    def setUp(self):
+        from app import arbeitsbereiche
+        self.ab = arbeitsbereiche
+        self.c = frische_db()
+        self.addCleanup(arbeitsbereiche.cache_leeren)
+        self.pid = projekt_anlegen(self.c, "Hansen Outreach", "kunde@hansen-outreach.de")
+        self.kunde = kunde_anlegen(self.c, "Hansen", projekt_id=str(self.pid), PAUSCHALE_EUR="490",
+                                   KI_WEITERBERECHNEN="1")
+        vormonat = (date.today().replace(day=1) - timedelta(days=3)).isoformat() + "T10:00:00"
+        with arbeitsbereiche.im(self.kunde):
+            self.a = lead_anlegen(self.c, "Interessent A", stage="gespraech", interest="qualified", email="a@a.de",
+                                  sent_at=vormonat, replied_at=vormonat, contact_name="Herr A", fit_reason="intern!")
+            lead_anlegen(self.c, "Ohne Antwort B", stage="kontaktiert", sent_at=vormonat)
+            leaddb.record_usage(self.c, "entwurf", "m", {"input": 1, "output": 1, "cache_write": 0, "cache_read": 0},
+                                1.0)
+            leaddb.kv_set(self.c, "x", 1)
+        self.c.execute("UPDATE ai_usage SET at=?", (vormonat,))
+        self.c.commit()
+
+    def test_zahlen_und_kontakte_ohne_interna(self):
+        o = self.ab.outreach_zahlen(self.c, self.kunde)
+        self.assertEqual(o["gesamt"]["angeschrieben"], 2)
+        self.assertEqual(o["gesamt"]["antworten"], 1)
+        self.assertEqual(o["gesamt"]["interesse"], 1)
+        self.assertEqual([k["name"] for k in o["kontakte"]], ["Interessent A"])
+        self.assertNotIn("intern!", str(o))
+        self.assertEqual(self.ab.outreach_zahlen(self.c, "ylva")["gesamt"]["angeschrieben"], 0)
+
+    def test_kunden_bereich_zeigt_outreach(self):
+        from app import portal
+        z = {"projekt_id": self.pid, "email": "kunde@hansen-outreach.de", "name": "Frau Hansen"}
+        a = portal.ansicht(self.c, z)
+        self.assertEqual(a["outreach"]["gesamt"]["interesse"], 1)
+        portal.regeln_speichern(self.c, "oskar", {**portal.regeln(self.c), "zeige_outreach": ""})
+        self.assertIsNone(portal.ansicht(self.c, z)["outreach"])
+
+    def test_monatsrechnung_mit_outreach_und_ki(self):
+        from app import finanzen
+        rid = finanzen.monat_anlegen(self.c, "oskar", self.pid)
+        texte = {p["text"]: p["betrag"] for p in finanzen.get(self.c, rid)["positionen"]}
+        outreach = [t for t in texte if t.startswith("Outreach")]
+        self.assertEqual(len(outreach), 1)
+        self.assertIn("2 Betriebe angeschrieben", outreach[0])
+        self.assertEqual(texte[outreach[0]], 490)
+        ki = [t for t in texte if t.startswith("KI-Kosten")]
+        self.assertEqual(len(ki), 1)
+        self.assertGreater(texte[ki[0]], 0)
+
+
+class FehlerOrdnerTest(unittest.TestCase):
+    """Postfach: Zustellfehler und Abwesenheit im Ordner „Fehler“, Meldungen nur für Angeschriebene."""
+
+    def setUp(self):
+        from unittest import mock
+        from app import agent
+        self.agent = agent
+        self.c = frische_db()
+        self.lid = lead_anlegen(self.c, "Tischlerei Fehler", email="info@tischlerei-fehler.de", stage="kontaktiert",
+                                status="versendet", message_id="<outreach-1@ylvalabs.de>", sent_at=HEUTE)
+        self.verschoben = []
+        settings = dict(agent.CFG["settings"], OUTREACH_USER="k@ylvalabs.de", OUTREACH_PASSWORD="x", IMAP_HOST="imap.x",
+                        FEHLER_ORDNER="Fehler")
+        p = mock.patch.dict(agent.CFG, {"settings": settings})
+        p.start()
+        self.addCleanup(p.stop)
+
+    def _mail(self, frm, subject, text, mid, ctype=None, **headers):
+        from email.message import EmailMessage
+        from email.utils import format_datetime
+        from datetime import datetime
+        m = EmailMessage()
+        m["From"], m["Subject"], m["Message-ID"] = frm, subject, mid
+        m["Date"] = format_datetime(datetime.now().astimezone())
+        for k, v in headers.items():
+            m[k.replace("_", "-")] = v
+        m.set_content(text)
+        return m.as_bytes()
+
+    def _abrufen(self, mails):
+        from unittest import mock
+        test = self
+
+        class Imap(FakeImap):
+            def __init__(self):
+                super().__init__(mails)
+                self.readonly = None
+
+            def select(self, *a, **kw):
+                self.readonly = kw.get("readonly")
+                return "OK", [b"1"]
+
+            def fetch(self, num, spec):
+                raw = mails[int(num) - 1]
+                if "HEADER" in spec:
+                    import email as em
+                    return "OK", [(b"x", f"Message-ID: {em.message_from_bytes(raw)['Message-ID']}\r\n\r\n".encode())]
+                return "OK", [(b"x", raw)]
+
+            def create(self, name):
+                return "OK", []
+
+            def copy(self, num, name):
+                test.verschoben.append((num, name))
+                return "OK", []
+
+            def store(self, *a):
+                return "OK", []
+
+            def expunge(self):
+                return "OK", []
+        self.imap = Imap()
+        with mock.patch.object(self.agent, "_imap", return_value=self.imap):
+            return self.agent.check_inbox(self.c)
+
+    def test_zustellfehler_und_abwesenheit_in_den_ordner_fehler(self):
+        from app import mailbox
+        bounce = self._mail("Mail Delivery System <MAILER-DAEMON@strato.de>", "Undelivered Mail Returned to Sender",
+                            "Die Mail an info@tischlerei-fehler.de konnte nicht zugestellt werden.\n"
+                            "Final-Recipient: rfc822; info@tischlerei-fehler.de\n"
+                            "Message-ID: <outreach-1@ylvalabs.de>", "<bounce@strato>")
+        abwesend = self._mail("info@tischlerei-fehler.de", "Abwesenheitsnotiz: Ein Gedanke", "Ich bin bis Montag nicht "
+                              "im Büro.", "<ooo@x>", In_Reply_To="<outreach-1@ylvalabs.de>", Auto_Submitted="auto-replied")
+        echt = self._mail("info@tischlerei-fehler.de", "Re: Ein Gedanke", "Klingt gut, rufen Sie an.", "<echt@x>",
+                          In_Reply_To="<outreach-1@ylvalabs.de>")
+        self.assertEqual(self._abrufen([bounce, abwesend, echt]), 1)  # nur die echte Antwort zählt
+        self.assertFalse(self.imap.readonly)
+        self.assertEqual([n for n, _ in self.verschoben], [b"1", b"2"])
+        self.assertTrue(all(o == '"Fehler"' for _, o in self.verschoben))
+        fehler = mailbox.fehler_liste(self.c)
+        self.assertEqual(len(fehler), 2)
+        self.assertTrue(all(f["lead_id"] == self.lid for f in fehler))
+        self.assertEqual(mailbox.ordner_zahlen(self.c)["fehler"], 2)
+        self.assertEqual(mailbox.unread_count(self.c), 1)
+        self.assertEqual(mailbox.last_incoming(self.c, self.lid)["subject"], "Re: Ein Gedanke")
+        titel = [r["title"] for r in self.c.execute("SELECT title FROM notices")]
+        self.assertFalse(any("Undelivered" in t or "Abwesen" in t for t in titel))
+        lead = leaddb.get_lead(self.c, self.lid)
+        self.assertEqual(lead["interest"], "qualified")  # die echte Antwort wurde eingeordnet
+
+    def test_ohne_ordner_bleibt_der_posteingang_unberuehrt(self):
+        from unittest import mock
+        with mock.patch.dict(self.agent.CFG["settings"], {"FEHLER_ORDNER": ""}):
+            self._abrufen([self._mail("MAILER-DAEMON@strato.de", "Undelivered Mail", "x", "<b2@strato>")])
+        self.assertTrue(self.imap.readonly)
+        self.assertEqual(self.verschoben, [])
+
+    def test_unbekannte_ohne_meldung(self):
+        from app import mailbox
+        self._abrufen([self._mail("Fremd <fremd@irgendwo.de>", "Frage", "Hallo, kurze Frage.", "<f@x>")])
+        self.assertEqual(self.c.execute("SELECT COUNT(*) FROM notices").fetchone()[0], 0)
+        self.assertEqual(len(mailbox.conversations(self.c, ordner="sonstige")), 1)
+        self.assertEqual(mailbox.conversations(self.c), [])
+
+
+class WiedervorlageJeArbeitsbereichTest(unittest.TestCase):
+    def test_heute_dran_nur_im_eigenen_arbeitsbereich(self):
+        from app import arbeitsbereiche
+        c = frische_db()
+        self.addCleanup(arbeitsbereiche.cache_leeren)
+        kunde = kunde_anlegen(c, "Kunde WV", postfach=False)
+        lid = lead_anlegen(c, "Ylva-Lead", stage="neu")
+        crm.add_task(c, lid, HEUTE, "Anrufen", "Oskar", person="oskar")
+        self.assertEqual(len(crm.open_tasks(c)), 1)
+        self.assertEqual(crm.due_count(c), 1)
+        with arbeitsbereiche.im(kunde):
+            self.assertEqual(crm.open_tasks(c), [])
+            self.assertEqual(crm.due_count(c), 0)
