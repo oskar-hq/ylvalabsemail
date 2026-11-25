@@ -27,7 +27,7 @@ from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid, parseaddr, parsedate_to_datetime
 from urllib.parse import urlparse
 
-from . import ai, crm, emailbuild, finder, known, leaddb, mailbox, niches, regions, reports, schedule, scoring, team, \
+from . import ai, arbeitsbereiche, crm, emailbuild, finder, known, leaddb, mailbox, niches, regions, reports, schedule, scoring, team, \
     websearch, webpush
 
 log = logging.getLogger("ylva.leads")
@@ -63,7 +63,11 @@ def conn():
 
 
 def S(key):
-    """Einstellung; während eines Laufs oder einer Aktion einer Person gelten ihre eigenen Werte (team.PERSONAL)."""
+    """Einstellung; im Arbeitsbereich eines Kunden seine Werte (Postfach, Absender, Suchgebiet, siehe
+    arbeitsbereiche.FELDER), während eines Laufs oder einer Aktion einer Person ihre eigenen (team.PERSONAL)."""
+    ab = arbeitsbereiche.wert(key)
+    if arbeitsbereiche.gesetzt(ab):
+        return ab
     own = getattr(_local, "prefs", None)
     if own and key in own:
         return own[key]
@@ -85,8 +89,16 @@ class acting_as:
         _local.person, _local.prefs = None, {}
 
 
+def mail_settings():
+    """Einstellungen für emailbuild (Firmenname, Fußzeile …) im aktiven Arbeitsbereich."""
+    return {**CFG["settings"], **{k: S(k) for k in ("ORG_NAME", "DEFAULT_FOOTER", "LEADS_SENDER_NAME")}}
+
+
 def writer_name(c, lead=None):
-    """Name der Person, die gerade schreibt (sonst die zuständige Person, sonst der Name aus den Einstellungen)."""
+    """Name der Person, die gerade schreibt (sonst die zuständige Person, sonst der Name aus den Einstellungen).
+    Im Arbeitsbereich eines Kunden schreiben wir in seinem Namen: die Unterschrift aus dem Arbeitsbereich."""
+    if arbeitsbereiche.ist_kunde():
+        return S("LEADS_SENDER_NAME") or S("ORG_NAME")
     key = getattr(_local, "person", None) or (lead or {}).get("owner")
     return (team.get(c, key) or {}).get("name") or S("LEADS_SENDER_NAME")
 
@@ -138,6 +150,8 @@ def vapid():
 
 
 def notify(c, title, body, url="/leads", push=False):
+    if arbeitsbereiche.ist_kunde():  # Meldungen sind gemeinsam: dazuschreiben, für welchen Kunden
+        title = f"{arbeitsbereiche.name(c)}: {title}"
     """Meldung in der App (Glocke oben). Aufs Handy (Push) nur mit push=True: das ist nur das Ende eines Laufs,
     den jemand von Hand gestartet hat (und der Test), damit das Handy nicht ständig klingelt. Per Mail kommen keine
     Benachrichtigungen mehr, sie landeten sonst zusätzlich in Apple Mail oder Gmail."""
@@ -543,13 +557,15 @@ def upgrade_template_lines(c):
 def template_text(c, member=None):
     """Die Vorlage als Text („Betreff: …“, „Anrede: …“, Leerzeile, Text): die eigene der Person, sonst die aus
     dem Gehirn (Abschnitt „Vorlage (ohne KI)“)."""
-    upgrade_template(c)
-    upgrade_template_lines(c)
-    own = (team.settings(c, member)["vorlage"] if member else "") or ""
-    if own.strip():
+    if not arbeitsbereiche.ist_kunde():  # einmalige Änderungen an unserer eigenen Vorlage
+        upgrade_template(c)
+        upgrade_template_lines(c)
+    own = (team.settings(c, member)["vorlage"] if member and not arbeitsbereiche.ist_kunde() else "") or ""
+    if own.strip():  # eigene Vorlagen der Personen gelten nur für Ylva Labs, bei Kunden die aus seinem Gehirn
         return own.strip()
+    seed = leaddb.BRAIN_SEED_KUNDE if arbeitsbereiche.ist_kunde() else leaddb.BRAIN_SEED
     section = leaddb.brain_sections(leaddb.brain(c), [TEMPLATE_HEADING]).strip() \
-        or leaddb.brain_sections(leaddb.BRAIN_SEED.read_text(encoding="utf-8"), [TEMPLATE_HEADING]).strip()
+        or leaddb.brain_sections(seed.read_text(encoding="utf-8"), [TEMPLATE_HEADING]).strip()
     text = "\n".join(section.splitlines()[1:]).strip()  # Überschrift weg
     # Die gemeinsame Vorlage stellt die Person vor, die schreibt (früher fest „Oskar Jacobsen“)
     return text.replace("Ich bin Oskar Jacobsen von", "Ich bin {absender} von")
@@ -602,6 +618,8 @@ def template_draft(c, lead_id, member=None):
     lead = leaddb.get_lead(c, lead_id)
     member = member or getattr(_local, "person", None) or lead.get("owner")
     absender = (team.get(c, member) or {}).get("name") or S("LEADS_SENDER_NAME")
+    if arbeitsbereiche.ist_kunde():
+        absender = S("LEADS_SENDER_NAME") or S("ORG_NAME")
     fields = fill_template(lead, template_text(c, member), absender)
     leaddb.update_lead(c, lead_id, status="entwurf", **fields)
     leaddb.add_event(c, lead_id, "draft", "Entwurf aus der Vorlage erstellt (ohne KI).", author="Vorlage")
@@ -716,7 +734,7 @@ def _eur(value):
 def execute_run(c, run_id):
     run = c.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
     p = json.loads(run["params"])
-    with acting_as(c, p.get("person")):  # eigene Einstellungen der Person, die den Lauf gestartet hat
+    with arbeitsbereiche.im(run["arbeitsbereich"]), acting_as(c, p.get("person")):  # eigene Einstellungen der Person, die den Lauf gestartet hat
         return _execute_run(c, run_id, run, p)
 
 
@@ -922,13 +940,15 @@ def send_outreach(c, lead, sent_by, followup=False, sender=None):
         raise RuntimeError("Es gibt noch keinen Text für die Erinnerung.")
     rcpt = {"name": lead["contact_name"] or "", "first": "", "email": lead["email"]}
     snd = team.sender(c, sender or lead.get("owner"), S("ORG_NAME")) if (sender or lead.get("owner")) else None
+    if arbeitsbereiche.ist_kunde():  # im Namen des Kunden: seine Unterschrift, nie die einer Person von uns
+        snd = _sender(c, None)
     form = {**(followup_form(lead) if followup else lead_form(lead)), **({} if not snd else {
         "closing": snd["gruss"], "sender_name": snd["name"], "from_name": snd["display"]})}
-    msg = emailbuild.build_message(form, rcpt, CFG["settings"], outreach_address())
+    msg = emailbuild.build_message(form, rcpt, mail_settings(), outreach_address())
     if followup and lead["message_id"]:  # im selben Gesprächsverlauf wie die erste Mail
         msg["In-Reply-To"] = lead["message_id"]
         msg["References"] = lead["message_id"]
-    smtp = CFG["smtp_connect"](S("OUTREACH_USER"), S("OUTREACH_PASSWORD"))
+    smtp = _smtp()
     try:
         smtp.send_message(msg)
     finally:
@@ -958,7 +978,30 @@ def send_outreach(c, lead, sent_by, followup=False, sender=None):
 # ---------------------------------------------------------------- Antworten lesen
 
 
+def _postfach_kunde():
+    """Akquise-Postfach des Kunden im aktiven Arbeitsbereich (None bei Ylva Labs)."""
+    if not arbeitsbereiche.ist_kunde():
+        return None
+    a = arbeitsbereiche._cache(arbeitsbereiche.aktiv()) or {}
+    return a.get("postfach")
+
+
+def _smtp():
+    """Postausgang des aktiven Arbeitsbereichs: bei Kunden sein Postfach, sonst das Akquise-Postfach."""
+    from . import posteingang
+    p = _postfach_kunde()
+    if arbeitsbereiche.ist_kunde():
+        if not p:
+            raise RuntimeError("Für diesen Kunden ist kein Akquise-Postfach eingetragen (Einstellungen → Arbeitsbereiche).")
+        return posteingang.SMTP(p)
+    return CFG["smtp_connect"](S("OUTREACH_USER"), S("OUTREACH_PASSWORD"))
+
+
 def _imap():
+    from . import posteingang
+    p = _postfach_kunde()
+    if p:
+        return posteingang.IMAP(p)
     imap = imaplib.IMAP4_SSL(S("IMAP_HOST"), S("IMAP_PORT"), ssl_context=ssl.create_default_context())
     imap.login(S("OUTREACH_USER"), S("OUTREACH_PASSWORD"))
     return imap
@@ -1076,7 +1119,8 @@ def _check_inbox(c):
         for num in (data[0] or b"").split()[-300:]:
             _, header = imap.fetch(num, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
             mid_raw = next((p[1] for p in header if isinstance(p, tuple)), b"")
-            mid = email.message_from_bytes(mid_raw).get("Message-ID", "").strip() or f"num:{num.decode()}:{state['start']}"
+            mid = email.message_from_bytes(mid_raw).get("Message-ID", "").strip() \
+                or f"num:{arbeitsbereiche.aktiv()}:{num.decode()}:{state['start']}"
             if c.execute("SELECT 1 FROM inbox_seen WHERE message_id=?", (mid,)).fetchone():
                 continue
             _, parts = imap.fetch(num, "(BODY.PEEK[])")
@@ -1193,8 +1237,9 @@ def send_reply(c, lead, text, sent_by, subject=None, sender=None):
 
 
 def _sender(c, key):
-    """Absender aus dem Team; ohne Person der Name aus den Einstellungen (wie bisher)."""
-    if key and team.get(c, key):
+    """Absender aus dem Team; ohne Person der Name aus den Einstellungen (wie bisher). Bei Kunden immer der Absender
+    aus dem Arbeitsbereich (Unterschrift, Firmenname, Fußzeile des Kunden)."""
+    if key and team.get(c, key) and not arbeitsbereiche.ist_kunde():
         return team.sender(c, key, S("ORG_NAME"))
     name = S("LEADS_SENDER_NAME") or S("ORG_NAME")
     return {"key": None, "name": name, "display": name, "gruss": "Viele Grüße",
@@ -1210,7 +1255,7 @@ def _claim(c, lead, key):
 def _deliver(msg):
     """Über das Akquise-Postfach verschicken und eine Kopie in „Gesendet“ ablegen. Fehler mit klarer Meldung."""
     try:
-        smtp = CFG["smtp_connect"](S("OUTREACH_USER"), S("OUTREACH_PASSWORD"))
+        smtp = _smtp()
         try:
             smtp.send_message(msg)
         finally:
@@ -1311,7 +1356,7 @@ def test_mailbox():
         return [("Akquise-Postfach", False, "Benutzer oder Passwort fehlt.")]
     out = []
     try:
-        CFG["smtp_connect"](S("OUTREACH_USER"), S("OUTREACH_PASSWORD")).quit()
+        _smtp().quit()
         out.append(("Postausgang (SMTP)", True, f"Anmeldung als {S('OUTREACH_USER')} bei {S('SMTP_HOST')} klappt."))
     except Exception as exc:
         out.append(("Postausgang (SMTP)", False, mail_error(exc)))
@@ -1341,14 +1386,16 @@ def tick():
     with _job_lock:
         c = conn()
         try:
-            # Antworten lesen ist kostenlos, nur das Einordnen einer echten Antwort kostet ein paar Cent
-            if outreach_configured() and S("IMAP_HOST"):
-                last = leaddb.kv_get(c, "last_inbox", 0)
-                if time.time() - last > S("INBOX_MINUTES") * 60 or leaddb.kv_get(c, "request:inbox"):
-                    leaddb.kv_set(c, "last_inbox", time.time())
-                    leaddb.kv_set(c, "request:inbox", False)
-                    fetch_inbox(c)
-            notify_due(c)
+            for a in arbeitsbereiche.alle(c, nur_aktive=True):  # Akquise je Arbeitsbereich (Stufe 11)
+                with arbeitsbereiche.im(a["key"]):
+                    try:
+                        akquise_takt(c)
+                    except ai.AIError:
+                        raise
+                    except Exception:
+                        if a["key"] == arbeitsbereiche.YLVA:
+                            raise
+                        log.exception("Fehler im Arbeitsbereich %s", a["key"])
             notify_tasks(c)
             try:  # Kalender: Erinnerungen, Ergebnis nachfragen, frei/belegt abgleichen, Serien (Firmen-OS Stufe 3)
                 from . import kalender
@@ -1385,23 +1432,13 @@ def tick():
                 posteingang.takt(c)
             except Exception:
                 log.exception("Fehler beim Abrufen der weiteren Postfächer")
-            reports.notify_released(c, notify)
-            start_scheduled(c)
             run = c.execute("SELECT id FROM runs WHERE status='wartet' ORDER BY id LIMIT 1").fetchone()
-            if run:
+            if run:  # ein Lauf nach dem anderen, im Arbeitsbereich, für den er gestartet wurde
                 execute_run(c, run["id"])
-            if leaddb.kv_get(c, "request:reflect") and ai.available():
-                leaddb.kv_set(c, "request:reflect", False)
-                maybe_reflect(c, force=True)
             if leaddb.kv_get(c, "request:kreise"):
                 leaddb.kv_set(c, "request:kreise", False)
                 ensure_boundaries(c, force=True)
                 assign_kreise(c, everything=True)
-            wanted = leaddb.kv_get(c, "request:lead")
-            if wanted:
-                leaddb.kv_set(c, "request:lead", None)
-                _local.run_id = None
-                recheck_lead(c, wanted)
             STATE["error"] = None if not run else STATE["error"]
         except ai.AIError as exc:
             log.warning("KI-Fehler: %s", exc)
@@ -1412,6 +1449,28 @@ def tick():
         finally:
             c.close()
             set_activity("Wartet")
+
+
+def akquise_takt(c):
+    """Was der Arbeiter je Arbeitsbereich tut: Postfach lesen, Nachfassen melden, Berichte, Zeitplan, Lernen."""
+    # Antworten lesen ist kostenlos, nur das Einordnen einer echten Antwort kostet ein paar Cent
+    if outreach_configured() and S("IMAP_HOST"):
+        last = leaddb.kv_get(c, "last_inbox", 0)
+        if time.time() - last > S("INBOX_MINUTES") * 60 or leaddb.kv_get(c, "request:inbox"):
+            leaddb.kv_set(c, "last_inbox", time.time())
+            leaddb.kv_set(c, "request:inbox", False)
+            fetch_inbox(c)
+    notify_due(c)
+    reports.notify_released(c, notify)
+    start_scheduled(c)
+    if leaddb.kv_get(c, "request:reflect") and ai.available():
+        leaddb.kv_set(c, "request:reflect", False)
+        maybe_reflect(c, force=True)
+    wanted = leaddb.kv_get(c, "request:lead")
+    if wanted:
+        leaddb.kv_set(c, "request:lead", None)
+        _local.run_id = None
+        recheck_lead(c, wanted)
 
 
 def start_scheduled(c, now=None):

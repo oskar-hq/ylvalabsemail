@@ -168,18 +168,23 @@ def standard_fuer(c, person):
 # ---------------------------------------------------------------- Einstellungen je Arbeitsbereich
 
 
+def _laden(c, key):
+    a = get(c, key)
+    if a and a.get("postfach_id"):
+        from . import posteingang
+        a["postfach"] = posteingang.postfach(c, a["postfach_id"])
+    return a
+
+
 def _cache(key):
+    """Einstellungen eines Arbeitsbereichs (agent.S fragt ohne Datenbankverbindung). Nach dem Speichern neu."""
     if key not in _CACHE:
         from . import agent, leaddb
         if not agent.CFG.get("db_path"):
             return None
         c = leaddb.connect(agent.CFG["db_path"])
         try:
-            a = get(c, key)
-            if a and a.get("postfach_id"):
-                from . import posteingang
-                a["postfach"] = posteingang.postfach(c, a["postfach_id"])
-            _CACHE[key] = a
+            _CACHE[key] = _laden(c, key)
         finally:
             c.close()
     return _CACHE[key]
@@ -279,6 +284,7 @@ def anlegen(c, wer, name_, projekt_id=None):
               (key, name_, projekt_id or None, "[]", json.dumps({"ORG_NAME": name_}), 1, sort, now(), wer))
     firma.log(c, wer, "einstellung", "arbeitsbereich", key, f"Arbeitsbereich „{name_}“ angelegt.")
     cache_leeren()
+    _CACHE[key] = _laden(c, key)
     return key
 
 
@@ -347,6 +353,7 @@ def speichern(c, wer, key, form):
     firma.log(c, wer, "einstellung", "regel", f"arbeitsbereich:{key}", text + ".",
               {"einstellungen": werte, "personen": personen, "postfach_id": postfach_id, "aktiv": aktiv_})
     cache_leeren()
+    _CACHE[key] = _laden(c, key)
 
 
 def projekt_von(c, key):

@@ -70,7 +70,13 @@ def postfach(c, pid):
 
 def fuer_person(c, person):
     """Postfächer, aus denen `person` senden darf: eigene und die des Teams."""
-    return [p for p in postfaecher(c, nur_aktive=True) if not p["besitzer"] or p["besitzer"] == person]
+    from . import arbeitsbereiche
+    akquise = arbeitsbereiche.postfach_ids(c)  # Akquise-Postfächer von Kunden nur in ihrem Arbeitsbereich
+    eigenes = (arbeitsbereiche.get(c, arbeitsbereiche.aktiv()) or {}).get("postfach_id")
+    if arbeitsbereiche.ist_kunde():
+        return [p for p in postfaecher(c, nur_aktive=True) if p["id"] == eigenes]
+    return [p for p in postfaecher(c, nur_aktive=True)
+            if p["id"] not in akquise and (not p["besitzer"] or p["besitzer"] == person)]
 
 
 def postfach_speichern(c, wer, pid, form):
@@ -113,6 +119,8 @@ def postfach_speichern(c, wer, pid, form):
                         (name, adresse, benutzer, enc, imap_host, imap_port, smtp_host, smtp_port, sicherheit, besitzer,
                          aktiv, (datetime.now() - timedelta(days=START_TAGE)).isoformat(timespec="seconds"), wer,
                          now())).lastrowid
+    from . import arbeitsbereiche
+    arbeitsbereiche.cache_leeren()  # Akquise-Postfach eines Kunden: neuer Zugang gilt sofort
     firma.log(c, wer, "einstellung", "postfach", pid, f"Postfach „{name}“ ({adresse}) gespeichert"
               + (f", gehört {firma.name_von(c, besitzer)}" if besitzer else ", fürs Team") + ".")
     return pid
@@ -251,9 +259,13 @@ def _einsortieren(c, p, msg, mid, start):
 def takt(c):
     """Hintergrund-Arbeiter: aktive Postfächer alle zehn Minuten abrufen (Fehler stehen am Postfach)."""
     grenze = (datetime.now() - timedelta(minutes=ABRUF_MINUTEN)).isoformat(timespec="seconds")
+    from . import arbeitsbereiche
     n = 0
+    akquise = arbeitsbereiche.postfach_ids(c)  # Akquise-Postfächer von Kunden liest der Arbeiter je Arbeitsbereich
     for p in c.execute("SELECT id FROM postfaecher WHERE aktiv=1 AND passwort IS NOT NULL AND "
                        "(abgerufen_am IS NULL OR abgerufen_am < ?)", (grenze,)).fetchall():
+        if p["id"] in akquise:
+            continue
         try:
             n += abrufen(c, p["id"])
         except PosteingangError:

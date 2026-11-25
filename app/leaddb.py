@@ -9,6 +9,7 @@ from . import arbeitsbereiche, assistent, aufgaben, branchentest, firma, finanze
 
 ROOT = Path(__file__).resolve().parent.parent
 BRAIN_SEED = Path(__file__).resolve().parent / "brain_seed.md"
+BRAIN_SEED_KUNDE = Path(__file__).resolve().parent / "brain_seed_kunde.md"
 
 # Reihenfolge = Reihenfolge in der Übersicht
 TABS = [
@@ -450,7 +451,11 @@ def tab_leads(conn, key, limit=300):
 
 def brain(conn):
     row = conn.execute("SELECT content FROM brain_versions WHERE arbeitsbereich=ab() ORDER BY id DESC LIMIT 1").fetchone()
-    return row["content"] if row else BRAIN_SEED.read_text(encoding="utf-8")
+    if row:
+        return row["content"]
+    # Ein Kunde startet mit einem leeren Gerüst, nie mit dem Gehirn von Ylva Labs (sonst schreibt die KI in
+    # unserem Namen)
+    return (BRAIN_SEED_KUNDE if arbeitsbereiche.ist_kunde() else BRAIN_SEED).read_text(encoding="utf-8")
 
 
 def save_brain(conn, content, author, reason):

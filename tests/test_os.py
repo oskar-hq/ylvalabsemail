@@ -2688,3 +2688,202 @@ class ZusammenfassungWebTest(WebBasis):
         html = self.client.get(f"/kalender/{tid}").get_data(as_text=True)
         self.assertIn("Alles besprochen.", html)
         self.assertEqual(self.post(f"/kalender/{tid}/zusammenfassung", {"text": "x"}).status_code, 403)  # war nicht dabei
+
+
+# ---------------------------------------------------------------- Stufe 11: Outreach für Kunden (Arbeitsbereiche)
+
+def kunde_anlegen(c, name="Kunde A", postfach=True, **werte):
+    """Arbeitsbereich für einen Kunden, mit Akquise-Postfach (vertrieb@kunde-a.de) und Werten aus FELDER."""
+    from app import arbeitsbereiche, posteingang
+    key = arbeitsbereiche.anlegen(c, "oskar", name)
+    pid = None
+    if postfach:
+        pid = posteingang.postfach_speichern(c, "oskar", None, {
+            "name": f"Vertrieb {name}", "adresse": f"vertrieb@{key}.de", "passwort": "geheim",
+            "imap_host": "imap.kunde.de", "smtp_host": "smtp.kunde.de", "aktiv": "1"})
+    form = {"name": name, "aktiv": "1", "postfach_id": str(pid or ""), **werte}
+    arbeitsbereiche.speichern(c, "oskar", key, form)
+    return key
+
+
+class ArbeitsbereicheTest(unittest.TestCase):
+    def setUp(self):
+        from app import arbeitsbereiche, known
+        self.ab, self.known = arbeitsbereiche, known
+        self.c = frische_db()
+        self.addCleanup(arbeitsbereiche.cache_leeren)
+        self.kunde = kunde_anlegen(self.c, "Kunde A", LEADS_SENDER_NAME="Maria Muster", DEFAULT_FOOTER="Kunde A GmbH, Hamburg")
+        self.ylva_lead = lead_anlegen(self.c, "Tischlerei Ylva", email="info@tischlerei-ylva.de", stage="neu")
+        with arbeitsbereiche.im(self.kunde):
+            self.kunden_lead = lead_anlegen(self.c, "Bäckerei Kunde", email="info@baeckerei-kunde.de", stage="neu")
+
+    def test_neue_zeilen_gehoeren_zum_aktiven_arbeitsbereich(self):
+        ab = dict(self.c.execute("SELECT id, arbeitsbereich FROM leads").fetchall())
+        self.assertEqual(ab[self.ylva_lead], "ylva")
+        self.assertEqual(ab[self.kunden_lead], self.kunde)
+        with self.ab.im(self.kunde):
+            leaddb.add_signal(self.c, "gut", "passt gut", self.kunden_lead)
+            leaddb.save_brain(self.c, "# Gehirn Kunde A\n", "Oskar", "Start")
+        self.assertEqual(self.c.execute("SELECT arbeitsbereich FROM signals").fetchone()[0], self.kunde)
+        self.assertEqual(self.c.execute("SELECT arbeitsbereich FROM brain_versions").fetchone()[0], self.kunde)
+
+    def test_lead_aus_a_ist_in_b_nie_sichtbar(self):
+        from app import mailbox
+        mailbox.add(self.c, self.kunden_lead, "in", "Klingt gut", subject="Re: Hallo", from_addr="info@baeckerei-kunde.de",
+                    read=False)
+        mailbox.add(self.c, self.ylva_lead, "in", "Gern", subject="Re: Hallo", from_addr="info@tischlerei-ylva.de",
+                    read=False)
+        for ab, eigen, fremd in (("ylva", self.ylva_lead, self.kunden_lead), (self.kunde, self.kunden_lead, self.ylva_lead)):
+            with self.ab.im(ab):
+                self.assertIsNotNone(leaddb.get_lead(self.c, eigen))
+                self.assertIsNone(leaddb.get_lead(self.c, fremd))
+                self.assertIsNotNone(leaddb.get_lead(self.c, fremd, alle=True))  # Firmen-OS darf alle
+                ids = [l["id"] for col in crm.board(self.c) for l in col[3]]
+                self.assertEqual(ids, [eigen])
+                self.assertEqual([x["id"] for x in mailbox.conversations(self.c)], [eigen])
+                self.assertEqual(mailbox.unread_count(self.c), 1)
+                self.assertEqual(sum(1 for _ in crm.export_csv(self.c, everything=True).splitlines()) - 1, 1)
+                self.assertEqual(leaddb.tab_counts(self.c)["passt"], 1)
+
+    def test_derselbe_betrieb_darf_in_zwei_arbeitsbereichen_sein(self):
+        daten = {"name": "Malerei Blau", "city": "Kiel", "email": "info@malerei-blau.de", "website": "malerei-blau.de"}
+        a = crm.create_lead(self.c, dict(daten), "Oskar")
+        with self.ab.im(self.kunde):
+            self.assertIsNone(self.known.find(self.c, daten["name"], daten["city"], email=daten["email"]))
+            b = crm.create_lead(self.c, dict(daten), "Oskar")
+        self.assertNotEqual(a, b)
+        sids = [r[0] for r in self.c.execute("SELECT source_id FROM leads WHERE name='Malerei Blau' ORDER BY id")]
+        self.assertTrue(sids[1].endswith(f"@ab:{self.kunde}"))
+        self.assertEqual(self.known.source_of(sids[1]), "hand")
+
+    def test_gespeicherte_werte_und_gehirn_je_arbeitsbereich(self):
+        leaddb.kv_set(self.c, "blocklist", ["konkurrenz.de"])
+        with self.ab.im(self.kunde):
+            self.assertEqual(leaddb.kv_get(self.c, "blocklist", []), [])
+            self.assertIn("Gehirn für einen Kunden", leaddb.brain(self.c))
+            self.assertNotIn("Ylva Labs ist", leaddb.brain(self.c))
+        self.assertEqual(leaddb.kv_get(self.c, "blocklist"), ["konkurrenz.de"])
+        self.assertIn("Ylva Labs", leaddb.brain(self.c))
+
+    def test_einstellungen_des_kunden(self):
+        from app import agent
+        with self.ab.im(self.kunde):
+            self.assertEqual(agent.S("OUTREACH_USER"), "vertrieb@kunde-a.de")
+            self.assertEqual(agent.S("OUTREACH_PASSWORD"), "geheim")
+            self.assertEqual(agent.S("SMTP_HOST"), "smtp.kunde.de")
+            self.assertEqual(agent.S("ORG_NAME"), "Kunde A")
+            self.assertEqual(agent.S("LEADS_SENDER_NAME"), "Maria Muster")
+            self.assertFalse(agent.S("OUTREACH_EMAIL"))  # Standard aus, bis der Kunde es bestätigt
+            self.assertEqual(agent.S("LEADS_RULE_MIN"), agent.CFG["settings"]["LEADS_RULE_MIN"])  # Rückfall
+        ohne = kunde_anlegen(self.c, "Kunde ohne Postfach", postfach=False)
+        with self.ab.im(ohne):
+            self.assertEqual(agent.S("OUTREACH_USER"), "")  # nie das Postfach von Ylva Labs
+            self.assertFalse(agent.outreach_configured())
+
+    def test_versand_aus_dem_postfach_des_kunden(self):
+        from unittest import mock
+        from app import agent, posteingang
+        gesendet = []
+        smtp = mock.Mock(send_message=gesendet.append)
+        self.ab.speichern(self.c, "oskar", self.kunde, {
+            "name": "Kunde A", "aktiv": "1", "postfach_id": str(self.ab.get(self.c, self.kunde)["postfach_id"]),
+            "LEADS_SENDER_NAME": "Maria Muster", "DEFAULT_FOOTER": "Kunde A GmbH, Hamburg", "OUTREACH_EMAIL": "1"})
+        with self.ab.im(self.kunde), mock.patch.object(posteingang, "SMTP", lambda p: smtp), \
+                mock.patch.object(posteingang, "IMAP", side_effect=Exception("kein IMAP")), \
+                mock.patch.dict(agent.CFG, {"smtp_connect": mock.Mock(side_effect=AssertionError("Ylva-Postfach"))}):
+            leaddb.update_lead(self.c, self.kunden_lead, status="entwurf", subject="Hallo", greeting="Guten Tag,",
+                               body="Kurze Frage.", owner="oskar")
+            agent.send_outreach(self.c, leaddb.get_lead(self.c, self.kunden_lead), "Oskar")
+        self.assertEqual(len(gesendet), 1)
+        msg = gesendet[0]
+        self.assertIn("vertrieb@kunde-a.de", msg["From"])
+        self.assertNotIn("Ylva", msg["From"])
+        self.assertNotIn("Oskar", msg.as_string())
+        self.assertIn("Maria Muster", msg.as_string())
+
+    def test_ohne_erlaubnis_kein_erstkontakt_per_mail(self):
+        from app import agent
+        with self.ab.im(self.kunde):
+            leaddb.update_lead(self.c, self.kunden_lead, status="entwurf", subject="Hallo", body="x")
+            with self.assertRaises(RuntimeError):
+                agent.send_outreach(self.c, leaddb.get_lead(self.c, self.kunden_lead), "Oskar")
+
+    def test_zugriff_je_person(self):
+        self.assertTrue(self.ab.darf(self.c, "finn", self.kunde))  # leere Liste: alle mit Leads oder CRM
+        self.ab.speichern(self.c, "oskar", self.kunde, {"name": "Kunde A", "aktiv": "1", "personen": ["finn"]})
+        self.assertTrue(self.ab.darf(self.c, "finn", self.kunde))
+        self.assertFalse(self.ab.darf(self.c, "hamza", self.kunde))
+        self.assertTrue(self.ab.darf(self.c, "oskar", self.kunde))  # verwaltet Personen: sieht alle
+        self.assertEqual([a["key"] for a in self.ab.fuer_person(self.c, "hamza")], ["ylva"])
+
+    def test_akquise_postfach_des_kunden_nicht_im_posteingang(self):
+        from app import posteingang
+        pid = self.ab.get(self.c, self.kunde)["postfach_id"]
+        self.assertNotIn(pid, [p["id"] for p in posteingang.fuer_person(self.c, "oskar")])
+        with self.ab.im(self.kunde):
+            self.assertEqual([p["id"] for p in posteingang.fuer_person(self.c, "oskar")], [pid])
+        abgerufen = []
+        from unittest import mock
+        with mock.patch.object(posteingang, "abrufen", lambda c, p: abgerufen.append(p) or 0):
+            posteingang.takt(self.c)
+        self.assertNotIn(pid, abgerufen)
+
+    def test_freigaben_nennen_den_kunden(self):
+        from app import freigaben
+        with self.ab.im(self.kunde):
+            leaddb.update_lead(self.c, self.kunden_lead, status="entwurf", owner="oskar")
+        offen = [f for f in freigaben._entwuerfe_offen(self.c, "oskar") if f["oid"] == self.kunden_lead]
+        self.assertEqual(len(offen), 1)
+        self.assertIn("Kunde A", offen[0]["eyebrow"])
+
+
+class ArbeitsbereicheWebTest(WebBasis):
+    def setUp(self):
+        super().setUp()
+        from app import arbeitsbereiche
+        self.ab = arbeitsbereiche
+        self.kunde = kunde_anlegen(self.c, "Kunde Web")
+        with arbeitsbereiche.im(self.kunde):
+            self.lid = lead_anlegen(self.c, "Gärtnerei Kunde Web", stage="neu")
+
+        def aufraeumen():
+            self.c.execute("DELETE FROM leads WHERE arbeitsbereich=?", (self.kunde,))
+            self.c.execute("DELETE FROM postfaecher WHERE id=(SELECT postfach_id FROM arbeitsbereiche WHERE key=?)",
+                           (self.kunde,))
+            self.c.execute("DELETE FROM arbeitsbereiche WHERE key=?", (self.kunde,))
+            self.c.commit()
+            arbeitsbereiche.cache_leeren()
+        self.addCleanup(aufraeumen)
+
+    def test_auswahl_und_wechsel(self):
+        html = self.client.get("/leads").get_data(as_text=True)
+        self.assertIn("ab-pick", html)
+        self.assertIn("Kunde Web", html)
+        self.assertNotIn("Gärtnerei Kunde Web", self.client.get("/crm?wer=alle").get_data(as_text=True))
+        r = self.post("/arbeitsbereich", {"ab": self.kunde, "next": "/crm?wer=alle"})
+        self.assertEqual(r.headers["Location"], "/crm?wer=alle")
+        self.assertIn("Gärtnerei Kunde Web", self.client.get("/crm?wer=alle").get_data(as_text=True))
+        self.post("/arbeitsbereich", {"ab": "ylva", "next": f"/leads/{self.lid}"})
+        self.assertEqual(self.client.get("/crm").status_code, 200)
+
+    def test_link_auf_lead_wechselt_den_arbeitsbereich(self):
+        r = self.client.get(f"/leads/{self.lid}")
+        self.assertEqual(r.status_code, 200)
+        with self.client.session_transaction() as sess:
+            self.assertEqual(sess["ab"], self.kunde)
+
+    def test_ohne_zugang_kein_lead_und_kein_wechsel(self):
+        self.ab.speichern(self.c, "oskar", self.kunde, {"name": "Kunde Web", "aktiv": "1", "personen": ["finn"]})
+        self.als("hamza")
+        self.assertEqual(self.client.get(f"/leads/{self.lid}").status_code, 404)
+        self.assertEqual(self.post("/arbeitsbereich", {"ab": self.kunde}).status_code, 403)
+        self.assertEqual(self.post(f"/crm/{self.lid}/stufe", {"stage": "kunde"}).status_code, 404)
+
+    def test_einstellungen_seite(self):
+        self.assertIn("Kunde Web", self.client.get("/einstellungen/arbeitsbereiche").get_data(as_text=True))
+        html = self.client.get(f"/einstellungen/arbeitsbereiche/{self.kunde}").get_data(as_text=True)
+        self.assertIn("Akquise-Postfach des Kunden", html)
+        r = self.post(f"/einstellungen/arbeitsbereiche/{self.kunde}", {"name": "Kunde Web", "aktiv": "1",
+                                                                         "LEADS_RULE_MIN": "abc"},
+                      headers={"X-Requested-With": "fetch"})
+        self.assertEqual(r.status_code, 400)
