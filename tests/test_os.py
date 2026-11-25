@@ -2887,3 +2887,55 @@ class ArbeitsbereicheWebTest(WebBasis):
                                                                          "LEADS_RULE_MIN": "abc"},
                       headers={"X-Requested-With": "fetch"})
         self.assertEqual(r.status_code, 400)
+
+
+class OutreachKundeTest(unittest.TestCase):
+    """Stufe 11, Schritt 5 und 6: Ergebnisse im Kunden-Bereich und auf der Monatsrechnung."""
+
+    def setUp(self):
+        from app import arbeitsbereiche
+        self.ab = arbeitsbereiche
+        self.c = frische_db()
+        self.addCleanup(arbeitsbereiche.cache_leeren)
+        self.pid = projekt_anlegen(self.c, "Hansen Outreach", "kunde@hansen-outreach.de")
+        self.kunde = kunde_anlegen(self.c, "Hansen", projekt_id=str(self.pid), PAUSCHALE_EUR="490",
+                                   KI_WEITERBERECHNEN="1")
+        vormonat = (date.today().replace(day=1) - timedelta(days=3)).isoformat() + "T10:00:00"
+        with arbeitsbereiche.im(self.kunde):
+            self.a = lead_anlegen(self.c, "Interessent A", stage="gespraech", interest="qualified", email="a@a.de",
+                                  sent_at=vormonat, replied_at=vormonat, contact_name="Herr A", fit_reason="intern!")
+            lead_anlegen(self.c, "Ohne Antwort B", stage="kontaktiert", sent_at=vormonat)
+            leaddb.record_usage(self.c, "entwurf", "m", {"input": 1, "output": 1, "cache_write": 0, "cache_read": 0},
+                                1.0)
+            leaddb.kv_set(self.c, "x", 1)
+        self.c.execute("UPDATE ai_usage SET at=?", (vormonat,))
+        self.c.commit()
+
+    def test_zahlen_und_kontakte_ohne_interna(self):
+        o = self.ab.outreach_zahlen(self.c, self.kunde)
+        self.assertEqual(o["gesamt"]["angeschrieben"], 2)
+        self.assertEqual(o["gesamt"]["antworten"], 1)
+        self.assertEqual(o["gesamt"]["interesse"], 1)
+        self.assertEqual([k["name"] for k in o["kontakte"]], ["Interessent A"])
+        self.assertNotIn("intern!", str(o))
+        self.assertEqual(self.ab.outreach_zahlen(self.c, "ylva")["gesamt"]["angeschrieben"], 0)
+
+    def test_kunden_bereich_zeigt_outreach(self):
+        from app import portal
+        z = {"projekt_id": self.pid, "email": "kunde@hansen-outreach.de", "name": "Frau Hansen"}
+        a = portal.ansicht(self.c, z)
+        self.assertEqual(a["outreach"]["gesamt"]["interesse"], 1)
+        portal.regeln_speichern(self.c, "oskar", {**portal.regeln(self.c), "zeige_outreach": ""})
+        self.assertIsNone(portal.ansicht(self.c, z)["outreach"])
+
+    def test_monatsrechnung_mit_outreach_und_ki(self):
+        from app import finanzen
+        rid = finanzen.monat_anlegen(self.c, "oskar", self.pid)
+        texte = {p["text"]: p["betrag"] for p in finanzen.get(self.c, rid)["positionen"]}
+        outreach = [t for t in texte if t.startswith("Outreach")]
+        self.assertEqual(len(outreach), 1)
+        self.assertIn("2 Betriebe angeschrieben", outreach[0])
+        self.assertEqual(texte[outreach[0]], 490)
+        ki = [t for t in texte if t.startswith("KI-Kosten")]
+        self.assertEqual(len(ki), 1)
+        self.assertGreater(texte[ki[0]], 0)

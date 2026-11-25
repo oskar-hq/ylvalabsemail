@@ -364,3 +364,62 @@ def projekt_von(c, key):
 def fuer_projekt(c, projekt_id):
     row = c.execute("SELECT * FROM arbeitsbereiche WHERE projekt_id=? ORDER BY sort LIMIT 1", (projekt_id,)).fetchone()
     return _zeile(row) if row else None
+
+# ---------------------------------------------------------------- Ergebnisse für den Kunden (Kunden-Bereich, Rechnung)
+
+STUFEN_KUNDE = {"antwort": "Hat geantwortet", "gespraech": "Gespräch vereinbart", "angebot": "Angebot",
+                "kunde": "Kunde geworden"}
+
+
+def _woche(iso):
+    d = datetime.fromisoformat(iso[:19])
+    jahr, kw, _ = d.isocalendar()
+    return f"{jahr}-{kw:02d}"
+
+
+def outreach_zahlen(c, key, wochen=8):
+    """Was der Outreach für einen Kunden gebracht hat: gesamt und je Kalenderwoche (neueste zuerst), dazu die
+    interessierten Kontakte. Ohne interne Notizen, Punkte oder Begründungen."""
+    from datetime import timedelta
+    leads = [dict(r) for r in c.execute(
+        "SELECT id, name, city, contact_name, email, phone, website, stage, interest, sent_at, replied_at, updated_at "
+        "FROM leads WHERE arbeitsbereich=?", (key,))]
+    ids = [l["id"] for l in leads]
+    termine = []
+    if ids:
+        marks = ",".join("?" * len(ids))
+        termine = [dict(r) for r in c.execute(
+            f"SELECT lead_id, start FROM termine WHERE lead_id IN ({marks}) AND status != 'abgesagt'", ids)]
+    antwort = [l for l in leads if l["replied_at"]]
+    interesse = [l for l in leads if l["interest"] == "qualified" or l["stage"] in ("gespraech", "angebot", "kunde")]
+    gesamt = {"angeschrieben": sum(1 for l in leads if l["sent_at"]), "antworten": len(antwort),
+              "interesse": len(interesse), "termine": len(termine)}
+    gesamt["quote"] = round(100 * gesamt["antworten"] / gesamt["angeschrieben"]) if gesamt["angeschrieben"] else None
+    heute = datetime.now()
+    kws = []
+    for i in range(wochen):
+        d = heute - timedelta(weeks=i)
+        jahr, kw, _ = d.isocalendar()
+        kws.append((f"{jahr}-{kw:02d}", kw))
+    je_woche = []
+    for schluessel, kw in kws:
+        je_woche.append({
+            "kw": kw,
+            "angeschrieben": sum(1 for l in leads if l["sent_at"] and _woche(l["sent_at"]) == schluessel),
+            "antworten": sum(1 for l in antwort if _woche(l["replied_at"]) == schluessel),
+            "interesse": sum(1 for l in interesse if _woche(l["replied_at"] or l["updated_at"]) == schluessel),
+            "termine": sum(1 for t in termine if t["start"] and _woche(t["start"]) == schluessel)})
+    kontakte = [{"name": l["name"], "ort": l["city"] or "", "ansprechperson": l["contact_name"] or "",
+                 "email": l["email"] or "", "telefon": l["phone"] or "", "webseite": l["website"] or "",
+                 "stand": STUFEN_KUNDE.get(l["stage"], "Interessiert"), "seit": (l["replied_at"] or l["updated_at"])[:10]}
+                for l in sorted(interesse, key=lambda x: x["replied_at"] or x["updated_at"], reverse=True)]
+    return {"gesamt": gesamt, "wochen": je_woche, "kontakte": kontakte}
+
+
+def monat_zahlen(c, key, von, bis):
+    """Für die Monatsrechnung: angeschrieben im Zeitraum und KI-Kosten (USD) des Arbeitsbereichs."""
+    n = c.execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=? AND sent_at >= ? AND sent_at < ?",
+                  (key, von, bis)).fetchone()[0]
+    usd = c.execute("SELECT IFNULL(SUM(cost_usd), 0) FROM ai_usage WHERE arbeitsbereich=? AND at >= ? AND at < ?",
+                    (key, von, bis)).fetchone()[0]
+    return {"angeschrieben": n, "ki_usd": usd}

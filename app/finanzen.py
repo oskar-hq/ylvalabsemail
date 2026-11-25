@@ -316,6 +316,30 @@ def _monat_positionen(c, p, monat):
                        "rp.quelle_typ='aenderung' AND rp.quelle_id=a.id AND r.status != 'storniert')",
                        (p["id"], von, bis)).fetchall():
         pos.append((f"Kleine Änderung: {a['text'].splitlines()[0][:90]}", 1, preis, "aenderung", a["id"]))
+    pos += _outreach_positionen(c, p, m, j, von, bis)
+    return pos
+
+
+def _outreach_positionen(c, p, m, j, von, bis):
+    """Stufe 11: Machen wir für den Kunden Outreach (Arbeitsbereich mit diesem Projekt), steht die Pauschale des
+    Arbeitsbereichs auf der Monatsrechnung, mit den Zahlen des Vormonats; auf Wunsch die KI-Kosten des Vormonats."""
+    from . import ai, arbeitsbereiche
+    a = arbeitsbereiche.fuer_projekt(c, p["id"])
+    if not a or a["key"] == arbeitsbereiche.YLVA:
+        return []
+    werte, pos = a["einstellungen"], []
+    z = arbeitsbereiche.monat_zahlen(c, a["key"], von, bis)
+    try:
+        pauschale = float(str(werte.get("PAUSCHALE_EUR") or 0).replace(",", "."))
+    except ValueError:
+        pauschale = 0
+    if pauschale > 0:
+        pos.append((f"Outreach {m:02d}/{j} (monatliche Pauschale; im Vormonat {z['angeschrieben']} Betriebe "
+                    "angeschrieben)", 1, pauschale, "outreach", None))
+    if werte.get("KI_WEITERBERECHNEN") in (True, "true", "1", 1) and z["ki_usd"] > 0:
+        vm = date.fromisoformat(von)
+        pos.append((f"KI-Kosten Outreach {vm.month:02d}/{vm.year} (nach Verbrauch)", 1, round(ai.eur(z["ki_usd"]), 2),
+                    "outreach_ki", None))
     return pos
 
 
