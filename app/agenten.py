@@ -130,6 +130,7 @@ REGELN = {
     "max_schreiben_tag": 300,    # schreibende Aufrufe je Agent und Tag
     "buendeln": True,            # gleichartige Karten eines Agents als eine Karte zeigen
     "push_dringend": True,       # Push aufs Handy bei 🟥
+    "standard_person": "",       # wer entscheidet, wenn weder Lead, Projekt noch Bereich des Agents jemanden ergibt
     "arten": {},                 # Art → Entscheidungsrecht (leer = Standard aus ARTEN)
 }
 REGEL_LABEL = {
@@ -140,6 +141,7 @@ REGEL_LABEL = {
     "max_schreiben_tag": "Schreibende Aufrufe je Agent und Tag (Standard)",
     "buendeln": "Gleichartige Karten eines Agents bündeln",
     "push_dringend": "Push aufs Handy bei dringenden Freigaben",
+    "standard_person": "Zuständig, wenn kein Lead, Projekt oder Bereich passt",
 }
 
 
@@ -223,6 +225,11 @@ def regeln_speichern(c, wer, form):
             raise AgentError("Bitte für jede Art ein vorhandenes Entscheidungsrecht wählen.")
         arten[a] = v
     neu["arten"] = arten
+    if "standard_person" in form:
+        p = (form.get("standard_person") or "").strip()
+        if p and not firma.aktive_person(c, p):
+            raise AgentError("Diese Person gibt es nicht (mehr).")
+        neu["standard_person"] = p
     leaddb.kv_set(c, "regel:agenten", neu)
     neu = regeln(c)
     geaendert = [k for k in REGELN if neu[k] != alt[k]]
@@ -665,6 +672,9 @@ def _kontext_person(c, agent, lead=None, projekt=None):
     b = firma.bereich(c, a.get("bereich")) if a.get("bereich") else None
     if b and b["verantwortlich"] and firma.aktive_person(c, b["verantwortlich"]):
         return b["verantwortlich"]
+    std = regeln(c).get("standard_person")  # Einstellungen → Agents → Regeln
+    if std and firma.aktive_person(c, std):
+        return std
     gruender = [p["key"] for p in firma.aktive_personen(c) if firma.darf(c, p["key"], "entscheidungen", firma.VERWALTEN)]
     return gruender[0] if gruender else None
 

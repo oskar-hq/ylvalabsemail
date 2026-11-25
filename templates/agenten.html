@@ -37,6 +37,10 @@
         {% for k in ['max_karten_tag', 'max_schreiben_tag', 'access_h', 'refresh_tage'] %}
         <label class="os-field"><span>{{ labels[k] }}</span><input type="number" name="{{ k }}" value="{{ regeln[k] }}" min="1" {{ 'disabled' if not verwalten }}></label>{% endfor %}
       </div>
+      <label class="os-field"><span>{{ labels['standard_person'] }}</span><select name="standard_person" {{ 'disabled' if not verwalten }}>
+        <option value="">Erste Person mit „Entscheidungen verwalten“</option>
+        {% for p in personen %}<option value="{{ p.key }}" {{ 'selected' if regeln.standard_person == p.key }}>{{ p.name }}</option>{% endfor %}</select>
+        <span class="os-caption">Gilt z. B. für Agents mit „Alle Bereiche“, wenn eine Karte keinen Lead oder kein Projekt mit zuständiger Person hat.</span></label>
       {% for k in ['buendeln', 'push_dringend', 'localhost'] %}
       <label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px"><span style="margin:0">{{ labels[k] }}</span>
         <span class="os-toggle"><input type="checkbox" name="{{ k }}" value="1" {{ 'checked' if regeln[k] }} {{ 'disabled' if not verwalten }}><span></span></span></label>{% endfor %}

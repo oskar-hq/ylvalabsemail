@@ -3109,6 +3109,23 @@ class AgentenTest(unittest.TestCase):
         self.assertTrue(leaddb.get_lead(c, rech, alle=True))  # Rechnung: bleibt immer
         self.assertEqual(aufraeumen.plan(c, [bleibt])["leads_weg"], [])
 
+    def test_zustaendig_und_standard_person(self):
+        from app import agenten, mcp_server
+        c = self.c
+        agenten.alles_erlauben(c, "oskar", "ops")
+        c.execute("UPDATE agenten SET bereich=NULL WHERE key='ops'")
+        c.commit()
+        d, f = mcp_server.aufrufen(c, "agent:ops", "lead_anlegen", {"name": "Kunde Zuständig", "zustaendig": "oskar"})
+        self.assertFalse(f, d)
+        self.assertEqual(leaddb.get_lead(c, d["lead_id"], alle=True)["owner"], "oskar")
+        _, f = mcp_server.aufrufen(c, "agent:ops", "lead_aendern", {"lead_id": d["lead_id"], "zustaendig": "niemand"})
+        self.assertTrue(f)
+        alt = agenten.regeln(c)
+        form = {"redirects": "\n".join(alt["redirects"]), "standard_person": "oskar",
+                **{f"art_{a}": v for a, v in alt["arten"].items()}}
+        agenten.regeln_speichern(c, "oskar", form)
+        self.assertEqual(agenten._kontext_person(c, "ops"), "oskar")
+
     def test_mail_verschickt_der_agent(self):
         """Standard seit Stufe 14: Nach dem Ja verschickt der Agent; das OS prüft Sperrliste und Erstkontakt-Regel und
         hält die Mail nach der Rückmeldung im Chat fest."""
