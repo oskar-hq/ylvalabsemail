@@ -626,7 +626,7 @@ def versenden(c, wer, rid, data_dir):
         raise FinanzError("Verschickt wird nur eine ausgestellte Rechnung.")
     if not r["email"]:
         raise FinanzError("An der Rechnung fehlt die Mailadresse.")
-    lead = leaddb.get_lead(c, r["lead_id"])
+    lead = leaddb.get_lead(c, r["lead_id"], alle=True)
     from . import posteingang
     if not lead or lead["status"] == "gesperrt" or posteingang.sperrliste(c, r["email"]):
         raise FinanzError("Dieser Kunde möchte keine Nachrichten mehr bekommen.")

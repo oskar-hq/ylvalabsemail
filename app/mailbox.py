@@ -63,7 +63,7 @@ def conversations(c, me=None):
         SELECT l.*, MAX(m.at) AS last_at, SUM(m.direction='in' AND m.read=0) AS unread_msgs,
                (SELECT text FROM messages x WHERE x.lead_id=l.id ORDER BY x.at DESC, x.id DESC LIMIT 1) AS last_text,
                (SELECT direction FROM messages x WHERE x.lead_id=l.id ORDER BY x.at DESC, x.id DESC LIMIT 1) AS last_dir
-        FROM leads l JOIN messages m ON m.lead_id = l.id WHERE 1 {where}
+        FROM leads l JOIN messages m ON m.lead_id = l.id WHERE l.arbeitsbereich=ab() {where}
         GROUP BY l.id HAVING SUM(m.direction='in') > 0
         ORDER BY unread_msgs > 0 DESC, last_at DESC""", args).fetchall()
     return [dict(r) for r in rows]
@@ -72,7 +72,7 @@ def conversations(c, me=None):
 def unread_count(c, me=None):
     where, args = _owner(me)
     return c.execute(f"SELECT COUNT(DISTINCT m.lead_id) FROM messages m JOIN leads l ON l.id = m.lead_id "
-                     f"WHERE m.direction='in' AND m.read=0 {where}", args).fetchone()[0]
+                     f"WHERE l.arbeitsbereich=ab() AND m.direction='in' AND m.read=0 {where}", args).fetchone()[0]
 
 
 def mark_read(c, lead_id):

@@ -280,7 +280,7 @@ def backfill(c):
     for k, n in NICHES.items():
         if n["tags"]:
             marks = ",".join("?" * len(n["tags"]))
-            c.execute(f"UPDATE leads SET niche=? WHERE niche IS NULL AND category IN ({marks})", (k, *n["tags"]))
+            c.execute(f"UPDATE leads SET niche=? WHERE arbeitsbereich=ab() AND niche IS NULL AND category IN ({marks})", (k, *n["tags"]))
     c.commit()
 
 

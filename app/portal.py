@@ -160,7 +160,7 @@ def mail_an_kunde(c, p, to, betreff, text, wer):
     """Über das Akquise-Postfach, im Namen der verantwortlichen Person, in der Akte vermerkt. Nie an gesperrte
     Betriebe. Das ist kein Erstkontakt (bestehender Kunde); ob es raus darf, entscheidet die Freigabe-Stufe."""
     from . import agent, leaddb
-    lead = leaddb.get_lead(c, p["lead_id"])
+    lead = leaddb.get_lead(c, p["lead_id"], alle=True)
     if not lead:
         raise PortalError("Zu diesem Projekt gibt es keinen Kunden in der Akte.")
     from . import posteingang
@@ -607,7 +607,7 @@ def erinnerung_entscheiden(c, wer, tid, ok, grund=""):
 
 def _erinnerung_senden(c, t, wer, projekte, leaddb):
     p = projekte.zum_lead(c, t["lead_id"]) or {"lead_id": t["lead_id"], "verantwortlich": t["verantwortlich"]}
-    lead = leaddb.get_lead(c, t["lead_id"])
+    lead = leaddb.get_lead(c, t["lead_id"], alle=True)
     r = regeln(c)
     for to in t["gaeste"]:
         text = _fuellen(r["text_erinnerung"], name=(lead or {}).get("contact_name") or "", zeit=t["zeit"],

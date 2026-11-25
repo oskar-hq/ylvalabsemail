@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import assistent, aufgaben, branchentest, firma, finanzen, freigaben, kalender, kpis, notfall, portal, posteingang, projekte  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
+from . import arbeitsbereiche, assistent, aufgaben, branchentest, firma, finanzen, freigaben, kalender, kpis, notfall, portal, posteingang, projekte  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
 
 ROOT = Path(__file__).resolve().parent.parent
 BRAIN_SEED = Path(__file__).resolve().parent / "brain_seed.md"
@@ -182,6 +182,16 @@ MIGRATIONS = [
     "ALTER TABLE kalender_konten ADD COLUMN kalender TEXT",
     "ALTER TABLE kalender_konten ADD COLUMN ziel_kalender TEXT",
     "ALTER TABLE termin_teilnehmer ADD COLUMN google_kalender_id TEXT",
+    # Firmen-OS Stufe 11: Arbeitsbereiche (Outreach für Kunden). Alles der Akquise gehört zu genau einem Arbeitsbereich
+    "ALTER TABLE leads ADD COLUMN arbeitsbereich TEXT NOT NULL DEFAULT 'ylva'",
+    "ALTER TABLE runs ADD COLUMN arbeitsbereich TEXT NOT NULL DEFAULT 'ylva'",
+    "ALTER TABLE ai_usage ADD COLUMN arbeitsbereich TEXT NOT NULL DEFAULT 'ylva'",
+    "ALTER TABLE signals ADD COLUMN arbeitsbereich TEXT NOT NULL DEFAULT 'ylva'",
+    "ALTER TABLE brain_versions ADD COLUMN arbeitsbereich TEXT NOT NULL DEFAULT 'ylva'",
+    "ALTER TABLE known_firms ADD COLUMN arbeitsbereich TEXT NOT NULL DEFAULT 'ylva'",
+    "CREATE INDEX IF NOT EXISTS leads_ab ON leads(arbeitsbereich, status)",
+    # Postfach: Zustellfehler und automatische Mails landen im Ordner „Fehler“ statt zwischen den Antworten
+    "ALTER TABLE messages ADD COLUMN fehler INTEGER NOT NULL DEFAULT 0",
     # Wer an einem Serientermin keine Zeit hat, ist „nicht dabei“ und bekommt danach die Zusammenfassung
     "ALTER TABLE termin_teilnehmer ADD COLUMN abwesend INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE termine ADD COLUMN zusammenfassung TEXT",
@@ -246,17 +256,32 @@ DATA_MIGRATIONS = [
        AND json_extract(rechte, '$.assistent') IS NULL""",
     """UPDATE rollen SET rechte = json_set(rechte, '$.assistent', 2) WHERE key = 'recherche'
        AND json_extract(rechte, '$.assistent') IS NULL""",
+    # Stufe 11: Arbeitsbereich „Ylva Labs“, alle bisherigen Daten gehören dazu (Spalten-Standard 'ylva')
+    *arbeitsbereiche.SEED,
 ]
+
+# Tabellen, deren neue Zeilen automatisch den aktiven Arbeitsbereich bekommen (Trigger in connect)
+AB_TABELLEN = ("leads", "runs", "ai_usage", "signals", "brain_versions", "known_firms")
+# Gespeicherte Werte der Akquise, die je Arbeitsbereich getrennt sind (kv-Schlüssel mit Präfix „ab:<key>:“)
+AB_KV = {"blocklist", "regionen", "niches", "niches_auto", "last_search", "schedule", "schedule_state", "inbox_state",
+         "inbox_status", "last_inbox", "mail_design_last", "followup_notified", "report_notified", "request:lead",
+         "request:inbox", "request:reflect"}
 
 FOLLOWUP_DAYS = 7  # wird beim Start aus LEADS_FOLLOWUP_DAYS gesetzt, 0 = aus
 
 
+def followup_days():
+    """Nachfassen nach so vielen Tagen; im Arbeitsbereich eines Kunden ggf. ein eigener Wert."""
+    v = arbeitsbereiche.wert("LEADS_FOLLOWUP_DAYS")
+    return v if arbeitsbereiche.gesetzt(v) else FOLLOWUP_DAYS
+
+
 def followup_cutoff():
-    return (datetime.now() - timedelta(days=FOLLOWUP_DAYS)).isoformat(timespec="seconds")
+    return (datetime.now() - timedelta(days=followup_days())).isoformat(timespec="seconds")
 
 
 def is_due(lead):
-    return bool(FOLLOWUP_DAYS and lead["status"] == "versendet" and not lead.get("interest")
+    return bool(followup_days() and lead["status"] == "versendet" and not lead.get("interest")
                 and (lead.get("followup_count") or 0) == 0 and lead.get("sent_at")
                 and lead["sent_at"] <= followup_cutoff())
 
@@ -285,6 +310,9 @@ def connect(path):
     conn.executescript(portal.SCHEMA)
     conn.executescript(finanzen.SCHEMA)
     conn.executescript(posteingang.SCHEMA)
+    conn.executescript(arbeitsbereiche.SCHEMA)
+    # Stufe 11: aktiver Arbeitsbereich in SQL als ab(), je Thread und Anfrage (siehe app/arbeitsbereiche.py)
+    conn.create_function("ab", 0, arbeitsbereiche.aktiv)
     for stmt in MIGRATIONS:
         try:
             conn.execute(stmt)
@@ -295,18 +323,38 @@ def connect(path):
         for stmt in DATA_MIGRATIONS[done:]:
             conn.execute(stmt)
         kv_set(conn, "data_version", len(DATA_MIGRATIONS))
-    known.backfill(conn)
+    for tabelle in AB_TABELLEN:  # neue Zeilen gehören zum aktiven Arbeitsbereich
+        conn.execute(f"CREATE TEMP TRIGGER IF NOT EXISTS {tabelle}_ab AFTER INSERT ON main.{tabelle} "
+                     f"WHEN NEW.arbeitsbereich = 'ylva' AND ab() != 'ylva' BEGIN UPDATE main.{tabelle} SET arbeitsbereich = ab() "
+                     f"WHERE rowid = NEW.rowid; END")
+    with arbeitsbereiche.im(arbeitsbereiche.YLVA):
+        known.backfill(conn)
     return conn
 
 # ---------------------------------------------------------------- Kleinkram
 
 
+def _kv_key(key):
+    """Werte der Akquise je Arbeitsbereich: für Kunden mit Präfix, Ylva Labs behält die bisherigen Schlüssel."""
+    if key in AB_KV and arbeitsbereiche.ist_kunde():
+        return f"ab:{arbeitsbereiche.aktiv()}:{key}"
+    return key
+
+
+def source_id(sid):
+    """Kennung eines Betriebs je Arbeitsbereich: Derselbe Betrieb darf für Ylva Labs und für einen Kunden ein Lead
+    sein (source_id ist UNIQUE). Bei Kunden hängt „@ab:<key>“ hinten an, Präfixe wie „claude:“ bleiben vorne."""
+    return f"{sid}@ab:{arbeitsbereiche.aktiv()}" if sid and arbeitsbereiche.ist_kunde() else sid
+
+
 def kv_get(conn, key, default=None):
+    key = _kv_key(key)
     row = conn.execute("SELECT value FROM kv WHERE key=?", (key,)).fetchone()
     return json.loads(row["value"]) if row else default
 
 
 def kv_set(conn, key, value):
+    key = _kv_key(key)
     conn.execute("INSERT INTO kv (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
                  (key, json.dumps(value, ensure_ascii=False)))
     conn.commit()
@@ -333,11 +381,14 @@ def update_lead(conn, lead_id, **fields):
     conn.commit()
 
 
-def get_lead(conn, lead_id):
+def get_lead(conn, lead_id, alle=False):
+    """Ein Lead des aktiven Arbeitsbereichs (alle=True: egal aus welchem, für Firmen-OS und Freigaben)."""
     row = conn.execute("SELECT * FROM leads WHERE id=?", (lead_id,)).fetchone()
     if not row:
         return None
     lead = dict(row)
+    if not alle and lead.get("arbeitsbereich", arbeitsbereiche.YLVA) != arbeitsbereiche.aktiv():
+        return None  # gehört zu einem anderen Arbeitsbereich
     lead["research"] = json.loads(lead["research"]) if lead["research"] else {}
     return lead
 
@@ -374,14 +425,14 @@ TAB_SQL = {
 
 
 def _tab_args():
-    return {"days": FOLLOWUP_DAYS, "cutoff": followup_cutoff()}
+    return {"days": followup_days(), "cutoff": followup_cutoff()}
 
 
 def tab_counts(conn):
-    counts = {key: conn.execute(f"SELECT COUNT(*) FROM leads WHERE {TAB_SQL[key]}", _tab_args()).fetchone()[0]
+    counts = {key: conn.execute(f"SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND ({TAB_SQL[key]})", _tab_args()).fetchone()[0]
               for key, _, _ in TABS}
-    counts["kandidaten"] = conn.execute("SELECT COUNT(*) FROM leads WHERE status='kandidat'").fetchone()[0]
-    counts["grobfilter"] = conn.execute("SELECT COUNT(*) FROM leads WHERE rejected_by='filter'").fetchone()[0]
+    counts["kandidaten"] = conn.execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND status='kandidat'").fetchone()[0]
+    counts["grobfilter"] = conn.execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND rejected_by='filter'").fetchone()[0]
     return counts
 
 
@@ -390,7 +441,7 @@ def tab_leads(conn, key, limit=300):
              "pruefen": "fit_score DESC, distance_km",
              "nachfassen": "sent_at",
              "arbeit": "IFNULL(fit_score, quick_score) DESC, updated_at DESC"}.get(key, "updated_at DESC")
-    rows = conn.execute(f"SELECT * FROM leads WHERE {TAB_SQL[key]} ORDER BY {order} LIMIT :limit",
+    rows = conn.execute(f"SELECT * FROM leads WHERE arbeitsbereich=ab() AND ({TAB_SQL[key]}) ORDER BY {order} LIMIT :limit",
                         {**_tab_args(), "limit": limit}).fetchall()
     return [dict(r) for r in rows]
 
@@ -398,7 +449,7 @@ def tab_leads(conn, key, limit=300):
 
 
 def brain(conn):
-    row = conn.execute("SELECT content FROM brain_versions ORDER BY id DESC LIMIT 1").fetchone()
+    row = conn.execute("SELECT content FROM brain_versions WHERE arbeitsbereich=ab() ORDER BY id DESC LIMIT 1").fetchone()
     return row["content"] if row else BRAIN_SEED.read_text(encoding="utf-8")
 
 
@@ -442,7 +493,8 @@ def branche_stats(conn):
                IFNULL(SUM(interest='kein_interesse' OR status='gesperrt'), 0) AS kein,
                IFNULL(SUM(status='aussortiert'), 0) AS aussortiert,
                IFNULL(SUM(status='entwurf'), 0) AS entwurf
-        FROM leads WHERE status NOT IN ('kandidat','recherche') AND IFNULL(rejected_by,'') != 'filter'
+        FROM leads WHERE arbeitsbereich=ab() AND status NOT IN ('kandidat','recherche')
+          AND IFNULL(rejected_by,'') != 'filter'
         GROUP BY branche, category_label ORDER BY sent DESC, qualified DESC""").fetchall()
     return [dict(r) for r in rows]
 
@@ -457,7 +509,7 @@ def category_outcomes(conn):
                    IFNULL(SUM({good}), 0) + 0.5 * IFNULL(SUM(interest='mittel' AND NOT {good}), 0) AS pos,
                    IFNULL(SUM(interest='kein_interesse' OR rejected_by='team'
                               OR (status='gesperrt' AND IFNULL(rejected_by,'') != 'filter')), 0) AS neg
-            FROM leads WHERE IFNULL({key},'') != '' GROUP BY {key}""")]
+            FROM leads WHERE arbeitsbereich=ab() AND IFNULL({key},'') != '' GROUP BY {key}""")]
     return rows
 
 
@@ -477,7 +529,9 @@ def record_usage(conn, stage, model, tokens, cost_usd, run_id=None, lead_id=None
     conn.commit()
 
 
-def _sum(conn, where="1", args=()):
+def _sum(conn, where="1", args=(), alle=False):
+    """KI-Kosten des aktiven Arbeitsbereichs (alle=True: aller Arbeitsbereiche, z. B. das Budget einer Person)."""
+    where = where if alle else f"arbeitsbereich=ab() AND ({where})"
     row = conn.execute(f"SELECT COUNT(*) n, IFNULL(SUM(cost_usd),0) usd, IFNULL(SUM(input_tokens+cache_write_tokens"
                        f"+cache_read_tokens),0) tin, IFNULL(SUM(output_tokens),0) tout FROM ai_usage WHERE {where}",
                        args).fetchone()
@@ -491,10 +545,10 @@ def month_cost_usd(conn):
 def cost_summary(conn):
     today = datetime.now().strftime("%Y-%m-%d")
     month = datetime.now().strftime("%Y-%m-01")
-    last_run = conn.execute("SELECT * FROM runs ORDER BY id DESC LIMIT 1").fetchone()
+    last_run = conn.execute("SELECT * FROM runs WHERE arbeitsbereich=ab() ORDER BY id DESC LIMIT 1").fetchone()
     stages = [dict(r) for r in conn.execute(
         "SELECT stage, model, COUNT(*) n, SUM(input_tokens+cache_write_tokens+cache_read_tokens) tin,"
-        " SUM(output_tokens) tout, SUM(cost_usd) usd FROM ai_usage WHERE at >= ? GROUP BY stage, model"
+        " SUM(output_tokens) tout, SUM(cost_usd) usd FROM ai_usage WHERE arbeitsbereich=ab() AND at >= ? GROUP BY stage, model"
         " ORDER BY usd DESC", (month,))]
     return {
         "today": _sum(conn, "at >= ?", (today,)), "month": _sum(conn, "at >= ?", (month,)), "total": _sum(conn),
@@ -505,7 +559,7 @@ def cost_summary(conn):
 
 
 def stage_averages(conn):
-    """Durchschnittliche Kosten pro Aufruf und Stufe (für die Schätzung vor einem Lauf)."""
+    """Durchschnittliche Kosten pro Aufruf und Stufe (für die Schätzung vor einem Lauf, über alle Arbeitsbereiche)."""
     return {r["stage"]: (r["usd"], r["n"]) for r in conn.execute(
         "SELECT stage, AVG(cost_usd) usd, COUNT(*) n FROM ai_usage GROUP BY stage")}
 

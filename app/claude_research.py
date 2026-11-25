@@ -255,7 +255,7 @@ def import_rows(conn, rows, author, center, source="claude"):
             "INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, category_label,"
             " niche, address, city, lat, lon, distance_km, website, email, phone, contact_name, status, research)"
             " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (source_id, now, now, name, branche, "",
+            (leaddb.source_id(source_id), now, now, name, branche, "",
              d.get("category_label") or (niches.NICHES[niche]["label"] if niche else "Betrieb"), niche,
              ", ".join(x for x in (street, plz_ort) if x), city, lat, lon, distance, website or None,
              email or None, d.get("phone") or None, d.get("contact_name") or None, "kandidat",

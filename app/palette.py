@@ -69,7 +69,7 @@ def search():
     like = f"%{q}%"
     rows = db().execute(
         "SELECT id, name, category_label, city, stage, status FROM leads "
-        "WHERE (name LIKE ? OR city LIKE ? OR email LIKE ?) AND IFNULL(rejected_by,'') != 'filter' "
+        "WHERE arbeitsbereich=ab() AND (name LIKE ? OR city LIKE ? OR email LIKE ?) AND IFNULL(rejected_by,'') != 'filter' "
         "ORDER BY stage IS NULL, name LIKE ? DESC, updated_at DESC LIMIT 6",
         (like, like, like, f"{q}%")).fetchall()
     leads = [{"t": r["name"], "s": " · ".join(x for x in ("Betrieb", r["category_label"], r["city"]) if x),

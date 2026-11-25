@@ -92,7 +92,7 @@ def writer_name(c, lead=None):
 
 
 def person_month_eur(c, key):
-    return ai.eur(leaddb._sum(c, "person = ? AND at >= ?", (key, datetime.now().strftime("%Y-%m-01")))["usd"])
+    return ai.eur(leaddb._sum(c, "person = ? AND at >= ?", (key, datetime.now().strftime("%Y-%m-01")), alle=True)["usd"])
 
 
 def person_budget_left_eur(c, key):
@@ -190,7 +190,7 @@ def run_search(c):
             "INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, category_label,"
             " niche, address, city, lat, lon, distance_km, website, email, phone, status, rejected_by, fit_reason,"
             " research) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (f["source_id"], leaddb.now(), leaddb.now(), f["name"], f["branche"], f["category"], f["category_label"],
+            (leaddb.source_id(f["source_id"]), leaddb.now(), leaddb.now(), f["name"], f["branche"], f["category"], f["category_label"],
              f.get("niche"),
              f["address"], f["city"], f["lat"], f["lon"], f["distance_km"], f["website"], f["email"], f["phone"],
              "aussortiert" if reason else "kandidat", "filter" if reason else None,
@@ -213,18 +213,18 @@ def learned_filter(c):
     removed = 0
     for r in c.execute("""
             SELECT category, category_label FROM leads
-            WHERE status NOT IN ('kandidat','recherche') AND IFNULL(rejected_by,'') != 'filter' AND category != ''
+            WHERE arbeitsbereich=ab() AND status NOT IN ('kandidat','recherche') AND IFNULL(rejected_by,'') != 'filter' AND category != ''
             GROUP BY category
             HAVING IFNULL(SUM(interest IN ('qualified','mittel') OR stage IS NOT NULL
                               OR status IN ('passt','entwurf','versendet')), 0) = 0
                AND IFNULL(SUM(rejected_by IN ('ki','regel','team') OR interest='kein_interesse'), 0) >= 5""").fetchall():
         removed += c.execute(
             "UPDATE leads SET status='aussortiert', rejected_by='filter', updated_at=?, fit_reason=? "
-            "WHERE status='kandidat' AND category=?",
+            "WHERE arbeitsbereich=ab() AND status='kandidat' AND category=?",
             (leaddb.now(), f"Grobfilter (gelernt): {r['category_label']} hat bisher fünfmal nicht gepasst.",
              r["category"])).rowcount
     blocked = set(leaddb.kv_get(c, "blocklist", []))
-    for r in c.execute("SELECT id, email, website FROM leads WHERE status='kandidat'").fetchall():
+    for r in c.execute("SELECT id, email, website FROM leads WHERE arbeitsbereich=ab() AND status='kandidat'").fetchall():
         if (_domain(r["email"]) or _host(r["website"])) in blocked:
             leaddb.update_lead(c, r["id"], status="gesperrt", rejected_by="filter",
                                fit_reason="Adresse steht auf der Sperrliste.")
@@ -249,14 +249,14 @@ def next_candidate(c, plan=None):
                    SUM(interest='kein_interesse' OR status='gesperrt') k,
                    SUM(rejected_by='team') rt, SUM(rejected_by IN ('ki','regel')) rk,
                    SUM(status IN ('passt','entwurf','versendet','beantwortet') AND rejected_by IS NULL) ok
-            FROM leads WHERE status NOT IN ('kandidat','recherche') AND IFNULL(rejected_by,'') != 'filter'
+            FROM leads WHERE arbeitsbereich=ab() AND status NOT IN ('kandidat','recherche') AND IFNULL(rejected_by,'') != 'filter'
             GROUP BY branche, category""").fetchall():
         for key in (("b", r["branche"]), ("c", r["category"])):
             s = stats.setdefault(key, [0.0, 0.0])
             s[0] += 3 * (r["q"] or 0) + 1.5 * (r["m"] or 0) + 0.5 * (r["ok"] or 0)
             s[1] += (r["k"] or 0) + (r["rt"] or 0) + 0.5 * (r["rk"] or 0)
     rows = c.execute("SELECT id, source_id, branche, category, niche, distance_km FROM leads "
-                     "WHERE status='kandidat'").fetchall()
+                     "WHERE arbeitsbereich=ab() AND status='kandidat'").fetchall()
     imported = [r for r in rows if (r["source_id"] or "").startswith(("claude:", "web:"))]
     if plan:  # aus der Claude-Recherche nur, was zu den gewählten Nischen passt (oder keine Nische hat)
         imported = [r for r in imported if not r["niche"] or r["niche"] in plan["weights"]]
@@ -335,7 +335,7 @@ def stage_score(c, lead_id, learned, promote=False):
         leaddb.add_event(c, lead_id, "status", "Gesperrt: Diese Adresse möchte nicht kontaktiert werden.")
         return False
     duplicate = email_addr and c.execute(
-        "SELECT name FROM leads WHERE id != ? AND email=? AND status IN ('passt','entwurf','versendet',"
+        "SELECT name FROM leads WHERE arbeitsbereich=ab() AND id != ? AND email=? AND status IN ('passt','entwurf','versendet',"
         "'beantwortet','gesperrt')", (lead_id, email_addr)).fetchone()
     if duplicate and not in_pipeline:
         leaddb.update_lead(c, lead_id, status="aussortiert", rejected_by="regel", **{
@@ -625,14 +625,14 @@ def avg_cost_usd(c, stage):
 
 
 def due_followups(c, without_text=False):
-    rows = c.execute("SELECT * FROM leads WHERE status='versendet' AND interest IS NULL AND IFNULL(followup_count,0)=0 "
-                     "AND ? > 0 AND sent_at <= ? ORDER BY sent_at", (leaddb.FOLLOWUP_DAYS, leaddb.followup_cutoff()))
+    rows = c.execute("SELECT * FROM leads WHERE arbeitsbereich=ab() AND status='versendet' AND interest IS NULL AND IFNULL(followup_count,0)=0 "
+                     "AND ? > 0 AND sent_at <= ? ORDER BY sent_at", (leaddb.followup_days(), leaddb.followup_cutoff()))
     return [dict(r) for r in rows if not (without_text and r["followup_body"])]
 
 
 def estimate(c, drafts, followups=True):
     """Was kostet ein Lauf ungefähr? Die Bewertung ist kostenlos, nur Entwürfe und Erinnerungen kosten."""
-    waiting = c.execute("SELECT COUNT(*) FROM leads WHERE status='passt' AND interest IS NULL "
+    waiting = c.execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND status='passt' AND interest IS NULL "
                         "AND IFNULL(body,'')='' AND stage IS NOT NULL").fetchone()[0]
     reminders = len(due_followups(c, without_text=True)) if followups else 0
     usd = drafts * avg_cost_usd(c, "entwurf") + reminders * avg_cost_usd(c, "erinnerung")
@@ -737,7 +737,7 @@ def _execute_run(c, run_id, run, p):
         weights = niches.load(c, p.get("nischen", "manuell"))
         searched = (leaddb.kv_get(c, "last_search") or {}).get("niches")
         marks = ",".join("?" * len(weights))
-        waiting = c.execute(f"SELECT 1 FROM leads WHERE status='kandidat' AND (niche IN ({marks}) "
+        waiting = c.execute(f"SELECT 1 FROM leads WHERE arbeitsbereich=ab() AND status='kandidat' AND (niche IN ({marks}) "
                             "OR ((source_id LIKE 'claude:%' OR source_id LIKE 'web:%') AND niche IS NULL))",
                             list(weights)).fetchone()
         web_count = int(p.get("web_anzahl") or 0) if use_ai else 0
@@ -784,20 +784,20 @@ def _execute_run(c, run_id, run, p):
         if notes:
             message = " ".join(notes)
         if check and not counts["bewertet"]:  # nichts zu bewerten: sagen, woran es liegt
-            others = c.execute("SELECT COUNT(*) FROM leads WHERE status='kandidat'").fetchone()[0]
+            others = c.execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND status='kandidat'").fetchone()[0]
             labels = ", ".join(niches.NICHES[k]["label"] for k in list(weights)[:4]) + (" …" if len(weights) > 4 else "")
             message = " ".join(notes + [
                 f"In den gewählten Nischen ({labels}) gibt es gerade keine neuen Betriebe"
                 + (f"; {others} warten in anderen Nischen" if others else "") + ". Agenturen und Büros stehen "
                 "oft nicht auf der Karte: Die Websuche (Webseiten, Instagram, LinkedIn) findet sie."])
-        counts["zu_pruefen"] = c.execute("SELECT COUNT(*) FROM leads WHERE status='passt' AND stage IS NULL "
+        counts["zu_pruefen"] = c.execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND status='passt' AND stage IS NULL "
                                          "AND interest IS NULL AND IFNULL(rejected_by,'')=''").fetchone()[0]
 
         # Schritt 3 (nur auf Wunsch): Entwürfe für die besten Betriebe im CRM ohne Nachricht (KI), also nur für
         # die, zu denen ihr beim Prüfen schon Ja gesagt habt
         if drafts and use_ai:
             brain = leaddb.brain(c)
-            best = c.execute("SELECT id, name FROM leads WHERE status='passt' AND interest IS NULL AND IFNULL(body,'')='' "
+            best = c.execute("SELECT id, name FROM leads WHERE arbeitsbereich=ab() AND status='passt' AND interest IS NULL AND IFNULL(body,'')='' "
                              "AND stage IS NOT NULL ORDER BY fit_score DESC, distance_km LIMIT ?", (drafts,)).fetchall()
             for i, row in enumerate(best):
                 check_budget(c, run_id, budget, "entwurf")
@@ -815,7 +815,7 @@ def _execute_run(c, run_id, run, p):
 
         # Wenn die KI geschrieben hat: aus euren Rückmeldungen den Stil lernen
         if (counts["entwuerfe"] or counts["erinnerungen"]) \
-                and c.execute("SELECT 1 FROM signals WHERE processed=0").fetchone():
+                and c.execute("SELECT 1 FROM signals WHERE arbeitsbereich=ab() AND processed=0").fetchone():
             check_budget(c, run_id, budget, "lernen")
             maybe_reflect(c, force=True)
     except BudgetStop as exc:
@@ -828,7 +828,7 @@ def _execute_run(c, run_id, run, p):
         status, message = "fehler", f"{exc.__class__.__name__}: {exc}"
         STATE["error"], STATE["error_at"] = message, time.time()
     finally:
-        c.execute("UPDATE leads SET status='fehler', updated_at=? WHERE status='recherche'", (leaddb.now(),))
+        c.execute("UPDATE leads SET status='fehler', updated_at=? WHERE arbeitsbereich=ab() AND status='recherche'", (leaddb.now(),))
         _local.run_id = None
         cost = ai.eur(leaddb._sum(c, "run_id = ?", (run_id,))["usd"])
         summary = ((f"Websuche: {counts['web_neu']} neu von {counts['web_gemeldet']} gemeldet. "
@@ -884,7 +884,7 @@ def lead_form(lead, snd=None):
 def write_followup(c, lead_id):
     """Erinnerung schreiben (kostet eine kleine KI-Anfrage). Verschickt wird sie erst nach Freigabe."""
     lead = leaddb.get_lead(c, lead_id)
-    result = ai.write_followup(leaddb.brain(c), lead, leaddb.FOLLOWUP_DAYS, writer_name(c, lead))
+    result = ai.write_followup(leaddb.brain(c), lead, leaddb.followup_days(), writer_name(c, lead))
     leaddb.update_lead(c, lead_id, followup_subject=result["betreff"], followup_greeting=result["anrede"],
                        followup_body=result["text"], unread=1)
     leaddb.add_event(c, lead_id, "draft", f"Erinnerung geschrieben ({ai.MODELS['erinnerung']}).")
@@ -900,7 +900,7 @@ def notify_due(c):
     leaddb.kv_set(c, "followup_notified", sorted(told | {lead["id"] for lead in new}))
     names = ", ".join(lead["name"] for lead in new[:3]) + (" …" if len(new) > 3 else "")
     notify(c, f"Nachfassen: {len(new)} Betrieb{'e' if len(new) != 1 else ''}",
-           f"Seit {leaddb.FOLLOWUP_DAYS} Tagen keine Antwort: {names}", "/leads?tab=nachfassen")
+           f"Seit {leaddb.followup_days()} Tagen keine Antwort: {names}", "/leads?tab=nachfassen")
     return len(new)
 
 
@@ -984,20 +984,20 @@ def _message_text(msg):
 def _match_lead(c, msg):
     refs = " ".join(filter(None, (msg.get("In-Reply-To"), msg.get("References"))))
     for mid in re.findall(r"<[^>]+>", refs):
-        row = c.execute("SELECT id FROM leads WHERE message_id=? OR followup_message_id=?", (mid, mid)).fetchone() \
-            or c.execute("SELECT lead_id AS id FROM messages WHERE message_id=?", (mid,)).fetchone()
+        row = c.execute("SELECT id FROM leads WHERE arbeitsbereich=ab() AND (message_id=? OR followup_message_id=?)", (mid, mid)).fetchone() \
+            or c.execute("SELECT m.lead_id AS id FROM messages m JOIN leads l ON l.id = m.lead_id WHERE l.arbeitsbereich=ab() AND m.message_id=?", (mid,)).fetchone()
         if row:
             return row["id"]
     sender = parseaddr(msg.get("From", ""))[1].lower()
     if not sender:
         return None
-    row = c.execute("SELECT id FROM leads WHERE lower(email)=? ORDER BY status IN ('versendet','beantwortet') DESC, "
+    row = c.execute("SELECT id FROM leads WHERE arbeitsbereich=ab() AND lower(email)=? ORDER BY status IN ('versendet','beantwortet') DESC, "
                     "sent_at DESC, id DESC LIMIT 1", (sender,)).fetchone()
     if row:
         return row["id"]
     domain = _domain(sender)
     if domain and domain not in FREEMAIL:
-        for r in c.execute("SELECT id, email, website FROM leads WHERE status IN ('versendet','beantwortet') "
+        for r in c.execute("SELECT id, email, website FROM leads WHERE arbeitsbereich=ab() AND status IN ('versendet','beantwortet') "
                            "ORDER BY sent_at DESC"):
             if domain in (_domain(r["email"]), _host(r["website"])):
                 return r["id"]
@@ -1032,20 +1032,20 @@ def _contact_for(c, msg):
     """Unbekannter Absender: als Kontakt anlegen (nicht in der Pipeline, nicht in den Leads-Reitern)."""
     name, addr = parseaddr(msg.get("From", ""))
     addr = addr.lower()
-    row = c.execute("SELECT id FROM leads WHERE lower(email)=? ORDER BY id DESC LIMIT 1", (addr,)).fetchone()
+    row = c.execute("SELECT id FROM leads WHERE arbeitsbereich=ab() AND lower(email)=? ORDER BY id DESC LIMIT 1", (addr,)).fetchone()
     if row:
         return row["id"]
     now = leaddb.now()
     cur = c.execute(
         "INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, category_label, "
         "email, contact_name, status, fit_reason) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-        (f"mail:{addr}", now, now, name or addr, "sonstige", "", "Kontakt", addr, name or None, "kontakt",
+        (leaddb.source_id(f"mail:{addr}"), now, now, name or addr, "sonstige", "", "Kontakt", addr, name or None, "kontakt",
          "Hat uns geschrieben."))
     c.commit()
     if cur.rowcount:
         leaddb.add_event(c, cur.lastrowid, "status", "Hat uns eine Mail geschrieben, als Kontakt angelegt.", author="Postfach")
         return cur.lastrowid
-    return c.execute("SELECT id FROM leads WHERE source_id=?", (f"mail:{addr}",)).fetchone()["id"]
+    return c.execute("SELECT id FROM leads WHERE source_id=?", (leaddb.source_id(f"mail:{addr}"),)).fetchone()["id"]
 
 
 def check_inbox(c):
@@ -1261,7 +1261,7 @@ def record_reply(c, lead, text, sent_by, subject, to, message_id=None, in_reply_
 
 
 def maybe_reflect(c, force=False):
-    signals = [dict(r) for r in c.execute("SELECT * FROM signals WHERE processed=0 ORDER BY id")]
+    signals = [dict(r) for r in c.execute("SELECT * FROM signals WHERE arbeitsbereich=ab() AND processed=0 ORDER BY id")]
     if not signals:
         return False
     oldest = datetime.fromisoformat(signals[0]["at"])

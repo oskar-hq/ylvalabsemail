@@ -624,7 +624,7 @@ def _record_in_crm(lead_id, msgs, author):
             pairs = []
             for msg in msgs:
                 addr = parseaddr(str(msg["To"]))[1].strip().lower()
-                row = c.execute("SELECT id FROM leads WHERE lower(email)=? AND status != 'gesperrt' "
+                row = c.execute("SELECT id FROM leads WHERE arbeitsbereich=ab() AND lower(email)=? AND status != 'gesperrt' "
                                 "ORDER BY stage IS NULL, id LIMIT 1", (addr,)).fetchone() if addr else None
                 if row:
                     pairs.append((row["id"], msg))

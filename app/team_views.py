@@ -167,7 +167,7 @@ def template_editor():
     c = db()
     s = team.settings(c, key, SETTINGS["ORG_NAME"])
     examples = [dict(r) for r in c.execute(
-        "SELECT id, name, category_label FROM leads WHERE stage IS NOT NULL OR status IN ('passt','entwurf') "
+        "SELECT id, name, category_label FROM leads WHERE arbeitsbereich=ab() AND (stage IS NOT NULL OR status IN ('passt','entwurf')) "
         "ORDER BY (owner = ?) DESC, updated_at DESC LIMIT 12", (key,))]
     return render_template("template_editor.html", account=g.account, text=agent.template_text(c, key),
                            own=bool((s["vorlage"] or "").strip()), settings=s,

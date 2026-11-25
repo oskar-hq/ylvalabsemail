@@ -131,7 +131,7 @@ def board(conn, who="alle", me=None):
     rows = conn.execute(f"""
         SELECT l.*, (SELECT MIN(t.faellig) {OPEN_TASK_SUB}) AS next_due,
                (SELECT COUNT(*) {OPEN_TASK_SUB}) AS open_tasks
-        FROM leads l WHERE l.stage IS NOT NULL AND {where}
+        FROM leads l WHERE l.arbeitsbereich=ab() AND l.stage IS NOT NULL AND {where}
         ORDER BY l.unread DESC, IFNULL(l.stage_at, l.updated_at) DESC""", args).fetchall()
     columns = {k: [] for k in STAGE_KEYS}
     for r in rows:
@@ -223,16 +223,16 @@ def website_url(url):
 
 def find_duplicate(conn, name, email, website):
     if email:
-        row = conn.execute("SELECT id, name FROM leads WHERE lower(email)=?", (email.lower(),)).fetchone()
+        row = conn.execute("SELECT id, name FROM leads WHERE arbeitsbereich=ab() AND lower(email)=?", (email.lower(),)).fetchone()
         if row:
             return row
     host = urlparse(website or "").netloc.lower().removeprefix("www.")
     if host:
-        for row in conn.execute("SELECT id, name, website FROM leads WHERE website LIKE ?", (f"%{host}%",)):
+        for row in conn.execute("SELECT id, name, website FROM leads WHERE arbeitsbereich=ab() AND website LIKE ?", (f"%{host}%",)):
             if urlparse(row["website"]).netloc.lower().removeprefix("www.") == host:
                 return row
     if name:
-        return conn.execute("SELECT id, name FROM leads WHERE lower(name)=?", (name.lower(),)).fetchone()
+        return conn.execute("SELECT id, name FROM leads WHERE arbeitsbereich=ab() AND lower(name)=?", (name.lower(),)).fetchone()
     return None
 
 
@@ -261,7 +261,7 @@ def create_lead(conn, data, author, source="hand"):
         "INSERT INTO leads (source_id, created_at, updated_at, name, branche, category, category_label, address, city,"
         " website, email, phone, contact_name, status, stage, stage_at, fit_reason)"
         " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-        (source_id, now, now, name, (data.get("branche") or "").strip().lower() or "sonstige", "",
+        (leaddb.source_id(source_id), now, now, name, (data.get("branche") or "").strip().lower() or "sonstige", "",
          (data.get("category_label") or data.get("branche") or "").strip() or "Betrieb", address, city,
          website or None, email or None, (data.get("phone") or "").strip() or None,
          (data.get("contact_name") or "").strip() or None, "passt", "neu", now,
@@ -353,7 +353,7 @@ def export_csv(conn, everything=False):
     """CSV für Excel (Semikolon, UTF-8 mit BOM). Standard: alle Betriebe in der Pipeline."""
     where = "1" if everything else "stage IS NOT NULL"
     rows = conn.execute(f"""SELECT l.*, (SELECT MIN(t.faellig) {OPEN_TASK_SUB})
-                            AS next_due FROM leads l WHERE {where} ORDER BY name""").fetchall()
+                            AS next_due FROM leads l WHERE l.arbeitsbereich=ab() AND {where} ORDER BY name""").fetchall()
     out = io.StringIO()
     writer = csv.writer(out, delimiter=";", quoting=csv.QUOTE_MINIMAL)
     writer.writerow([h for h, _ in EXPORT_COLUMNS])

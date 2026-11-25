@@ -294,7 +294,7 @@ def compose_mail():
         return jsonify(error="Bitte eine gültige E-Mail-Adresse eintragen (eine Adresse)."), 400
     if not subject or not text:
         return jsonify(error="Bitte Betreff und Text schreiben."), 400
-    row = c.execute("SELECT id FROM leads WHERE lower(email)=? ORDER BY id DESC LIMIT 1", (to,)).fetchone()
+    row = c.execute("SELECT id FROM leads WHERE arbeitsbereich=ab() AND lower(email)=? ORDER BY id DESC LIMIT 1", (to,)).fetchone()
     if row:
         lead = leaddb.get_lead(c, row["id"])
         if lead["status"] != "kontakt":
@@ -305,10 +305,10 @@ def compose_mail():
         now = leaddb.now()
         cur = c.execute("INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, "
                         "category_label, email, status, fit_reason) VALUES (?,?,?,?,?,?,?,?,?,?)",
-                        (f"mail:{to}", now, now, request.form.get("name", "").strip() or to, "sonstige", "", "Kontakt",
+                        (leaddb.source_id(f"mail:{to}"), now, now, request.form.get("name", "").strip() or to, "sonstige", "", "Kontakt",
                          to, "kontakt", "Von euch angeschrieben."))
         c.commit()
-        lead_id = cur.lastrowid or c.execute("SELECT id FROM leads WHERE source_id=?", (f"mail:{to}",)).fetchone()["id"]
+        lead_id = cur.lastrowid or c.execute("SELECT id FROM leads WHERE source_id=?", (leaddb.source_id(f"mail:{to}"),)).fetchone()["id"]
         lead = leaddb.get_lead(c, lead_id)
     if lead["status"] == "gesperrt":
         return jsonify(error="Diese Adresse möchte keine Nachrichten mehr bekommen."), 400
