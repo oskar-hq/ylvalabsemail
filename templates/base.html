@@ -4,13 +4,13 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="csrf-token" content="{{ csrf_token() }}">
-<title>{% block title %}Ylva Labs Mailer{% endblock %}</title>
+<title>{% block title %}Ylva Labs{% endblock %}</title>
 <link rel="icon" href="{{ url_for('static', filename='mark.svg') }}" type="image/svg+xml">
 <link rel="manifest" href="{{ url_for('leads.manifest') }}">
 <link rel="apple-touch-icon" href="{{ url_for('static', filename='apple-touch-icon.png') }}">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Ylva Leads">
+<meta name="apple-mobile-web-app-title" content="Ylva OS">
 {% if ui_theme == 'light' %}<meta name="theme-color" content="#ffffff">{% elif ui_theme == 'dark' %}<meta name="theme-color" content="#000000">{% else %}<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">{% endif %}
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -21,12 +21,12 @@
 <body class="{% block body_class %}{% endblock %}">
 {% if account %}
 {% set ep = request.endpoint or '' %}
-{% set sec = 'tag' if ep == 'aufgaben.mein_tag' else 'freigaben' if ep == 'freigaben.zentrale' else ('kalender' if ep.startswith('kalender.') and ep != 'kalender.einstellungen' else 'cockpit' if ep.startswith('cockpit.') else 'kunden' if ep.startswith('kunden.') and ep != 'kunden.einstellungen' else 'aufgaben' if ep.startswith('aufgaben.') else 'assistent' if ep in ('assistent.seite',) else ('leads' if ep.startswith('leads.') else ('crm' if ep.startswith('crm.') else ('mailer' if ep in ('compose', 'history') else ('mehr' if ep.startswith(('settings.', 'personen.')) else ''))))) %}
+{% set sec = 'aufgaben' if ep.startswith(('stapel.', 'aufgaben.', 'freigaben.zentrale')) else ('pipeline' if ep.startswith(('pipeline.', 'kunden.')) and ep != 'kunden.einstellungen' else ('chat' if ep in ('crm.chat', 'crm.inbox', 'crm.conversation', 'crm.compose_mail') else ('crm' if ep.startswith(('crm.', 'leads.detail')) else ('mailer' if ep in ('compose', 'history') else ('mehr' if ep.startswith(('settings.', 'personen.', 'agenten.')) else ''))))) %}
 {% set mit_person = account.team %}
-{% set n_leads = leads_todo() if mit_person and darf('leads') else 0 %}{% set n_crm = crm_due() if mit_person and darf('crm') else 0 %}{% set n_auf = aufgaben_offen() if mit_person else 0 %}{% set n_frei = freigaben_offen() if mit_person else 0 %}
+{% set n_auf = stapel_offen() if mit_person else 0 %}{% set n_chat = inbox_unread() if mit_person and darf('crm') else 0 %}
 {% set who_name = (account.name or account.address or account.user or 'Team') %}
 <header class="top">
-  <a class="brand" href="{{ url_for('index') }}" aria-label="Ylva Labs, Mein Tag">
+  <a class="brand" href="{{ url_for('index') }}" aria-label="Ylva Labs, zu den Aufgaben">
     <span class="brand-tile"><span class="mark" aria-hidden="true"><i class="d"></i><i class="d"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i></i><i class="b"></i><i class="d"></i><i class="d"></i><i class="b"></i><i class="b"></i><i class="d"></i><i class="d"></i></span></span>
   </a>
   {% set abs_ = g.get('arbeitsbereiche') or [] %}{% if mit_person and abs_|length > 1 %}{% set ab_jetzt = (abs_|selectattr('key', 'equalto', g.arbeitsbereich)|first) %}
@@ -40,16 +40,11 @@
   </details>{% endif %}
   <nav aria-label="Hauptnavigation">
     <span class="nav-main">
-      {% if mit_person %}<a href="{{ url_for('aufgaben.mein_tag') }}" class="{{ 'on' if sec == 'tag' }}">Mein Tag</a>
-      {% if n_frei or sec == 'freigaben' %}<a href="{{ url_for('freigaben.zentrale') }}" class="{{ 'on' if sec == 'freigaben' }}">Freigaben{% if n_frei %} <span class="nav-count" title="Wartet auf deine Freigabe">{{ n_frei }}</span>{% endif %}</a>{% endif %}
-      {% if darf('aufgaben') %}<a href="{{ url_for('aufgaben.liste') }}" class="{{ 'on' if sec == 'aufgaben' }}">Aufgaben{% if n_auf %} <span class="nav-count" title="Heute fällig und Anfragen an dich">{{ n_auf }}</span>{% endif %}</a>{% endif %}
-      {% if darf('kalender') %}<a href="{{ url_for('kalender.uebersicht') }}" class="{{ 'on' if sec == 'kalender' }}">Kalender{% set n_heute = termine_heute() %}{% if n_heute %} <span class="nav-count" title="Termine heute">{{ n_heute }}</span>{% endif %}</a>{% endif %}
-      {% if darf('kunden') %}<a href="{{ url_for('kunden.uebersicht') }}" class="{{ 'on' if sec == 'kunden' }}">Kunden</a>{% endif %}
-      {% if darf('cockpit') %}<a href="{{ url_for('cockpit.cockpit') }}" class="{{ 'on' if sec == 'cockpit' }}">Cockpit</a>{% endif %}
-      {% if darf('assistent') and assistent_an() %}<a href="{{ url_for('assistent.seite') }}" class="{{ 'on' if sec == 'assistent' }}">Assistent</a>{% endif %}
-      {% if darf('leads') %}<a href="{{ url_for('leads.overview') }}" class="{{ 'on' if sec == 'leads' }}">Leads{% if n_leads %} <span class="nav-count">{{ n_leads }}</span>{% endif %}</a>{% endif %}
-      {% if darf('crm') %}<a href="{{ url_for('crm.board') }}" class="{{ 'on' if sec == 'crm' }}">CRM{% if n_crm %} <span class="nav-count" title="Wiedervorlagen heute">{{ n_crm }}</span>{% endif %}</a>{% endif %}{% endif %}
-      {% if not mit_person or darf('mailer') %}<a href="{{ url_for('compose') }}" class="{{ 'on' if sec == 'mailer' }}">Mailer</a>{% endif %}
+      {% if mit_person %}<a href="{{ url_for('stapel.start') }}" class="{{ 'on' if sec == 'aufgaben' }}">Aufgaben{% if n_auf %} <span class="nav-count" title="Wartet heute auf dich">{{ n_auf }}</span>{% endif %}</a>
+      <a href="{{ url_for('pipeline.seite') }}" class="{{ 'on' if sec == 'pipeline' }}">Pipeline</a>
+      {% if darf('crm') %}<a href="{{ url_for('crm.board') }}" class="{{ 'on' if sec == 'crm' }}">CRM</a>
+      <a href="{{ url_for('crm.chat') }}" class="{{ 'on' if sec == 'chat' }}">Chat{% if n_chat %} <span class="nav-count" title="Ungelesene Gespräche">{{ n_chat }}</span>{% endif %}</a>{% endif %}
+      {% else %}<a href="{{ url_for('compose') }}" class="{{ 'on' if sec == 'mailer' }}">Mailer</a>{% endif %}
     </span>
     {% set n_unread = inbox_unread() + notices_unseen() %}
     <div class="bell" id="bell">
@@ -63,7 +58,7 @@
         <div class="bell-head bell-head-mail"><b>Neue Mails</b><a href="{{ url_for('crm.compose_mail') }}">Neue Mail schreiben</a></div>
         <p class="bell-error small" id="bellError" hidden></p>
         <ul class="bell-list" id="bellList"><li class="muted small">Lädt …</li></ul>
-        <a class="bell-all" href="{{ url_for('crm.inbox') }}">Zum Postfach →</a>
+        <a class="bell-all" href="{{ url_for('crm.chat') }}">Zum Chat →</a>
       </div>
     </div>
     <button type="button" class="find-btn" id="findOpen" aria-label="Suchen (⌘K)" aria-keyshortcuts="Meta+K Control+K"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span>Suchen</span><kbd id="findKey">⌘K</kbd></button>
@@ -75,25 +70,13 @@
           <span>Darstellung</span>
           <span class="segmented small">{% for key, label in [('light', 'Hell'), ('dark', 'Dunkel'), ('auto', 'Auto')] %}<button type="button" data-theme-set="{{ key }}" class="{{ 'on' if ui_theme == key }}" aria-pressed="{{ 'true' if ui_theme == key else 'false' }}">{{ label }}</button>{% endfor %}</span>
         </div>
-        {% if account.team %}<a href="{{ url_for('team.profile') }}">Mein Profil und Passwort</a>
-        <a href="{{ url_for('team.template_editor') }}">Meine Vorlage</a>{% else %}<a href="{{ url_for('team.who_am_i') }}">Wer bist du? Person wählen</a>{% endif %}
-        {% if mit_person %}<a href="{{ url_for('freigaben.zentrale') }}">Freigaben{% if n_frei %} ({{ n_frei }}){% endif %}</a>
-        {% if darf('entscheidungen') %}<a href="{{ url_for('freigaben.log') }}">Entscheidungs-Log</a>{% endif %}
-        <a href="{{ url_for('freigaben.notfall') }}">Notfall melden</a>
-        <a href="{{ url_for('team.overview') }}">Team und Zahlen</a>{% endif %}
-        {% if darf('personen') %}<a href="{{ url_for('personen.liste') }}">Personen und Rechte</a>{% endif %}
-        {% if darf('einstellungen') %}<a href="{{ url_for('settings.settings') }}">Einstellungen</a>{% endif %}
-        {% if mit_person and darf('mailer') %}<a href="{{ url_for('compose') }}">Mailer</a>{% endif %}
-        {% if darf('kalender') %}<a href="{{ url_for('kalender.mein') }}">Mein Kalender</a>{% endif %}
-        {% if darf('kunden') %}<a href="{{ url_for('kunden.uebersicht') }}">Kunden und Projekte</a>
-        <a href="{{ url_for('angebote.liste') }}">Angebote</a>{% endif %}
-        {% if darf('assistent') %}<a href="{{ url_for('assistent.seite') }}">Assistent</a>{% endif %}
-        {% if darf('cockpit') %}<a href="{{ url_for('cockpit.cockpit') }}">Cockpit</a>
-        <a href="{{ url_for('cockpit.wochengespraech') }}">Wochengespräch</a>{% endif %}
-        {% if not mit_person or darf('mailer') %}<a href="{{ url_for('history') }}">Verlauf des Mailers</a>{% endif %}
+        {% if account.team %}<a href="{{ url_for('team.profile') }}">Mein Profil</a>{% else %}<a href="{{ url_for('team.who_am_i') }}">Wer bist du? Person wählen</a>{% endif %}
+        {% if darf('einstellungen') or darf('personen') %}<a href="{{ url_for('settings.settings') }}">Einstellungen</a>{% endif %}
+        {% if mit_person %}{% if darf('kalender') %}<a href="{{ url_for('kalender.uebersicht') }}">Kalender</a>{% endif %}
+        {% if darf('kunden') %}<a href="{{ url_for('kunden.uebersicht') }}">Kunden und Projekte</a>{% endif %}
         {% if darf('finanzen') %}<a href="{{ url_for('finanzen.uebersicht') }}">Finanzen</a>{% endif %}
-        {% if darf('kosten') %}<a href="{{ url_for('leads.costs') }}">KI-Kosten</a>{% endif %}
-        {% if darf('einstellungen') %}<a href="{{ url_for('leads.system') }}">Systemcheck</a>{% endif %}
+        {% if darf('entscheidungen') %}<a href="{{ url_for('freigaben.log') }}">Entscheidungs-Log</a>{% endif %}
+        {% if darf('mailer') %}<a href="{{ url_for('compose') }}">Mailer</a>{% endif %}{% endif %}
         <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}"><button>Abmelden</button></form>
       </div>
     </details>
@@ -102,11 +85,10 @@
 {% if mit_person %}{% for n in notfaelle_aktiv() %}<a class="os-notfall-band" href="{{ url_for('freigaben.notfall') }}#n{{ n.id }}"><b>Notfall: {{ n.art_label }}</b><span>{{ n.text }} · gemeldet von {{ n.von_name }} um {{ n.gemeldet_am[11:16] }}</span></a>{% endfor %}{% endif %}
 {% if not account.team and request.endpoint != 'team.who_am_i' %}<div class="who-banner">Du bist mit dem Postfach angemeldet und kannst den Mailer nutzen. <a href="{{ url_for('team.who_am_i', next=request.path) }}">Wähle, wer du bist</a>, oder melde dich mit deinem Namen an.</div>{% endif %}
 <nav class="tabbar" aria-label="Bereiche">
-  {% if mit_person %}<a href="{{ url_for('aufgaben.mein_tag') }}" class="{{ 'on' if sec == 'tag' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>Mein Tag</a>
-  {% if darf('aufgaben') %}<a href="{{ url_for('aufgaben.liste') }}" class="{{ 'on' if sec == 'aufgaben' }}">{% if n_auf %}<span class="tab-count">{{ n_auf }}</span>{% endif %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3 8-8"/><path d="M20 12v7a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h9"/></svg>Aufgaben</a>{% endif %}
-  {% if darf('kalender') %}<a href="{{ url_for('kalender.uebersicht') }}" class="{{ 'on' if sec == 'kalender' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>Kalender</a>{% endif %}
-  {% if darf('leads') %}<a href="{{ url_for('leads.overview') }}" class="{{ 'on' if sec == 'leads' }}">{% if n_leads %}<span class="tab-count">{{ n_leads }}</span>{% endif %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="7" r="4"/><path d="M2 21v-1a6 6 0 0 1 9-5.2"/><circle cx="17" cy="16" r="3"/><path d="m21 20-1.8-1.8"/></svg>Leads</a>{% endif %}
-  {% if darf('crm') %}<a href="{{ url_for('crm.board') }}" class="{{ 'on' if sec == 'crm' }}">{% if n_crm %}<span class="tab-count">{{ n_crm }}</span>{% endif %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg>CRM</a>{% endif %}{% endif %}
+  {% if mit_person %}<a href="{{ url_for('stapel.start') }}" class="{{ 'on' if sec == 'aufgaben' }}">{% if n_auf %}<span class="tab-count">{{ n_auf }}</span>{% endif %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg>Aufgaben</a>
+  <a href="{{ url_for('pipeline.seite') }}" class="{{ 'on' if sec == 'pipeline' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>Pipeline</a>
+  {% if darf('crm') %}<a href="{{ url_for('crm.board') }}" class="{{ 'on' if sec == 'crm' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="5" height="16" rx="1.5"/><rect x="10" y="4" width="5" height="11" rx="1.5"/><rect x="17" y="4" width="4" height="7" rx="1.5"/></svg>CRM</a>
+  <a href="{{ url_for('crm.chat') }}" class="{{ 'on' if sec == 'chat' }}">{% if n_chat %}<span class="tab-count">{{ n_chat }}</span>{% endif %}<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12Z"/></svg>Chat</a>{% endif %}{% endif %}
   {% if not mit_person %}<a href="{{ url_for('compose') }}" class="{{ 'on' if sec == 'mailer' }}"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg>Mailer</a>{% endif %}
 </nav>
 {% endif %}

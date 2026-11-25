@@ -19,6 +19,13 @@ import re
 from datetime import datetime, timedelta
 
 SCHEMA = """
+CREATE TABLE IF NOT EXISTS freigaben (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, art TEXT NOT NULL, objekt_typ TEXT, objekt_id INTEGER, stufe TEXT,
+    vorschlag TEXT, angefragt_von TEXT, angefragt_am TEXT NOT NULL, pruefer TEXT,
+    status TEXT NOT NULL DEFAULT 'offen', grund TEXT, entschieden_von TEXT, entschieden_am TEXT, geaendert TEXT
+);
+CREATE INDEX IF NOT EXISTS freigaben_offen ON freigaben(status, pruefer);
+CREATE INDEX IF NOT EXISTS freigaben_objekt ON freigaben(objekt_typ, objekt_id);
 CREATE TABLE IF NOT EXISTS entscheidungsrechte (
     key TEXT PRIMARY KEY, titel TEXT NOT NULL, beschreibung TEXT, wer TEXT NOT NULL DEFAULT '[]',
     modus TEXT NOT NULL DEFAULT 'eine', gefragt TEXT NOT NULL DEFAULT '[]', grenze_eur REAL, ab_grenze TEXT,
@@ -80,9 +87,6 @@ AKTIONEN = [
        bereich="Projekte"),
     _a("abnahme", "Abnahme vor der Übergabe", "D", hinweis="Das letzte Wort hat die verantwortliche Person.",
        bereich="Projekte"),
-    _a("lead_pruefung", "Lead für den Kontakt freigeben", "C",
-       hinweis="Gesteuert über die Lernstufen: Stufe 1 jeder Lead, Stufe 2 und 3 Stichproben (Branchentest → Regeln).",
-       bereich="Akquise"),
     _a("lernstufe", "Aufstieg in die nächste Lernstufe", "C", hinweis="Die führende Person gibt frei.",
        bereich="Team"),
     _a("team_meldungen", "Erinnerungen und Meldungen an das Team", "A", bereich="Team"),
@@ -488,18 +492,6 @@ def _person_name(c, key):
     return firma.name_von(c, key) if key else ""
 
 
-def _lead_pruefung(c, f):
-    row = c.execute("SELECT l.name, l.category_label, l.city, b.name AS branche FROM leads l LEFT JOIN testbranchen b "
-                    "ON b.key = l.testbranche WHERE l.id=?", (f["objekt_id"],)).fetchone()
-    if not row:
-        return None
-    teile = [row["category_label"], row["city"], row["branche"]]
-    return {"titel": row["name"], "text": " · ".join(x for x in teile if x),
-            "eyebrow": "Stichprobe" if f["stufe"] == "stichprobe" else "Lead prüfen",
-            "url": f"/leads/{f['objekt_id']}", "frage": "Warum passt er nicht?",
-            "folge": "Abgelehnt wird der Lead aussortiert; die recherchierende Person bekommt den Grund."}
-
-
 def _termin_einladung(c, f):
     from . import kalender
     t = kalender.get(c, f["objekt_id"])
@@ -529,13 +521,6 @@ def _entscheidung_art(c, f):
              e["begruendung"][:120]]
     return {"titel": e["titel"], "text": " · ".join(x for x in teile if x), "eyebrow": "Entscheidung",
             "url": f"/entscheidungen#e{e['id']}", "frage": "Warum nicht?", "ja": "Zustimmen"}
-
-
-def _entscheide_lead(c, wer, f, ok, grund):
-    from . import branchentest
-    if not branchentest.darf_entscheiden(c, wer, dict(f)):
-        raise FreigabeError("Prüfen darf die eingetragene Person (oder wer Leads verwaltet).")
-    branchentest.entscheiden(c, wer, f["id"], ok, grund)
 
 
 def _entscheide_termin(c, wer, f, ok, grund):
@@ -644,8 +629,6 @@ def _darf_selbst(c, wer, f):
 
 # Arten mit Zeilen in `freigaben`. Neue Art: Eintrag hier (Beschreibung, Entscheiden-Funktion, Modul für „Verwalten“).
 ARTEN = {
-    "lead_pruefung": {"label": "Lead-Prüfungen", "modul": "leads", "beschreiben": _lead_pruefung,
-                      "entscheiden": _entscheide_lead, "darf": _darf_alle},
     "termin_einladung": {"label": "Einladungen an Kunden", "modul": "kalender", "beschreiben": _termin_einladung,
                          "entscheiden": _entscheide_termin, "darf": _darf_alle},
     "lernstufe": {"label": "Aufstiege", "modul": "personen", "beschreiben": _lernstufe,

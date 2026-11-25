@@ -5,7 +5,7 @@ import sqlite3
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from . import agenten, arbeitsbereiche, assistent, aufgaben, branchentest, firma, finanzen, freigaben, kalender, kpis, notfall, portal, posteingang, projekte  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
+from . import agenten, arbeitsbereiche, assistent, aufgaben, firma, finanzen, freigaben, kalender, kpis, notfall, portal, posteingang, projekte  # Firmen-OS: Tabellen und Startwerte (beide importieren leaddb erst beim Aufruf)
 
 ROOT = Path(__file__).resolve().parent.parent
 BRAIN_SEED = Path(__file__).resolve().parent / "brain_seed.md"
@@ -201,9 +201,27 @@ MIGRATIONS = [
     # Firmen-OS Stufe 12 (Agenten-Schnittstelle): „Später“ bei Agent-Freigaben und was das OS danach ausgeführt hat
     "ALTER TABLE freigaben ADD COLUMN spaeter_bis TEXT",
     "ALTER TABLE freigaben ADD COLUMN ausfuehrung TEXT",
+    # Stufe 13: Antworten über Slack, WhatsApp, LinkedIn warten auf den Versand durch einen Agent
+    "ALTER TABLE messages ADD COLUMN versand TEXT",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.
+# Stufe 2 (Branchentest) ist seit Stufe 13 entfernt; Tabelle und Startwerte bleiben, damit bestehende Datenbanken
+# und die Zählung der DATA_MIGRATIONS gleich bleiben.
+TESTBRANCHEN_SCHEMA = """
+CREATE TABLE IF NOT EXISTS testbranchen (
+    key TEXT PRIMARY KEY, name TEXT NOT NULL, beschreibung TEXT, nischen TEXT NOT NULL DEFAULT '[]',
+    person TEXT, ziel INTEGER NOT NULL DEFAULT 50, aktiv INTEGER NOT NULL DEFAULT 1, sort INTEGER NOT NULL DEFAULT 0
+);
+"""
+TESTBRANCHEN_SEED = [
+    """INSERT OR IGNORE INTO testbranchen (key, name, beschreibung, nischen, person, ziel, sort) VALUES
+       ('video', 'Video & Content', 'Nur Fremde: prüft, ob die Piloten mehr waren als Kontakte.', '["video", "foto"]', 'hamza', 50, 1),
+       ('design', 'Design & Werbung', 'Ähnlich wie Video, aber ohne Bezug zu Oskars Kontakten.', '["werbeagentur", "marketing", "grafik", "design"]', 'hamza', 50, 2),
+       ('handwerk', 'Handwerk (Heizung/Sanitär, Elektro)', 'Viel Büroarbeit.', '["sanitaer", "elektro"]', NULL, 50, 3),
+       ('verwaltung', 'Hausverwaltungen und Ingenieurbüros', 'Viel wiederkehrende Büroarbeit.', '["hausverwaltung", "ingenieur"]', NULL, 50, 4)""",
+]
+
 DATA_MIGRATIONS = [
     # Bewertung nach Regeln statt KI: „analysiert“ heißt jetzt „passt“, Vorgeprüfte werden neu bewertet
     "UPDATE leads SET status='passt' WHERE status='analysiert'",
@@ -226,7 +244,7 @@ DATA_MIGRATIONS = [
     "INSERT OR IGNORE INTO team (key, name, sort) VALUES ('oskar', 'Oskar Jacobsen', 3)",
     *firma.SEED,
     aufgaben.UEBERNAHME,
-    *branchentest.SEED,
+    *TESTBRANCHEN_SEED,  # Stufe 2 (Branchentest, seit Stufe 13 entfernt): bleibt, damit die Zählung stimmt
     # Stufe 3: neues Modul „Kalender“ in den bestehenden Rollen (Gründer verwalten, Recherche bearbeitet)
     """UPDATE rollen SET rechte = json_set(rechte, '$.kalender', 4) WHERE key = 'gruender'
        AND json_extract(rechte, '$.kalender') IS NULL""",
@@ -301,12 +319,11 @@ def connect(path):
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     conn.executescript(SCHEMA)
-    from . import known, reports
+    from . import known
     conn.executescript(known.SCHEMA)
-    conn.executescript(reports.SCHEMA)
     conn.executescript(firma.SCHEMA)
     conn.executescript(aufgaben.SCHEMA)
-    conn.executescript(branchentest.SCHEMA)
+    conn.executescript(TESTBRANCHEN_SCHEMA)
     conn.executescript(kalender.SCHEMA)
     conn.executescript(kpis.SCHEMA)
     conn.executescript(projekte.SCHEMA)

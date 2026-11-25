@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, avatar %}
+{% block title %}{% if lead %}{{ lead.name }} · {% endif %}Chat · Ylva Labs{% endblock %}
+{% block content %}
+{% macro zeile(x) -%}
+<li><a class="ch-zeile {{ 'on' if lead and lead.id == x.id }}" href="{{ url_for('crm.chat', lead_id=x.id, wer=wer if wer == 'alle' else None) }}">
+  {{ avatar(x.contact_name or x.name) }}
+  <span class="ch-zeile-txt"><span class="ch-zeile-kopf"><b>{{ x.contact_name or x.name }}</b><time class="{{ 'blau' if x.wartet }}">{{ x.last_at|kurzdatum }}</time></span>
+    <span class="ch-zeile-firma">{{ x.name if x.contact_name else '' }}{% if x.kanal != 'mail' %}{{ ' · ' if x.contact_name }}{{ kanal_namen.get(x.kanal, x.kanal) }}{% endif %}</span>
+    <span class="ch-zeile-letzte">{% if x.last_dir == 'out' %}Ihr: {% endif %}{{ (x.last_text or '')|replace('\n', ' ')|truncate(70) }}</span></span>
+  {% if x.unread_msgs %}<i class="ch-punkt" aria-label="ungelesen"></i>{% endif %}
+</a></li>
+{%- endmacro %}
+{% set kanal_namen = {'mail': 'Mail', 'slack': 'Slack', 'whatsapp': 'WhatsApp', 'linkedin': 'LinkedIn', 'telefon': 'Telefon', 'brief': 'Brief', 'portal': 'Kunden-Bereich'} %}
+<main class="ch-seite {{ 'mit-verlauf' if lead else '' }}">
+  {{ toasts() }}
+  <aside class="ch-liste" aria-label="Gespräche">
+    <div class="ch-liste-kopf">
+      <h1 class="os-title-l">Chat</h1>
+      <div class="os-chips"><a href="{{ url_for('crm.chat', lead_id=lead.id if lead else None) }}" class="{{ 'on' if wer == 'meine' }}">Meine</a><a href="{{ url_for('crm.chat', lead_id=lead.id if lead else None, wer='alle') }}" class="{{ 'on' if wer == 'alle' }}">Alle</a></div>
+    </div>
+    <input class="os-input ch-suche" type="search" placeholder="Name, Firma …" aria-label="Gespräche durchsuchen" data-ch-suche>
+    {% if wartet %}<p class="ch-gruppe">Wartet auf euch · {{ wartet|length }}</p><ul class="ch-ul">{% for x in wartet %}{{ zeile(x) }}{% endfor %}</ul>{% endif %}
+    {% if rest %}<p class="ch-gruppe">Alle anderen</p><ul class="ch-ul">{% for x in rest %}{{ zeile(x) }}{% endfor %}</ul>{% endif %}
+    <p class="ch-ordner"><a class="os-link" href="{{ url_for('crm.inbox', ordner='sonstige') }}">Sonstige</a> · <a class="os-link" href="{{ url_for('crm.inbox', ordner='fehler') }}">Fehler</a></p>
+    {% if not wartet and not rest %}<p class="os-empty">Noch keine Gespräche. Antworten per Mail kommen von selbst; Slack-Nachrichten tragen die Agents ein.</p>{% endif %}
+  </aside>
+
+  <section class="ch-verlauf-box" aria-label="Verlauf">
+    {% if lead %}
+    <header class="ch-kopf">
+      <a class="ch-zurueck" href="{{ url_for('crm.chat', wer=wer if wer == 'alle' else None) }}" aria-label="Zurück zur Liste">{{ i('back') }}</a>
+      {{ avatar(lead.contact_name or lead.name) }}
+      <span class="ch-kopf-txt"><b>{{ lead.contact_name or lead.name }}</b><span>{{ lead.name if lead.contact_name else '' }}{% if lead.email %} · {{ lead.email }}{% endif %}{% if wartet_seit %} · wartet seit {{ wartet_seit|kurzdatum }}{% endif %}</span></span>
+      <a class="os-btn small quiet" href="{{ url_for('leads.detail', lead_id=lead.id) }}">Akte {{ i('pfeil') }}</a>
+    </header>
+    <div class="ch-verlauf" data-ch-verlauf>
+      {% for m in items %}
+      {% set neu_tag = loop.first or items[loop.index0 - 1].at[:10] != m.at[:10] %}
+      {% if neu_tag and m.at %}<p class="ch-tag">{{ m.at[8:10] }}.{{ m.at[5:7] }}.{{ m.at[:4] }}</p>{% endif %}
+      <div class="ch-blase {{ 'raus' if m.direction == 'out' else 'rein' }}{{ ' fehler' if m.fehler }}">
+        <span class="ch-meta">{{ m.who }} · {{ m.at[11:16] }}{% if (m.kanal or 'mail') != 'mail' %} · {{ kanal_namen.get(m.kanal, m.kanal) }}{% endif %}{% if m.subject and (m.kanal or 'mail') == 'mail' %} · {{ m.subject|truncate(60) }}{% endif %}
+          {% if m.versand == 'wartet' %} · <span class="ch-warte">wartet auf Versand durch einen Agent</span>{% elif m.versand == 'fehler' %} · <span class="os-late">nicht verschickt</span>{% endif %}</span>
+        <p>{{ m.text }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    <div class="ch-antwort">
+      {% set ueber_agent = kanal in ueber_agents %}
+      <div class="os-chips ch-kanal" role="tablist" aria-label="Antworten über">
+        {% if lead.email %}<button type="button" data-ch-kanal="mail" class="{{ 'on' if not ueber_agent }}">Mail</button>{% endif %}
+        {% for k in ueber_agents %}<button type="button" data-ch-kanal="{{ k }}" class="{{ 'on' if kanal == k }}">{{ kanal_namen[k] }}</button>{% endfor %}
+        <button type="button" data-ch-kanal="festhalten">Festhalten</button>
+      </div>
+      <form method="post" action="{{ url_for('crm.reply', lead_id=lead.id) }}" data-os-fetch="reload" data-ch-form="mail" {{ 'hidden' if ueber_agent or not lead.email }}>
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="subject" value="{{ subject }}">
+        {% if senders|length > 1 %}<input type="hidden" name="von" value="{{ sender }}">{% endif %}
+        <textarea class="os-input ch-feld" name="text" rows="3" placeholder="Antwort per Mail an {{ lead.contact_name or lead.name }} …" required></textarea>
+        <div class="ch-fuss"><span class="os-caption">{{ 'Geht direkt über das Postfach raus, im selben Mailverlauf.' if can_mail else 'Postfach noch nicht eingerichtet (Einstellungen → Verbindungen).' }}</span>
+          <button class="os-btn small ink" {{ 'disabled' if not can_mail }}>Senden {{ i('pfeil') }}</button></div>
+      </form>
+      {% for k in ueber_agents %}
+      <form method="post" action="{{ url_for('crm.chat_senden', lead_id=lead.id) }}" data-os-fetch="reload" data-ch-form="{{ k }}" {{ 'hidden' if kanal != k }}>
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="kanal" value="{{ k }}">
+        <textarea class="os-input ch-feld" name="text" rows="3" placeholder="Antwort über {{ kanal_namen[k] }} …" required></textarea>
+        <div class="ch-fuss"><span class="os-caption">Ein Agent verschickt sie über {{ kanal_namen[k] }} und meldet, wenn sie raus ist.</span>
+          <button class="os-btn small ink">An Agent geben {{ i('pfeil') }}</button></div>
+      </form>
+      {% endfor %}
+      <form method="post" action="{{ url_for('crm.festhalten', lead_id=lead.id) }}" data-os-fetch="reload" data-ch-form="festhalten" hidden>
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <div class="os-grid2">
+          <label class="os-field"><span>Kanal</span><select name="kanal">{% for k in von_hand %}<option value="{{ k }}">{{ kanaele[k] }}</option>{% endfor %}</select></label>
+          <label class="os-field"><span>Von</span><select name="richtung"><option value="in">Vom Kontakt</option><option value="out">Von uns</option></select></label>
+        </div>
+        <textarea class="os-input ch-feld" name="text" rows="3" placeholder="Was wurde gesagt oder geschrieben?" required></textarea>
+        <div class="ch-fuss"><span class="os-caption">Nur festhalten, nichts wird verschickt.</span><button class="os-btn small quiet">Festhalten</button></div>
+      </form>
+    </div>
+    {% else %}
+    <p class="ch-leer">Links ein Gespräch wählen.</p>
+    {% endif %}
+  </section>
+</main>
+<script src="{{ url_for('static', filename='chat.js') }}"></script>
+{% endblock %}

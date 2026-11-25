@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}{{ item.titel }} · Aufgaben{% endblock %}
+{% block body_class %}st-fokus-body{% endblock %}
+{% block content %}
+{% set csrf = csrf_token() %}
+<main class="st-fokus" data-fokus>
+  {{ toasts() }}
+  <header class="st-leiste">
+    <a class="st-leiste-links" href="{{ url_for('stapel.start') }}" data-taste="Escape">{{ i('back') }}<span>Beenden</span><kbd>Esc</kbd></a>
+    <div class="st-fortschritt" role="progressbar" aria-valuemin="0" aria-valuemax="{{ gesamt }}" aria-valuenow="{{ erledigt }}" aria-label="{{ erledigt }} von {{ gesamt }} erledigt">
+      <b>{{ erledigt }} von {{ gesamt }} erledigt</b><span><i style="transform:scaleX({{ (erledigt / gesamt) if gesamt else 0 }})"></i></span>
+    </div>
+    <div class="st-leiste-rechts">
+      <form method="post" action="{{ url_for('stapel.weiter') }}"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="key" value="{{ item.key }}">
+        <button class="os-link" data-taste="j">Jetzt nicht <kbd>J</kbd></button></form>
+      {% if item.typ in ('aufgabe', 'agent') %}<form method="post" action="{{ url_for('stapel.spaeter') }}"><input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="key" value="{{ item.key }}">
+        {% if item.typ == 'agent' %}{% for e in item.gruppe.eintraege %}<input type="hidden" name="ids" value="{{ e.id }}">{% endfor %}{% endif %}
+        <button class="os-link" data-taste="w">Später <kbd>W</kbd></button></form>{% endif %}
+    </div>
+  </header>
+
+  <article class="st-karte">
+    <p class="st-eyebrow">{% if item.typ == 'agent' %}<span aria-hidden="true">{{ item.gruppe.symbol }}</span> {{ item.karte.agent }} · {{ item.karte.art_label }}{% else %}{{ item.eyebrow }}{% endif %}
+      {% if item.typ == 'agent' and item.karte.frist %} · <span class="{{ 'os-late' if item.karte.frist_um }}">{{ 'Frist vorbei' if item.karte.frist_um else 'bis ' ~ item.karte.frist[8:10] ~ '.' ~ item.karte.frist[5:7] ~ '.' }}</span>{% endif %}</p>
+    <h1 class="st-titel">{{ item.titel }}</h1>
+    {% if item.text %}<p class="st-text">{{ item.text }}</p>{% endif %}
+
+    {# ---------------- Freigabe eines Agents ---------------- #}
+    {% if item.typ == 'agent' and item.mehrere %}
+      <form method="post" action="{{ url_for('agenten.buendel') }}" id="st-form">
+        <input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ hier }}">
+        <ul class="os-list st-buendel">{% for k in item.gruppe.eintraege %}
+          <li><label class="os-akarte-zeile"><input type="checkbox" name="ids" value="{{ k.id }}" checked>
+            <span class="os-txt"><b>{{ k.titel }}</b><span>{{ k.was }}</span></span></label>
+            {% if k.entwurf %}<details class="os-akarte-details"><summary class="os-link">Entwurf ansehen</summary>
+              {% if k.entwurf.betreff %}<p class="os-caption">An {{ k.entwurf.an }} · {{ k.entwurf.betreff }}</p>{% endif %}
+              <p class="os-akarte-text">{{ k.entwurf.text }}</p></details>{% endif %}</li>{% endfor %}
+        </ul>
+        <div class="st-knoepfe">
+          <button class="st-knopf" name="aktion" value="ablehnen" data-taste="ArrowLeft"><kbd>←</kbd>Ablehnen</button>
+          <button class="st-knopf haupt" name="aktion" value="freigeben" data-taste="Enter">Ausgewählte freigeben<kbd>↵</kbd></button>
+        </div>
+      </form>
+    {% elif item.typ == 'agent' %}
+      {% set k = item.karte %}
+      {% if k.bezug %}<p class="os-caption st-bezug"><a href="{{ k.bezug.url }}">{{ k.bezug.name }}</a></p>{% endif %}
+      {% if k.typ == 'entscheidung' %}
+        <div class="os-akarte-optionen st-optionen">{% for o in k.optionen %}
+          <form method="post" action="{{ url_for('agenten.entscheiden', fid=k.id) }}">
+            <input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ hier }}">
+            <input type="hidden" name="aktion" value="option"><input type="hidden" name="option" value="{{ o.key }}">
+            <button class="os-akarte-option {{ 'empfohlen' if o.key == k.empfehlung }}" data-taste="{{ loop.index }}"><b>{{ o.key }}</b><span>{{ o.text }}</span>{% if o.key == k.empfehlung %}<em>Empfohlen</em>{% endif %}<kbd>{{ loop.index }}</kbd></button>
+          </form>{% endfor %}
+        </div>
+        {% if k.details %}<details class="os-akarte-details"><summary class="os-link">Begründung</summary><p class="os-akarte-text">{{ k.details }}</p></details>{% endif %}
+        <form method="post" action="{{ url_for('agenten.entscheiden', fid=k.id) }}" class="st-knoepfe einzeln">
+          <input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ hier }}"><input type="hidden" name="aktion" value="ablehnen">
+          <button class="st-knopf" data-taste="ArrowLeft"><kbd>←</kbd>Keine davon</button>
+        </form>
+      {% else %}
+        <form method="post" action="{{ url_for('agenten.entscheiden', fid=k.id) }}" id="st-form">
+          <input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ hier }}">
+          {% if k.entwurf %}
+          <div class="st-entwurf">
+            {% if k.entwurf.art == 'mail' %}<p class="os-caption">An <b>{{ k.entwurf.an }}</b>{% if k.entwurf.betreff %} · {{ k.entwurf.betreff }}{% endif %}</p>
+            <input type="hidden" name="an" value="{{ k.entwurf.an or '' }}"><input type="hidden" name="betreff" value="{{ k.entwurf.betreff or '' }}">{% endif %}
+            <textarea class="st-entwurf-text" name="text" rows="8" aria-label="Entwurf (bearbeitbar)">{{ k.entwurf.text }}</textarea>
+            <p class="os-caption">Freigegeben wird genau dieser Text. Änderungen sieht der Agent.</p>
+          </div>
+          {% endif %}
+          {% if k.empfehlung %}<p class="os-akarte-empf"><em>Empfehlung</em> {{ k.empfehlung }}</p>{% endif %}
+          {% if k.details %}<details class="os-akarte-details"><summary class="os-link">Details</summary><p class="os-akarte-text">{{ k.details }}</p></details>{% endif %}
+          <div class="st-knoepfe">
+            <button class="st-knopf" name="aktion" value="ablehnen" data-taste="ArrowLeft" formnovalidate><kbd>←</kbd>Ablehnen</button>
+            <button class="st-knopf haupt" name="aktion" value="freigeben" data-taste="Enter">{{ 'Freigeben und senden' if k.art == 'mail' else 'Freigeben' }}<kbd>↵</kbd></button>
+          </div>
+        </form>
+      {% endif %}
+
+    {# ---------------- Andere Freigaben (Termin, Angebot, Rechnung, Entscheidung …) ---------------- #}
+    {% elif item.typ == 'freigabe' %}
+      {% set f = item.f %}
+      {% if f.frist %}<p class="os-frist">Geht von selbst raus am {{ f.frist[8:10] }}.{{ f.frist[5:7] }}. um {{ f.frist[11:16] }} Uhr, wenn niemand stoppt.</p>{% endif %}
+      <p><a class="os-link" href="{{ f.url }}">Ganz ansehen</a></p>
+      {% if f.nur_link or not f.darf %}
+        <div class="st-knoepfe einzeln"><a class="st-knopf haupt" href="{{ f.url }}" data-taste="Enter">{{ f.nur_link or 'Öffnen' }}<kbd>↵</kbd></a></div>
+      {% else %}
+        <form method="post" action="{{ url_for('freigaben.entscheiden', art=f.art, oid=f.oid) }}" id="st-nein" hidden>
+          <input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ hier }}"><input type="hidden" name="ok" value="0">
+          <label class="os-field"><span>{{ f.frage or 'Warum nicht?' }}</span><textarea name="grund" rows="3" required></textarea></label>
+          <button class="os-btn small quiet">{{ f.nein or 'Ablehnen' }}</button>
+        </form>
+        <form method="post" action="{{ url_for('freigaben.entscheiden', art=f.art, oid=f.oid) }}" class="st-knoepfe">
+          <input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ hier }}"><input type="hidden" name="ok" value="1">
+          {% if f.nein %}<button type="button" class="st-knopf" data-zeigen="st-nein" data-taste="ArrowLeft"><kbd>←</kbd>{{ f.nein }}</button>{% endif %}
+          <button class="st-knopf haupt" data-taste="Enter">{{ f.ja }}<kbd>↵</kbd></button>
+        </form>
+      {% endif %}
+
+    {# ---------------- Antwort im Chat ---------------- #}
+    {% elif item.typ == 'antwort' %}
+      <div class="ch-verlauf st-verlauf">{% for m in verlauf %}
+        <div class="ch-blase {{ 'raus' if m.direction == 'out' else 'rein' }}"><span class="ch-meta">{{ m.who }} · {{ m.at[8:10] }}.{{ m.at[5:7] }}. {{ m.at[11:16] }}{% if m.kanal and m.kanal != 'mail' %} · {{ m.kanal|capitalize }}{% endif %}</span>
+          <p>{{ m.text|truncate(700) }}</p></div>{% endfor %}
+      </div>
+      <div class="st-knoepfe einzeln"><a class="st-knopf haupt" href="{{ url_for('crm.chat', lead_id=item.lead_id) }}" data-taste="Enter">Im Chat antworten<kbd>↵</kbd></a></div>
+
+    {# ---------------- Anfrage an meinen Bereich ---------------- #}
+    {% elif item.typ == 'anfrage' %}
+      {% if item.a.notiz %}<p class="st-notiz">{{ item.a.notiz }}</p>{% endif %}
+      <form method="post" action="{{ url_for('aufgaben.ablehnen', aid=item.a.id) }}" id="st-nein" hidden>
+        <input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ hier }}">
+        <label class="os-field"><span>Warum nicht?</span><textarea name="grund" rows="3" required></textarea></label>
+        <button class="os-btn small quiet">Ablehnen</button>
+      </form>
+      <form method="post" action="{{ url_for('aufgaben.annehmen', aid=item.a.id) }}" class="st-knoepfe">
+        <input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ hier }}"><input type="hidden" name="faellig" value="{{ item.a.faellig }}">
+        <button type="button" class="st-knopf" data-zeigen="st-nein" data-taste="ArrowLeft"><kbd>←</kbd>Ablehnen</button>
+        <button class="st-knopf haupt" data-taste="Enter">Annehmen bis {{ item.a.tag }}<kbd>↵</kbd></button>
+      </form>
+
+    {# ---------------- Aufgabe ---------------- #}
+    {% elif item.typ == 'aufgabe' %}
+      {% if item.a.notiz %}<p class="st-notiz">{{ item.a.notiz }}</p>{% endif %}
+      <p class="os-caption st-bezug">{{ item.a.bereich_name }}{% if item.a.objekt_url %} · <a href="{{ item.a.objekt_url }}">{{ item.a.objekt_name }}</a>{% endif %}{% if item.a.erstellt_von_name and item.a.erstellt_von != account.team %} · von {{ item.a.erstellt_von_name }}{% endif %} · <a href="{{ url_for('aufgaben.detail', aid=item.a.id) }}">Öffnen</a></p>
+      <form method="post" action="{{ url_for('aufgaben.erledigt', aid=item.a.id) }}" class="st-knoepfe einzeln">
+        <input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ hier }}">
+        <button class="st-knopf haupt" data-taste="Enter">Erledigt {{ i('check') }}<kbd>↵</kbd></button>
+      </form>
+
+    {# ---------------- Termin-Ergebnis ---------------- #}
+    {% elif item.typ == 'ergebnis' %}
+      <div class="st-knoepfe einzeln"><a class="st-knopf haupt" href="{{ item.url }}" data-taste="Enter">Ergebnis eintragen<kbd>↵</kbd></a></div>
+    {% endif %}
+  </article>
+  {% if items|length > 1 %}<p class="st-danach">Danach: {{ items[1].titel }}{% if items|length > 2 %} und {{ items|length - 2 }} weitere{% endif %}</p>{% endif %}
+</main>
+<script src="{{ url_for('static', filename='stapel.js') }}"></script>
+{% endblock %}

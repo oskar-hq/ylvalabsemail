@@ -2,9 +2,9 @@
 import re
 from datetime import date
 
-from flask import Blueprint, Response, abort, g, jsonify, render_template, request
+from flask import Blueprint, Response, abort, g, jsonify, redirect, render_template, request, url_for
 
-from . import agent, arbeitsbereiche, branchentest, crm, leaddb, mailbox, team
+from . import agent, arbeitsbereiche, crm, leaddb, mailbox, team
 from .leads_views import db, lead_or_404, me, status_payload, who
 from .main import SETTINGS, darf, login_required
 
@@ -124,7 +124,6 @@ def create():
     if not lead_id:
         return jsonify(error=f"Nicht angelegt: {reason}."), 400
     crm.claim(db(), lead_id, me())
-    branchentest.eingang(db(), lead_id, me())
     return jsonify(ok=True, lead_id=lead_id)
 
 
@@ -154,11 +153,77 @@ def export_csv():
 # ---------------------------------------------------------------- Postfach: Antworten lesen und direkt antworten
 
 
+# ---------------------------------------------------------------- Chat (Stufe 13): alle Kanäle als Gespräch
+
+
+def _chat_liste(c, wer):
+    from . import posteingang
+    person = me() if wer == "meine" else None
+    gespraeche = mailbox.conversations(c, person)
+    wartend = {w["id"] for w in posteingang.wartend(c, person)}
+    letzte_kanal = {r["lead_id"]: r["kanal"] for r in c.execute(
+        "SELECT lead_id, kanal FROM messages m WHERE fehler=0 AND id = (SELECT MAX(id) FROM messages x WHERE "
+        "x.lead_id = m.lead_id AND x.fehler = 0)")}
+    for g_ in gespraeche:
+        g_["wartet"] = g_["id"] in wartend
+        g_["kanal"] = letzte_kanal.get(g_["id"]) or "mail"
+    gespraeche.sort(key=lambda x: (not x["wartet"], x["last_at"] or ""), reverse=False)
+    wartet = [x for x in gespraeche if x["wartet"]]
+    rest = sorted([x for x in gespraeche if not x["wartet"]], key=lambda x: x["last_at"] or "", reverse=True)
+    return wartet, rest
+
+
+@bp.get("/chat")
+@bp.get("/chat/<int:lead_id>")
+@login_required
+def chat(lead_id=None):
+    """Chat: links die Gespräche (wartet auf euch zuerst), rechts der Verlauf als Sprechblasen. Mails, Slack,
+    WhatsApp, LinkedIn, Telefonate: alles eines Kontakts in einem Verlauf."""
+    from . import posteingang
+    c = db()
+    wer = "alle" if request.args.get("wer") == "alle" or not me() else "meine"
+    wartet, rest = _chat_liste(c, wer)
+    lead = items = None
+    kontext = {}
+    if lead_id:
+        lead = lead_or_404(lead_id)
+        items = mailbox.thread(c, lead)
+        mailbox.mark_read(c, lead_id)
+        if lead["unread"]:
+            leaddb.update_lead(c, lead_id, unread=0)
+        letzter = next((i for i in reversed(items) if i["direction"] == "in"), None)
+        kanal = (letzter or {}).get("kanal") or ("mail" if lead.get("email") else "slack")
+        last_in = mailbox.last_incoming(c, lead_id)
+        kontext = {"kanal": kanal, "kanaele": posteingang.KANAELE, "ueber_agents": posteingang.UEBER_AGENTS,
+                   "can_mail": agent.outreach_configured() and bool(lead.get("email")),
+                   "subject": mailbox.reply_subject((last_in or {}).get("subject") or lead["subject"] or lead["name"]),
+                   "wartet_seit": posteingang.wartet_seit(c, lead_id), "von_hand": posteingang.VON_HAND,
+                   "senders": team.members(c), "sender": _default_sender(lead)}
+    return render_template("chat.html", account=g.account, wartet=wartet, rest=rest, wer=wer, lead=lead, items=items,
+                           **kontext)
+
+
+@bp.post("/chat/<int:lead_id>/senden")
+@login_required
+def chat_senden(lead_id):
+    """Antwort auf Slack, WhatsApp oder LinkedIn: wartet, bis ein Agent sie dort verschickt."""
+    from . import posteingang
+    lead_or_404(lead_id)
+    try:
+        posteingang.zum_senden(db(), me(), lead_id, request.form.get("kanal", ""), request.form.get("text", ""))
+    except posteingang.PosteingangError as exc:
+        return jsonify(error=str(exc)), 400
+    return jsonify(ok=True, message="Liegt beim Agent zum Verschicken. Im Verlauf steht, sobald es raus ist.")
+
+
 @bp.get("/crm/postfach")
 @login_required
 def inbox():
+    """Ordner „Sonstige“ und „Fehler“ des Postfachs; die Gespräche selbst stehen seit Stufe 13 im Chat."""
     wer = "alle" if request.args.get("wer") == "alle" or not me() else "meine"
     ordner = request.args.get("ordner") if request.args.get("ordner") in mailbox.ORDNER else "haupt"
+    if ordner == "haupt":
+        return redirect(url_for("crm.chat", wer="alle" if wer == "alle" else None))
     from . import posteingang
     person = me() if wer == "meine" else None
     return render_template("inbox.html", account=g.account, ordner=ordner, ordner_namen=mailbox.ORDNER,
@@ -188,7 +253,7 @@ def inbox_news():
     c = db()
     items = [{"name": cv["name"], "n": cv["unread_msgs"], "at": cv["last_at"],
               "text": (cv["last_text"] or "").replace("\n", " ")[:120],
-              "url": f"/crm/postfach/{cv['id']}"} for cv in mailbox.conversations(c, me()) if cv["unread_msgs"]][:8]
+              "url": f"/chat/{cv['id']}"} for cv in mailbox.conversations(c, me()) if cv["unread_msgs"]][:8]
     status = leaddb.kv_get(c, "inbox_status") or {}
     return jsonify(count=mailbox.unread_count(c, me()), items=items,
                    error=None if status.get("ok", True) else status.get("error"), checked=status.get("at"))
@@ -290,6 +355,8 @@ def compose_mail():
 @bp.get("/crm/postfach/<int:lead_id>")
 @login_required
 def conversation(lead_id):
+    if request.args.get("alt") != "1":  # seit Stufe 13: Gespräche im Chat
+        return redirect(url_for("crm.chat", lead_id=lead_id))
     lead = lead_or_404(lead_id)
     items = mailbox.thread(db(), lead)
     mailbox.mark_read(db(), lead_id)
