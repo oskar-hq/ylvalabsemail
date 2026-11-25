@@ -102,6 +102,9 @@ ARTEN = {
                           "hinweis": "Markt und Technik entscheiden gemeinsam."},
     "grundsatz": {"label": "Grundsatz (Zielgruppe, Verträge, Anteile, Einstellungen)", "recht": "gruenderteam",
                   "modul": "entscheidungen", "ausfuehren": "entscheidung", "hinweis": "Gründerteam gemeinsam."},
+    "aufraeumen": {"label": "Daten aufräumen (alte Leads, Projekte, Aufgaben entfernen)", "recht": "gruenderteam",
+                   "modul": "entscheidungen", "ausfuehren": "aufraeumen",
+                   "hinweis": "Nur über aufraeumen_vorschlagen. Das OS löscht nach dem Ja; Rechnungen bleiben immer."},
     "sonstiges": {"label": "Sonstige Freigabe", "recht": "eigener_bereich", "modul": "entscheidungen",
                   "ausfuehren": "manuell", "hinweis": "Der Agent macht nach dem Ja selbst weiter."},
 }
@@ -770,8 +773,11 @@ def anfragen(c, agent, art, titel, was, optionen=None, empfehlung=None, frist=No
     if art == "status":
         if not isinstance(aktion, dict) or aktion.get("typ") not in ("lead_stufe", "projekt_status"):
             raise AgentError("Status ändern geht über lead_stufe_setzen oder projekt_status_vorschlagen.")
+    elif art == "aufraeumen":
+        if not isinstance(aktion, dict) or aktion.get("typ") != "aufraeumen":
+            raise AgentError("Aufräumen geht nur über das Werkzeug aufraeumen_vorschlagen.")
     elif aktion:
-        raise AgentError("„aktion“ gibt es nur bei Art status.")
+        raise AgentError("„aktion“ gibt es nur bei Art status und aufraeumen.")
     if opts and (entwurf or aktion):
         raise AgentError("Entweder Optionen (Entscheidung) oder ein Entwurf/eine Aktion (Freigabe), nicht beides.")
     if opts and info["ausfuehren"] not in ("entscheidung", "manuell"):
@@ -1088,6 +1094,15 @@ def _ausfuehren(c, wer, fid, data_dir=None):
                       f"Mail verschickt (freigegeben, vorbereitet von {a_name}): {e['betreff'] or 'Antwort'}",
                       {"freigabe": fid, "entwurf": e["id"]}, commit=False)
             return _ausfuehrung_setzen(c, fid, "ausgefuehrt", f"Mail an {e['an']} verschickt.")
+        if art.get("ausfuehren") == "aufraeumen":
+            akt = v.get("aktion") or {}
+            if _hash(json.dumps(akt, sort_keys=True)) != v.get("hash"):
+                raise AgentError("Die Aktion passt nicht mehr zur Freigabe.")
+            from . import aufraeumen
+            erg = aufraeumen.ausfuehren(c, f["entschieden_von"], akt.get("behalten") or [], akt.get("aufgaben") or [])
+            return _ausfuehrung_setzen(c, fid, "ausgefuehrt", f"Aufgeräumt: {erg['leads']} Leads, {erg['projekte']} "
+                                       f"Projekte, {erg['aufgaben']} Aufgaben entfernt; {erg['bleiben']} Leads bleiben.",
+                                       {"ergebnis": erg})
         if art.get("ausfuehren") == "status":
             akt = v.get("aktion") or {}
             if _hash(json.dumps(akt, sort_keys=True)) != v.get("hash"):

@@ -457,6 +457,29 @@ def w_lead_stufe(c, wer, a):
     return {"gesetzt": False, "als_freigabe": r}
 
 
+def w_aufraeumen(c, wer, a):
+    """Aufräumen vorschlagen: zeigt, was wegfiele, und legt eine Freigabe-Karte fürs Gründerteam an."""
+    from . import aufraeumen
+    behalten = sorted({int(x) for x in a.get("behalten_lead_ids") or []})
+    aufg = sorted({int(x) for x in a.get("aufgaben_entfernen") or []})
+    p = aufraeumen.plan(c, behalten, aufg)
+    if a.get("nur_ansehen"):
+        return {"wuerde_entfernen": {"leads": len(p["leads_weg"]), "projekte": len(p["projekte_weg"]),
+                                     "aufgaben_direkt": len(aufg)},
+                "bleiben": p["namen_bleiben"], "geschuetzt_wegen_rechnungen_oder_zeiten": p["geschuetzt"]}
+    if not p["leads_weg"] and not aufg:
+        raise Werkzeugfehler("Es gäbe nichts zu entfernen.")
+    aktion = {"typ": "aufraeumen", "behalten": behalten, "aufgaben": aufg}
+    details = ((a.get("begruendung") or "").strip() + "\n\nBleiben: " + ", ".join(p["namen_bleiben"])
+               + (f"\nGeschützt (Rechnungen/Zeiten): {len(p['geschuetzt'])} Leads" if p["geschuetzt"] else ""))
+    r = agenten.anfragen(c, wer, "aufraeumen", "Alte Daten entfernen",
+                         f"{len(p['leads_weg'])} alte Leads, {len(p['projekte_weg'])} Projekte und "
+                         f"{len(aufg)} Aufgaben entfernen, {len(p['leads_bleiben'])} Leads bleiben."[:240],
+                         aktion=aktion, details=details.strip()[:4000], dringlichkeit="normal")
+    return {"als_freigabe": r, "hinweis": "Nach dem Ja entfernt das OS die Daten selbst; freigaben_status zeigt das "
+            "Ergebnis."}
+
+
 def w_projekt_status(c, wer, a):
     from . import projekte
     p = projekte.get(c, int(a["projekt_id"]))
@@ -689,6 +712,14 @@ WERKZEUGE = {
         "Stufe direkt oder als Freigabe-Karte; „kunde“ immer als Freigabe.",
         _obj({"lead_id": I, "stufe": S, "begruendung": S, "frist": S, "dringlichkeit": DRING, "buendel": S},
              ["lead_id", "stufe"]), w_lead_stufe, ("leads", "crm"), 2, True),
+    "aufraeumen_vorschlagen": (
+        "Alte Daten aufräumen (Vorschlag)",
+        "Schlägt vor, alle Leads außer den genannten zu entfernen (mit ihren Nachrichten, Terminen, Projekten und "
+        "Aufgaben), dazu einzelne Aufgaben. Erst mit nur_ansehen=true prüfen, was wegfiele. Immer als Freigabe "
+        "fürs Gründerteam; das OS löscht erst nach dem Ja. Leads mit Rechnungen oder erfasster Zeit bleiben immer. "
+        "Nur auf ausdrücklichen Wunsch von Oskar oder Finn.",
+        _obj({"behalten_lead_ids": {"type": "array", "items": I}, "aufgaben_entfernen": {"type": "array", "items": I},
+              "begruendung": S, "nur_ansehen": B}, ["behalten_lead_ids"]), w_aufraeumen, "einstellungen", 2, True),
     "projekt_status_vorschlagen": (
         "Projekt weiterschalten (Vorschlag)",
         "Schlägt vor, ein Projekt in die nächste Phase zu schalten. Immer als Freigabe; das OS schaltet nach dem Ja "

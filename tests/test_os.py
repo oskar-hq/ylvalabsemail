@@ -3074,6 +3074,41 @@ class AgentenTest(unittest.TestCase):
         self.assertEqual(set(firma.rechte(c, f"agent:{key}").values()), {agenten.MAX_STUFE})
         self.assertFalse(firma.darf(c, f"agent:{key}", "entscheidungen", firma.FREIGEBEN))  # freigeben nie
 
+    def test_aufraeumen_nur_nach_freigabe(self):
+        from app import agenten, mcp_server, aufraeumen
+        c = self.c
+        alt = lead_anlegen(c, "Alte Tischlerei", stage="kontaktiert")
+        alt2 = lead_anlegen(c, "Altes Autohaus")
+        bleibt = lead_anlegen(c, "Neue Filmproduktion", stage="neu")
+        rech = lead_anlegen(c, "Kunde mit Rechnung", stage="kunde")
+        c.execute("INSERT INTO rechnungen (lead_id, nummer, status, erstellt_am) VALUES (?, 'R-1', 'entwurf', "
+                  "'2026-11-01')", (rech,))
+        c.commit()
+        agenten.alles_erlauben(c, "oskar", "ops")
+        aid = aufgaben.anlegen(c, "oskar", "Alte Aufgabe", "markt", HEUTE, person="oskar")
+        d, f = mcp_server.aufrufen(c, "agent:ops", "aufraeumen_vorschlagen",
+                                   {"behalten_lead_ids": [bleibt], "aufgaben_entfernen": [aid], "nur_ansehen": True})
+        self.assertFalse(f, d)
+        self.assertIn("Neue Filmproduktion", d["bleiben"])
+        self.assertTrue(leaddb.get_lead(c, alt, alle=True))  # nur angesehen: nichts weg
+        d, f = mcp_server.aufrufen(c, "agent:ops", "aufraeumen_vorschlagen",
+                                   {"behalten_lead_ids": [bleibt], "aufgaben_entfernen": [aid],
+                                    "begruendung": "Neustart mit dem Second Brain"})
+        self.assertFalse(f, d)
+        fid = d["als_freigabe"]["freigabe_ids"][0]
+        self.assertTrue(leaddb.get_lead(c, alt, alle=True))  # erst nach dem Ja
+        with self.assertRaises(agenten.AgentError):
+            agenten.entscheiden(c, "agent:ops", fid, True)  # Agents geben nie frei
+        for f_ in c.execute("SELECT id, pruefer FROM freigaben WHERE angefragt_von='agent:ops' AND status='offen' "
+                            "AND vorschlag LIKE '%aufraeumen%'").fetchall():
+            agenten.entscheiden(c, f_["pruefer"], f_["id"], True)
+        self.assertIsNone(leaddb.get_lead(c, alt, alle=True))
+        self.assertIsNone(leaddb.get_lead(c, alt2, alle=True))
+        self.assertTrue(leaddb.get_lead(c, bleibt, alle=True))
+        self.assertIsNone(aufgaben.get(c, aid))
+        self.assertTrue(leaddb.get_lead(c, rech, alle=True))  # Rechnung: bleibt immer
+        self.assertEqual(aufraeumen.plan(c, [bleibt])["leads_weg"], [])
+
     def test_mail_verschickt_der_agent(self):
         """Standard seit Stufe 14: Nach dem Ja verschickt der Agent; das OS prüft Sperrliste und Erstkontakt-Regel und
         hält die Mail nach der Rückmeldung im Chat fest."""

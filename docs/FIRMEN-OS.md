@@ -943,6 +943,14 @@ Die Reihenfolge 2 und 3 kann getauscht werden, je nachdem, was im Alltag zuerst 
   - **Abweichung:** Rechnungen, Angebote, Wochenberichte und Termin-Einladungen verschickt das OS weiterhin selbst
     über das Postfach (eigene Module mit eigener Freigabe); das kann später ebenfalls zu den Agents wandern.
 
+- [x] **Stufe 15 – Aufräumen per Freigabe** (gebaut 25.11.2026)
+  Ziel (Oskar, 25.11.2026): Mit dem Second Brain clean durchstarten; alte Kunden und Leads aus der Anfangszeit
+  des Programms können raus. *Umsetzung:* `app/aufraeumen.py` und das Werkzeug `aufraeumen_vorschlagen` (erst
+  `nur_ansehen`, dann Freigabe-Karte „Alte Daten entfernen“, Art `aufraeumen`, Recht Gründerteam). Erst nach dem
+  Ja löscht das OS alle Leads außer der Behalten-Liste samt Nachrichten, Terminen, Projekten und Aufgaben.
+  Immer erhalten: Leads mit Rechnungen, erfasster Zeit oder Arbeitsbereich, Firmen-Protokoll, Entscheidungs-Log,
+  KI-Kosten und die „schon kontaktiert“-Liste.
+
 ## 9. Was das OS ausdrücklich nicht sein soll
 
 - Kein Ersatz für Steuerberater, Anwalt oder Buchhaltung (nur sauber zuarbeiten).
