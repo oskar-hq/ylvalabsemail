@@ -23,7 +23,7 @@ from cryptography.hazmat.primitives import serialization  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric import ec  # noqa: E402
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM  # noqa: E402
 
-from app import agent, ai, claude_research, crm, finder, known, leaddb, niches, regions, schedule, scoring, team, webpush  # noqa: E402
+from app import agent, ai, claude_research, crm, finder, known, leaddb, niches, schedule, scoring, team, webpush  # noqa: E402
 from app.main import app  # noqa: E402
 
 
@@ -505,11 +505,12 @@ class AgentTest(unittest.TestCase):
             self.assertEqual(agent.check_inbox(self.c), 0)  # schon gesehen
         contact = leaddb.get_lead(self.c, self.c.execute("SELECT id FROM leads WHERE email='lisa@partner.de'").fetchone()[0])
         self.assertEqual((contact["status"], contact["name"], contact["stage"]), ("kontakt", "Lisa Meier", None))
-        self.assertEqual(mailbox.unread_count(self.c), 1)
+        # Unbekannte, die wir nie angeschrieben haben: still unter „Sonstige“, nicht im Zähler der Glocke
+        self.assertEqual(mailbox.unread_count(self.c), 0)
+        self.assertEqual([x["id"] for x in mailbox.conversations(self.c, ordner="sonstige")], [contact["id"]])
         in_tabs = {r["id"] for k, _, _ in leaddb.TABS for r in leaddb.tab_leads(self.c, k)}
         self.assertNotIn(contact["id"], in_tabs)  # Kontakte stehen im Postfach, nicht bei den Leads
-        self.notify.assert_called()
-        self.assertIn("Neue Mail von Lisa Meier", self.notify.call_args[0][1])
+        self.notify.assert_not_called()  # keine Meldung für Unbekannte
         # Antwort von uns auf den Kontakt (kein Erstkontakt, die Person hat geschrieben)
         sent = []
         smtp = mock.Mock(send_message=lambda m: sent.append(m))
@@ -549,18 +550,6 @@ class AgentTest(unittest.TestCase):
         with mock.patch.dict(agent.CFG, {"settings": settings, "smtp_connect": fail}):
             with self.assertRaisesRegex(RuntimeError, "Akquise-Postfach"):
                 agent.send_new(self.c, lead, "a@b.de", "Hallo", "Text", "oskar")
-
-    def test_boundaries_loaded_once_and_assigned(self):
-        geo = {k: {"name": n, "rings": [[[lat - 0.05, lon - 0.05], [lat - 0.05, lon + 0.05], [lat + 0.05, lon + 0.05],
-                                         [lat - 0.05, lon - 0.05]]]} for k, (n, lat, lon) in regions.KREISE.items()}
-        lead_id = self.add("In Kiel", lat=54.33, lon=10.13)
-        with mock.patch.dict(agent.CFG["settings"], {"LEADS_REGION": "DE-SH"}), \
-                mock.patch.object(regions, "load_boundaries", return_value=geo) as load:
-            self.assertTrue(agent.ensure_boundaries(self.c))
-            self.assertFalse(agent.ensure_boundaries(self.c))  # schon da: nicht noch einmal laden
-            self.assertEqual(load.call_count, 1)
-        self.assertEqual(agent.assign_kreise(self.c), 1)
-        self.assertEqual(leaddb.get_lead(self.c, lead_id)["kreis"], "01002")
 
     def test_learned_filter(self):
         for i in range(5):
@@ -671,53 +660,6 @@ class ScoringTest(unittest.TestCase):
             self.assertEqual(scoring.classify_reply(subject, text, headers)["interesse"], expected, text)
 
 
-class RegionsTest(unittest.TestCase):
-    def test_boundaries_stitch_and_locate(self):
-        # Kiel als Quadrat aus zwei Wegen (einer rückwärts), dazu eine Insel und ein Loch
-        def way(points, role="outer"):
-            return {"type": "way", "role": role, "geometry": [{"lat": a, "lon": b} for a, b in points]}
-        payload = {"elements": [{"type": "relation", "tags": {"de:amtlicher_gemeindeschluessel": "01002", "name": "Kiel"},
-                                 "members": [way([(54.2, 10.0), (54.2, 10.3), (54.4, 10.3)]),
-                                             way([(54.2, 10.0), (54.4, 10.0), (54.4, 10.3)]),
-                                             way([(54.30, 10.10), (54.30, 10.12), (54.32, 10.12), (54.32, 10.10),
-                                                  (54.30, 10.10)], "inner"),
-                                             way([(54.6, 10.6), (54.6, 10.7), (54.7, 10.7), (54.6, 10.6)])]},
-                                {"type": "relation", "tags": {"de:regionalschluessel": "099990000000"}, "members": []}]}
-        geo = regions.parse_boundaries(payload)
-        self.assertEqual(list(geo), ["01002"])
-        self.assertEqual(len(geo["01002"]["rings"]), 3)
-        self.assertEqual(regions.kreis_of(geo, 54.25, 10.2), "01002")
-        self.assertIsNone(regions.kreis_of(geo, 54.31, 10.11))   # im Loch
-        self.assertEqual(regions.kreis_of(geo, 54.62, 10.65), "01002")  # Insel
-        self.assertIsNone(regions.kreis_of(geo, 53.5, 9.5))
-        self.assertIn('["admin_level"="6"]', regions.boundary_query())
-
-    def test_stats_csv_and_summary(self):
-        csv = ("Gewerbeanmeldungen;;2025\n01001;Flensburg, kreisfreie Stadt;1.000\n01056;Pinneberg, Kreis;4.800\n"
-               "01058;Rendsburg-Eckernförde, Kreis;-\n\"Kiel, Landeshauptstadt\";2.480\n")
-        values = regions.parse_stats_csv(csv.encode("utf-8"))
-        self.assertEqual(values, {"01001": 1000.0, "01056": 4800.0, "01002": 2480.0})
-        rows = {r["key"]: r for r in regions.summary({"gewerbe": values, "einwohner": {"01001": 100000}})}
-        self.assertEqual(rows["01001"]["gewerbe_1000"], 10.0)  # importierte Einwohner gehen vor
-        self.assertEqual((rows["01056"]["gewerbe_rang"], rows["01001"]["gewerbe_rang"]), (1, 2))  # 15 vor 10 je 1.000
-        self.assertTrue(rows["01056"]["gewerbe_top"])
-        self.assertIsNone(rows["01058"]["gewerbe_1000"])
-        self.assertFalse(regions.bonus_info({})["01002"]["bau_top"])
-
-    def test_growth_bonus_in_scoring(self):
-        site = {"pages": [{"url": "https://d.de", "title": "", "text": "Dachdeckerei mit 20 Mitarbeitern."}],
-                "emails": ["info@d.de"], "links": [], "errors": []}
-        lead = {"name": "Dach", "branche": "handwerk", "category": "craft=roofer", "website": "https://d.de", "kreis": "01059"}
-        info = {"01059": {"name": "Schleswig-Flensburg", "gewerbe_top": True, "bau_top": True}}
-        base = scoring.score(lead, site)["score"]
-        res = scoring.score(lead, site, region=info)
-        self.assertEqual(res["score"], base + 13)
-        reasons = [r for _, r in res["signals"]]
-        self.assertIn("Viele Baugenehmigungen im Kreis Schleswig-Flensburg, volle Auftragsbücher absehbar", reasons)
-        pflege = scoring.score({**lead, "branche": "pflege", "category": "healthcare=home_care"}, site, region=info)
-        self.assertNotIn("Viele Baugenehmigungen", " ".join(r for _, r in pflege["signals"]))  # nur Bau-Gewerke
-
-
 class CrmTest(unittest.TestCase):
     def setUp(self):
         self.c = leaddb.connect(os.path.join(tempfile.mkdtemp(), "crm.db"))
@@ -760,17 +702,6 @@ class CrmTest(unittest.TestCase):
         self.assertIn("Tischlerei Nord;Neu;", out)
         with self.assertRaises(ValueError):
             crm.import_csv(self.c, b"foo;bar\n1;2\n", "t")
-
-    def test_hotspots(self):
-        pts = [{"id": i, "name": f"K{i}", "lat": 54.32 + i * 0.001, "lon": 10.12, "fit_score": 60 + i, "passend": True,
-                "stage": "neu" if i == 0 else None, "city": "Kiel"} for i in range(3)]
-        pts += [{"id": 9, "name": "F", "lat": 54.78, "lon": 9.43, "fit_score": 90, "passend": True, "stage": None,
-                 "city": "Flensburg"},
-                {"id": 10, "name": "X", "lat": 54.78, "lon": 9.43, "fit_score": 20, "passend": False, "stage": None,
-                 "city": "Flensburg"}]
-        hs = crm.hotspots(pts)
-        self.assertEqual([(h["name"], h["count"]) for h in hs], [("Kiel", 3), ("Flensburg", 1)])
-        self.assertEqual((hs[0]["in_pipeline"], hs[0]["top"][0]["name"]), (1, "K2"))  # beste zuerst
 
     def test_may_email_respects_first_contact_rule(self):
         lead = {"email": "a@a.de", "status": "passt", "stage": "neu", "replied_at": None, "interest": None}
@@ -1062,8 +993,8 @@ class ProfileTest(unittest.TestCase):
                 "website": "https://www.a.example/", "email": "chef@a.example", "contact_name": "",
                 "research": json.dumps({"beschreibung": "Küchen nach Maß aus Angeln.", "groesse": "ca. 14 Mitarbeitende"})}
         p = crm.profile(lead)
-        self.assertEqual((p["beschreibung"], p["quelle"], p["groesse"], p["kreis"], p["web"]),
-                         ("Küchen nach Maß aus Angeln.", "Webseite", "ca. 14 Mitarbeitende", "Schleswig-Flensburg", "a.example"))
+        self.assertEqual((p["beschreibung"], p["quelle"], p["groesse"], p["web"]),
+                         ("Küchen nach Maß aus Angeln.", "Webseite", "ca. 14 Mitarbeitende", "a.example"))
         self.assertEqual(p["fehlt"], ["Ansprechperson"])
         p = crm.profile({"name": "B", "research": json.dumps({"groesse": "unklar"})})
         self.assertEqual(p["fehlt"], ["Was sie machen", "Größe", "Ansprechperson", "E-Mail"])
@@ -1797,20 +1728,7 @@ class ViewsTest(unittest.TestCase):
         r = self.client.post("/leads/claude/import", data={"_csrf": self.csrf, "text": ClaudeResearchTest.CSV})
         self.assertEqual(r.status_code, 302)
         self.assertIn("1 Betriebe übernommen", self.client.get("/leads/claude").get_data(as_text=True))
-        karte = self.client.get("/crm/karte").get_data(as_text=True)
-        self.assertIn("Gegend Kiel", karte)  # Beispieldaten haben Koordinaten
-        self.assertIn('id="mapData"', karte)
-        self.assertIn("Beispielzahlen, erfunden", karte)  # erfundene Zahlen sind gekennzeichnet
-        self.assertIn("Schleswig-Flensburg", karte)
-        r = self.client.post("/crm/regionen/import", headers={"X-CSRF-Token": self.csrf}, content_type="multipart/form-data",
-                             data={"kind": "bau", "label": "2025", "file": (io.BytesIO(
-                                 "\n".join(f"{k};{n};{100 + i}" for i, (k, (n, _, _)) in enumerate(regions.KREISE.items()))
-                                 .encode()), "bau.csv")})
-        self.assertEqual((r.get_json()["count"], r.get_json()["missing"]), (15, []))
-        self.assertEqual(leaddb.kv_get(c, "regionen")["bau"]["01062"], 114)
-        r = self.client.post("/crm/regionen/import", headers={"X-CSRF-Token": self.csrf}, content_type="multipart/form-data",
-                             data={"kind": "bau", "file": (io.BytesIO(b"foo;1\n"), "x.csv")})
-        self.assertEqual(r.status_code, 400)
+        self.assertEqual(self.client.get("/crm/karte").status_code, 404)  # Karte gibt es nicht mehr
         r = self.client.post(f"/crm/{lead_id}/stufe", data={"stage": "gespraech"}, headers={"X-CSRF-Token": self.csrf})
         self.assertEqual(r.get_json()["label"], "Gespräch")
         r = self.client.post(f"/crm/{lead_id}/aufgabe", data={"text": "Angebot schicken", "quick": "3t"},
@@ -1855,7 +1773,7 @@ class ViewsTest(unittest.TestCase):
         self.assertIn("Kartensuche (OpenStreetMap)", html)
         self.assertIn("overpass-api.de erreichen", html)   # Hinweis bei Fehler
         self.assertIn("Bewertung, CRM und Vorlage laufen trotzdem", html)  # ohne KI-Schlüssel nur ein Hinweis
-        self.assertIn("Kreise und Wachstumszahlen", html)
+        self.assertNotIn("Kreise und Wachstumszahlen", html)  # Karte und Kreisdaten gibt es nicht mehr
         self.assertEqual(len(webpush.b64u_decode(self.client.get("/push/key").get_json()["key"])), 65)
 
 

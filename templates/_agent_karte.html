@@ -59,7 +59,7 @@
       <dt>Recht</dt><dd>{{ k.recht_titel }}</dd>
       {% if k.betrag is not none %}<dt>Betrag</dt><dd>{{ '%.2f'|format(k.betrag)|replace('.', ',') }} €</dd>{% endif %}
       {% if k.vorschlag_person %}<dt>Agent schlug vor</dt><dd>{{ k.vorschlag_person }}</dd>{% endif %}
-      <dt>Angefragt</dt><dd>{{ k.seit|kurzdatum }} {{ k.seit[11:16] }}</dd>
+      <dt>Angefragt</dt><dd>{{ k.seit|kurzdatum }}</dd>
     </dl>
     <form method="post" action="{{ url_for('agenten.entscheiden', fid=k.id) }}" data-os-fetch="reload" style="margin-top:16px">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}"><input type="hidden" name="aktion" value="ablehnen">

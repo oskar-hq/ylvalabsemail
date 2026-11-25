@@ -1,6 +1,6 @@
 # Agenten-Schnittstelle (MCP): wie KI-Agents mit dem Firmen-OS arbeiten
 
-**Stand:** 25.11.2026 · Stufe 11 · Code: `app/agenten.py`, `app/mcp_server.py`, `app/agenten_views.py`,
+**Stand:** 25.11.2026 · Stufe 12 · Code: `app/agenten.py`, `app/mcp_server.py`, `app/agenten_views.py`,
 `app/agenten_prompts.py` · Tests: `tests/test_os.py` (Klassen `AgentenTest`, `AgentenWebTest`)
 
 Das Firmen-OS ist die Datenbank der Firma und die **einzige Schnittstelle zwischen den KI-Agents und den Menschen**.

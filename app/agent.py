@@ -27,7 +27,7 @@ from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid, parseaddr, parsedate_to_datetime
 from urllib.parse import urlparse
 
-from . import ai, crm, emailbuild, finder, known, leaddb, mailbox, niches, regions, reports, schedule, scoring, team, \
+from . import ai, arbeitsbereiche, crm, emailbuild, finder, known, leaddb, mailbox, niches, reports, schedule, scoring, team, \
     websearch, webpush
 
 log = logging.getLogger("ylva.leads")
@@ -63,7 +63,11 @@ def conn():
 
 
 def S(key):
-    """Einstellung; während eines Laufs oder einer Aktion einer Person gelten ihre eigenen Werte (team.PERSONAL)."""
+    """Einstellung; im Arbeitsbereich eines Kunden seine Werte (Postfach, Absender, Suchgebiet, siehe
+    arbeitsbereiche.FELDER), während eines Laufs oder einer Aktion einer Person ihre eigenen (team.PERSONAL)."""
+    ab = arbeitsbereiche.wert(key)
+    if arbeitsbereiche.gesetzt(ab):
+        return ab
     own = getattr(_local, "prefs", None)
     if own and key in own:
         return own[key]
@@ -85,14 +89,22 @@ class acting_as:
         _local.person, _local.prefs = None, {}
 
 
+def mail_settings():
+    """Einstellungen für emailbuild (Firmenname, Fußzeile …) im aktiven Arbeitsbereich."""
+    return {**CFG["settings"], **{k: S(k) for k in ("ORG_NAME", "DEFAULT_FOOTER", "LEADS_SENDER_NAME")}}
+
+
 def writer_name(c, lead=None):
-    """Name der Person, die gerade schreibt (sonst die zuständige Person, sonst der Name aus den Einstellungen)."""
+    """Name der Person, die gerade schreibt (sonst die zuständige Person, sonst der Name aus den Einstellungen).
+    Im Arbeitsbereich eines Kunden schreiben wir in seinem Namen: die Unterschrift aus dem Arbeitsbereich."""
+    if arbeitsbereiche.ist_kunde():
+        return S("LEADS_SENDER_NAME") or S("ORG_NAME")
     key = getattr(_local, "person", None) or (lead or {}).get("owner")
     return (team.get(c, key) or {}).get("name") or S("LEADS_SENDER_NAME")
 
 
 def person_month_eur(c, key):
-    return ai.eur(leaddb._sum(c, "person = ? AND at >= ?", (key, datetime.now().strftime("%Y-%m-01")))["usd"])
+    return ai.eur(leaddb._sum(c, "person = ? AND at >= ?", (key, datetime.now().strftime("%Y-%m-01")), alle=True)["usd"])
 
 
 def person_budget_left_eur(c, key):
@@ -138,6 +150,8 @@ def vapid():
 
 
 def notify(c, title, body, url="/leads", push=False):
+    if arbeitsbereiche.ist_kunde():  # Meldungen sind gemeinsam: dazuschreiben, für welchen Kunden
+        title = f"{arbeitsbereiche.name(c)}: {title}"
     """Meldung in der App (Glocke oben). Aufs Handy (Push) nur mit push=True: das ist nur das Ende eines Laufs,
     den jemand von Hand gestartet hat (und der Test), damit das Handy nicht ständig klingelt. Per Mail kommen keine
     Benachrichtigungen mehr, sie landeten sonst zusätzlich in Apple Mail oder Gmail."""
@@ -190,7 +204,7 @@ def run_search(c):
             "INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, category_label,"
             " niche, address, city, lat, lon, distance_km, website, email, phone, status, rejected_by, fit_reason,"
             " research) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-            (f["source_id"], leaddb.now(), leaddb.now(), f["name"], f["branche"], f["category"], f["category_label"],
+            (leaddb.source_id(f["source_id"]), leaddb.now(), leaddb.now(), f["name"], f["branche"], f["category"], f["category_label"],
              f.get("niche"),
              f["address"], f["city"], f["lat"], f["lon"], f["distance_km"], f["website"], f["email"], f["phone"],
              "aussortiert" if reason else "kandidat", "filter" if reason else None,
@@ -213,18 +227,18 @@ def learned_filter(c):
     removed = 0
     for r in c.execute("""
             SELECT category, category_label FROM leads
-            WHERE status NOT IN ('kandidat','recherche') AND IFNULL(rejected_by,'') != 'filter' AND category != ''
+            WHERE arbeitsbereich=ab() AND status NOT IN ('kandidat','recherche') AND IFNULL(rejected_by,'') != 'filter' AND category != ''
             GROUP BY category
             HAVING IFNULL(SUM(interest IN ('qualified','mittel') OR stage IS NOT NULL
                               OR status IN ('passt','entwurf','versendet')), 0) = 0
                AND IFNULL(SUM(rejected_by IN ('ki','regel','team') OR interest='kein_interesse'), 0) >= 5""").fetchall():
         removed += c.execute(
             "UPDATE leads SET status='aussortiert', rejected_by='filter', updated_at=?, fit_reason=? "
-            "WHERE status='kandidat' AND category=?",
+            "WHERE arbeitsbereich=ab() AND status='kandidat' AND category=?",
             (leaddb.now(), f"Grobfilter (gelernt): {r['category_label']} hat bisher fünfmal nicht gepasst.",
              r["category"])).rowcount
     blocked = set(leaddb.kv_get(c, "blocklist", []))
-    for r in c.execute("SELECT id, email, website FROM leads WHERE status='kandidat'").fetchall():
+    for r in c.execute("SELECT id, email, website FROM leads WHERE arbeitsbereich=ab() AND status='kandidat'").fetchall():
         if (_domain(r["email"]) or _host(r["website"])) in blocked:
             leaddb.update_lead(c, r["id"], status="gesperrt", rejected_by="filter",
                                fit_reason="Adresse steht auf der Sperrliste.")
@@ -249,14 +263,14 @@ def next_candidate(c, plan=None):
                    SUM(interest='kein_interesse' OR status='gesperrt') k,
                    SUM(rejected_by='team') rt, SUM(rejected_by IN ('ki','regel')) rk,
                    SUM(status IN ('passt','entwurf','versendet','beantwortet') AND rejected_by IS NULL) ok
-            FROM leads WHERE status NOT IN ('kandidat','recherche') AND IFNULL(rejected_by,'') != 'filter'
+            FROM leads WHERE arbeitsbereich=ab() AND status NOT IN ('kandidat','recherche') AND IFNULL(rejected_by,'') != 'filter'
             GROUP BY branche, category""").fetchall():
         for key in (("b", r["branche"]), ("c", r["category"])):
             s = stats.setdefault(key, [0.0, 0.0])
             s[0] += 3 * (r["q"] or 0) + 1.5 * (r["m"] or 0) + 0.5 * (r["ok"] or 0)
             s[1] += (r["k"] or 0) + (r["rt"] or 0) + 0.5 * (r["rk"] or 0)
     rows = c.execute("SELECT id, source_id, branche, category, niche, distance_km FROM leads "
-                     "WHERE status='kandidat'").fetchall()
+                     "WHERE arbeitsbereich=ab() AND status='kandidat'").fetchall()
     imported = [r for r in rows if (r["source_id"] or "").startswith(("claude:", "web:"))]
     if plan:  # aus der Claude-Recherche nur, was zu den gewählten Nischen passt (oder keine Nische hat)
         imported = [r for r in imported if not r["niche"] or r["niche"] in plan["weights"]]
@@ -311,7 +325,7 @@ def stage_score(c, lead_id, learned, promote=False):
     research["nische_gewaehlt"] = bool(lead["niche"]) and lead["niche"] in (
         set(niches.load(c, "manuell")) | set(niches.load(c, "auto")))
     research["empfehlung"] = (imported or {}).get("begruendung") or ""
-    result = scoring.score(lead, research, learned, regions.bonus_info(leaddb.kv_get(c, "regionen")))
+    result = scoring.score(lead, research, learned)
     if imported:
         result["zeitfresser"] = list(dict.fromkeys([*imported.get("zeitfresser", []), *result["zeitfresser"]]))
     threshold = S("LEADS_RULE_MIN")
@@ -335,7 +349,7 @@ def stage_score(c, lead_id, learned, promote=False):
         leaddb.add_event(c, lead_id, "status", "Gesperrt: Diese Adresse möchte nicht kontaktiert werden.")
         return False
     duplicate = email_addr and c.execute(
-        "SELECT name FROM leads WHERE id != ? AND email=? AND status IN ('passt','entwurf','versendet',"
+        "SELECT name FROM leads WHERE arbeitsbereich=ab() AND id != ? AND email=? AND status IN ('passt','entwurf','versendet',"
         "'beantwortet','gesperrt')", (lead_id, email_addr)).fetchone()
     if duplicate and not in_pipeline:
         leaddb.update_lead(c, lead_id, status="aussortiert", rejected_by="regel", **{
@@ -543,13 +557,15 @@ def upgrade_template_lines(c):
 def template_text(c, member=None):
     """Die Vorlage als Text („Betreff: …“, „Anrede: …“, Leerzeile, Text): die eigene der Person, sonst die aus
     dem Gehirn (Abschnitt „Vorlage (ohne KI)“)."""
-    upgrade_template(c)
-    upgrade_template_lines(c)
-    own = (team.settings(c, member)["vorlage"] if member else "") or ""
-    if own.strip():
+    if not arbeitsbereiche.ist_kunde():  # einmalige Änderungen an unserer eigenen Vorlage
+        upgrade_template(c)
+        upgrade_template_lines(c)
+    own = (team.settings(c, member)["vorlage"] if member and not arbeitsbereiche.ist_kunde() else "") or ""
+    if own.strip():  # eigene Vorlagen der Personen gelten nur für Ylva Labs, bei Kunden die aus seinem Gehirn
         return own.strip()
+    seed = leaddb.BRAIN_SEED_KUNDE if arbeitsbereiche.ist_kunde() else leaddb.BRAIN_SEED
     section = leaddb.brain_sections(leaddb.brain(c), [TEMPLATE_HEADING]).strip() \
-        or leaddb.brain_sections(leaddb.BRAIN_SEED.read_text(encoding="utf-8"), [TEMPLATE_HEADING]).strip()
+        or leaddb.brain_sections(seed.read_text(encoding="utf-8"), [TEMPLATE_HEADING]).strip()
     text = "\n".join(section.splitlines()[1:]).strip()  # Überschrift weg
     # Die gemeinsame Vorlage stellt die Person vor, die schreibt (früher fest „Oskar Jacobsen“)
     return text.replace("Ich bin Oskar Jacobsen von", "Ich bin {absender} von")
@@ -602,6 +618,8 @@ def template_draft(c, lead_id, member=None):
     lead = leaddb.get_lead(c, lead_id)
     member = member or getattr(_local, "person", None) or lead.get("owner")
     absender = (team.get(c, member) or {}).get("name") or S("LEADS_SENDER_NAME")
+    if arbeitsbereiche.ist_kunde():
+        absender = S("LEADS_SENDER_NAME") or S("ORG_NAME")
     fields = fill_template(lead, template_text(c, member), absender)
     leaddb.update_lead(c, lead_id, status="entwurf", **fields)
     leaddb.add_event(c, lead_id, "draft", "Entwurf aus der Vorlage erstellt (ohne KI).", author="Vorlage")
@@ -625,14 +643,14 @@ def avg_cost_usd(c, stage):
 
 
 def due_followups(c, without_text=False):
-    rows = c.execute("SELECT * FROM leads WHERE status='versendet' AND interest IS NULL AND IFNULL(followup_count,0)=0 "
-                     "AND ? > 0 AND sent_at <= ? ORDER BY sent_at", (leaddb.FOLLOWUP_DAYS, leaddb.followup_cutoff()))
+    rows = c.execute("SELECT * FROM leads WHERE arbeitsbereich=ab() AND status='versendet' AND interest IS NULL AND IFNULL(followup_count,0)=0 "
+                     "AND ? > 0 AND sent_at <= ? ORDER BY sent_at", (leaddb.followup_days(), leaddb.followup_cutoff()))
     return [dict(r) for r in rows if not (without_text and r["followup_body"])]
 
 
 def estimate(c, drafts, followups=True):
     """Was kostet ein Lauf ungefähr? Die Bewertung ist kostenlos, nur Entwürfe und Erinnerungen kosten."""
-    waiting = c.execute("SELECT COUNT(*) FROM leads WHERE status='passt' AND interest IS NULL "
+    waiting = c.execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND status='passt' AND interest IS NULL "
                         "AND IFNULL(body,'')='' AND stage IS NOT NULL").fetchone()[0]
     reminders = len(due_followups(c, without_text=True)) if followups else 0
     usd = drafts * avg_cost_usd(c, "entwurf") + reminders * avg_cost_usd(c, "erinnerung")
@@ -716,7 +734,7 @@ def _eur(value):
 def execute_run(c, run_id):
     run = c.execute("SELECT * FROM runs WHERE id=?", (run_id,)).fetchone()
     p = json.loads(run["params"])
-    with acting_as(c, p.get("person")):  # eigene Einstellungen der Person, die den Lauf gestartet hat
+    with arbeitsbereiche.im(run["arbeitsbereich"]), acting_as(c, p.get("person")):  # eigene Einstellungen der Person, die den Lauf gestartet hat
         return _execute_run(c, run_id, run, p)
 
 
@@ -737,7 +755,7 @@ def _execute_run(c, run_id, run, p):
         weights = niches.load(c, p.get("nischen", "manuell"))
         searched = (leaddb.kv_get(c, "last_search") or {}).get("niches")
         marks = ",".join("?" * len(weights))
-        waiting = c.execute(f"SELECT 1 FROM leads WHERE status='kandidat' AND (niche IN ({marks}) "
+        waiting = c.execute(f"SELECT 1 FROM leads WHERE arbeitsbereich=ab() AND status='kandidat' AND (niche IN ({marks}) "
                             "OR ((source_id LIKE 'claude:%' OR source_id LIKE 'web:%') AND niche IS NULL))",
                             list(weights)).fetchone()
         web_count = int(p.get("web_anzahl") or 0) if use_ai else 0
@@ -761,8 +779,6 @@ def _execute_run(c, run_id, run, p):
             counts["web_neu"], counts["web_gemeldet"] = new, reported
             counts["neu_gefunden"] += new
         counts["grobfilter"] += learned_filter(c)
-        ensure_boundaries(c)
-        assign_kreise(c)
 
         # Schritt 2: nach Regeln bewerten (kostenlos, nur die Webseite wird gelesen)
         learned = scoring.learned_adjustments(leaddb.category_outcomes(c))
@@ -784,20 +800,20 @@ def _execute_run(c, run_id, run, p):
         if notes:
             message = " ".join(notes)
         if check and not counts["bewertet"]:  # nichts zu bewerten: sagen, woran es liegt
-            others = c.execute("SELECT COUNT(*) FROM leads WHERE status='kandidat'").fetchone()[0]
+            others = c.execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND status='kandidat'").fetchone()[0]
             labels = ", ".join(niches.NICHES[k]["label"] for k in list(weights)[:4]) + (" …" if len(weights) > 4 else "")
             message = " ".join(notes + [
                 f"In den gewählten Nischen ({labels}) gibt es gerade keine neuen Betriebe"
                 + (f"; {others} warten in anderen Nischen" if others else "") + ". Agenturen und Büros stehen "
                 "oft nicht auf der Karte: Die Websuche (Webseiten, Instagram, LinkedIn) findet sie."])
-        counts["zu_pruefen"] = c.execute("SELECT COUNT(*) FROM leads WHERE status='passt' AND stage IS NULL "
+        counts["zu_pruefen"] = c.execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND status='passt' AND stage IS NULL "
                                          "AND interest IS NULL AND IFNULL(rejected_by,'')=''").fetchone()[0]
 
         # Schritt 3 (nur auf Wunsch): Entwürfe für die besten Betriebe im CRM ohne Nachricht (KI), also nur für
         # die, zu denen ihr beim Prüfen schon Ja gesagt habt
         if drafts and use_ai:
             brain = leaddb.brain(c)
-            best = c.execute("SELECT id, name FROM leads WHERE status='passt' AND interest IS NULL AND IFNULL(body,'')='' "
+            best = c.execute("SELECT id, name FROM leads WHERE arbeitsbereich=ab() AND status='passt' AND interest IS NULL AND IFNULL(body,'')='' "
                              "AND stage IS NOT NULL ORDER BY fit_score DESC, distance_km LIMIT ?", (drafts,)).fetchall()
             for i, row in enumerate(best):
                 check_budget(c, run_id, budget, "entwurf")
@@ -815,7 +831,7 @@ def _execute_run(c, run_id, run, p):
 
         # Wenn die KI geschrieben hat: aus euren Rückmeldungen den Stil lernen
         if (counts["entwuerfe"] or counts["erinnerungen"]) \
-                and c.execute("SELECT 1 FROM signals WHERE processed=0").fetchone():
+                and c.execute("SELECT 1 FROM signals WHERE arbeitsbereich=ab() AND processed=0").fetchone():
             check_budget(c, run_id, budget, "lernen")
             maybe_reflect(c, force=True)
     except BudgetStop as exc:
@@ -828,7 +844,7 @@ def _execute_run(c, run_id, run, p):
         status, message = "fehler", f"{exc.__class__.__name__}: {exc}"
         STATE["error"], STATE["error_at"] = message, time.time()
     finally:
-        c.execute("UPDATE leads SET status='fehler', updated_at=? WHERE status='recherche'", (leaddb.now(),))
+        c.execute("UPDATE leads SET status='fehler', updated_at=? WHERE arbeitsbereich=ab() AND status='recherche'", (leaddb.now(),))
         _local.run_id = None
         cost = ai.eur(leaddb._sum(c, "run_id = ?", (run_id,))["usd"])
         summary = ((f"Websuche: {counts['web_neu']} neu von {counts['web_gemeldet']} gemeldet. "
@@ -884,7 +900,7 @@ def lead_form(lead, snd=None):
 def write_followup(c, lead_id):
     """Erinnerung schreiben (kostet eine kleine KI-Anfrage). Verschickt wird sie erst nach Freigabe."""
     lead = leaddb.get_lead(c, lead_id)
-    result = ai.write_followup(leaddb.brain(c), lead, leaddb.FOLLOWUP_DAYS, writer_name(c, lead))
+    result = ai.write_followup(leaddb.brain(c), lead, leaddb.followup_days(), writer_name(c, lead))
     leaddb.update_lead(c, lead_id, followup_subject=result["betreff"], followup_greeting=result["anrede"],
                        followup_body=result["text"], unread=1)
     leaddb.add_event(c, lead_id, "draft", f"Erinnerung geschrieben ({ai.MODELS['erinnerung']}).")
@@ -900,7 +916,7 @@ def notify_due(c):
     leaddb.kv_set(c, "followup_notified", sorted(told | {lead["id"] for lead in new}))
     names = ", ".join(lead["name"] for lead in new[:3]) + (" …" if len(new) > 3 else "")
     notify(c, f"Nachfassen: {len(new)} Betrieb{'e' if len(new) != 1 else ''}",
-           f"Seit {leaddb.FOLLOWUP_DAYS} Tagen keine Antwort: {names}", "/leads?tab=nachfassen")
+           f"Seit {leaddb.followup_days()} Tagen keine Antwort: {names}", "/leads?tab=nachfassen")
     return len(new)
 
 
@@ -922,13 +938,15 @@ def send_outreach(c, lead, sent_by, followup=False, sender=None):
         raise RuntimeError("Es gibt noch keinen Text für die Erinnerung.")
     rcpt = {"name": lead["contact_name"] or "", "first": "", "email": lead["email"]}
     snd = team.sender(c, sender or lead.get("owner"), S("ORG_NAME")) if (sender or lead.get("owner")) else None
+    if arbeitsbereiche.ist_kunde():  # im Namen des Kunden: seine Unterschrift, nie die einer Person von uns
+        snd = _sender(c, None)
     form = {**(followup_form(lead) if followup else lead_form(lead)), **({} if not snd else {
         "closing": snd["gruss"], "sender_name": snd["name"], "from_name": snd["display"]})}
-    msg = emailbuild.build_message(form, rcpt, CFG["settings"], outreach_address())
+    msg = emailbuild.build_message(form, rcpt, mail_settings(), outreach_address())
     if followup and lead["message_id"]:  # im selben Gesprächsverlauf wie die erste Mail
         msg["In-Reply-To"] = lead["message_id"]
         msg["References"] = lead["message_id"]
-    smtp = CFG["smtp_connect"](S("OUTREACH_USER"), S("OUTREACH_PASSWORD"))
+    smtp = _smtp()
     try:
         smtp.send_message(msg)
     finally:
@@ -958,7 +976,30 @@ def send_outreach(c, lead, sent_by, followup=False, sender=None):
 # ---------------------------------------------------------------- Antworten lesen
 
 
+def _postfach_kunde():
+    """Akquise-Postfach des Kunden im aktiven Arbeitsbereich (None bei Ylva Labs)."""
+    if not arbeitsbereiche.ist_kunde():
+        return None
+    a = arbeitsbereiche._cache(arbeitsbereiche.aktiv()) or {}
+    return a.get("postfach")
+
+
+def _smtp():
+    """Postausgang des aktiven Arbeitsbereichs: bei Kunden sein Postfach, sonst das Akquise-Postfach."""
+    from . import posteingang
+    p = _postfach_kunde()
+    if arbeitsbereiche.ist_kunde():
+        if not p:
+            raise RuntimeError("Für diesen Kunden ist kein Akquise-Postfach eingetragen (Einstellungen → Arbeitsbereiche).")
+        return posteingang.SMTP(p)
+    return CFG["smtp_connect"](S("OUTREACH_USER"), S("OUTREACH_PASSWORD"))
+
+
 def _imap():
+    from . import posteingang
+    p = _postfach_kunde()
+    if p:
+        return posteingang.IMAP(p)
     imap = imaplib.IMAP4_SSL(S("IMAP_HOST"), S("IMAP_PORT"), ssl_context=ssl.create_default_context())
     imap.login(S("OUTREACH_USER"), S("OUTREACH_PASSWORD"))
     return imap
@@ -984,23 +1025,48 @@ def _message_text(msg):
 def _match_lead(c, msg):
     refs = " ".join(filter(None, (msg.get("In-Reply-To"), msg.get("References"))))
     for mid in re.findall(r"<[^>]+>", refs):
-        row = c.execute("SELECT id FROM leads WHERE message_id=? OR followup_message_id=?", (mid, mid)).fetchone() \
-            or c.execute("SELECT lead_id AS id FROM messages WHERE message_id=?", (mid,)).fetchone()
+        row = c.execute("SELECT id FROM leads WHERE arbeitsbereich=ab() AND (message_id=? OR followup_message_id=?)", (mid, mid)).fetchone() \
+            or c.execute("SELECT m.lead_id AS id FROM messages m JOIN leads l ON l.id = m.lead_id WHERE l.arbeitsbereich=ab() AND m.message_id=?", (mid,)).fetchone()
         if row:
             return row["id"]
     sender = parseaddr(msg.get("From", ""))[1].lower()
     if not sender:
         return None
-    row = c.execute("SELECT id FROM leads WHERE lower(email)=? ORDER BY status IN ('versendet','beantwortet') DESC, "
+    row = c.execute("SELECT id FROM leads WHERE arbeitsbereich=ab() AND lower(email)=? ORDER BY status IN ('versendet','beantwortet') DESC, "
                     "sent_at DESC, id DESC LIMIT 1", (sender,)).fetchone()
     if row:
         return row["id"]
     domain = _domain(sender)
     if domain and domain not in FREEMAIL:
-        for r in c.execute("SELECT id, email, website FROM leads WHERE status IN ('versendet','beantwortet') "
+        for r in c.execute("SELECT id, email, website FROM leads WHERE arbeitsbereich=ab() AND status IN ('versendet','beantwortet') "
                            "ORDER BY sent_at DESC"):
             if domain in (_domain(r["email"]), _host(r["website"])):
                 return r["id"]
+    return None
+
+
+def match_fehler(c, msg):
+    """Zu welchem Lead gehört ein Zustellfehler? Erst wie eine Antwort, dann über die Message-ID unserer Mail oder
+    den Empfänger, die im Bericht des Mailservers stehen."""
+    lead_id = _match_lead(c, msg) if not mailbox.FEHLER_ABSENDER.match(parseaddr(msg.get("From", ""))[1]) else None
+    if lead_id:
+        return lead_id
+    try:
+        raw = msg.as_string()[:200000]
+    except Exception:
+        return None
+    for mid in re.findall(r"<[^<>\s]+@[^<>\s]+>", raw):
+        row = c.execute("SELECT id FROM leads WHERE arbeitsbereich=ab() AND (message_id=? OR followup_message_id=?)",
+                        (mid, mid)).fetchone() \
+            or c.execute("SELECT m.lead_id AS id FROM messages m JOIN leads l ON l.id = m.lead_id WHERE "
+                         "l.arbeitsbereich=ab() AND m.direction='out' AND m.message_id=?", (mid,)).fetchone()
+        if row:
+            return row["id"]
+    for addr in re.findall(r"(?im)^(?:final|original)-recipient:\s*rfc822;\s*<?([^\s>]+)", raw):
+        row = c.execute("SELECT id FROM leads WHERE arbeitsbereich=ab() AND lower(email)=? ORDER BY sent_at DESC LIMIT 1",
+                        (addr.lower(),)).fetchone()
+        if row:
+            return row["id"]
     return None
 
 
@@ -1032,20 +1098,20 @@ def _contact_for(c, msg):
     """Unbekannter Absender: als Kontakt anlegen (nicht in der Pipeline, nicht in den Leads-Reitern)."""
     name, addr = parseaddr(msg.get("From", ""))
     addr = addr.lower()
-    row = c.execute("SELECT id FROM leads WHERE lower(email)=? ORDER BY id DESC LIMIT 1", (addr,)).fetchone()
+    row = c.execute("SELECT id FROM leads WHERE arbeitsbereich=ab() AND lower(email)=? ORDER BY id DESC LIMIT 1", (addr,)).fetchone()
     if row:
         return row["id"]
     now = leaddb.now()
     cur = c.execute(
         "INSERT OR IGNORE INTO leads (source_id, created_at, updated_at, name, branche, category, category_label, "
         "email, contact_name, status, fit_reason) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
-        (f"mail:{addr}", now, now, name or addr, "sonstige", "", "Kontakt", addr, name or None, "kontakt",
+        (leaddb.source_id(f"mail:{addr}"), now, now, name or addr, "sonstige", "", "Kontakt", addr, name or None, "kontakt",
          "Hat uns geschrieben."))
     c.commit()
     if cur.rowcount:
         leaddb.add_event(c, cur.lastrowid, "status", "Hat uns eine Mail geschrieben, als Kontakt angelegt.", author="Postfach")
         return cur.lastrowid
-    return c.execute("SELECT id FROM leads WHERE source_id=?", (f"mail:{addr}",)).fetchone()["id"]
+    return c.execute("SELECT id FROM leads WHERE source_id=?", (leaddb.source_id(f"mail:{addr}"),)).fetchone()["id"]
 
 
 def check_inbox(c):
@@ -1070,22 +1136,29 @@ def _check_inbox(c):
     set_activity("Liest das Postfach …")
     imap = _imap()
     handled = 0
+    ordner = S("FEHLER_ORDNER")
+    fehler_nums = []
     try:
-        imap.select("INBOX", readonly=True)
+        imap.select("INBOX", readonly=not ordner)
         _, data = imap.search(None, f"(SINCE {since.day:02d}-{MONTHS[since.month - 1]}-{since.year})")
         for num in (data[0] or b"").split()[-300:]:
             _, header = imap.fetch(num, "(BODY.PEEK[HEADER.FIELDS (MESSAGE-ID)])")
             mid_raw = next((p[1] for p in header if isinstance(p, tuple)), b"")
-            mid = email.message_from_bytes(mid_raw).get("Message-ID", "").strip() or f"num:{num.decode()}:{state['start']}"
+            mid = email.message_from_bytes(mid_raw).get("Message-ID", "").strip() \
+                or f"num:{arbeitsbereiche.aktiv()}:{num.decode()}:{state['start']}"
             if c.execute("SELECT 1 FROM inbox_seen WHERE message_id=?", (mid,)).fetchone():
                 continue
             _, parts = imap.fetch(num, "(BODY.PEEK[])")
             raw = next((p[1] for p in parts if isinstance(p, tuple)), b"")
             msg = email.message_from_bytes(raw, policy=email.policy.default)
-            if _take(c, msg, mid, start, own):
+            taken = _take(c, msg, mid, start, own)
+            if taken == "fehler":
+                fehler_nums.append(num)
+            elif taken:
                 handled += 1
             c.execute("INSERT OR IGNORE INTO inbox_seen (message_id, at) VALUES (?,?)", (mid, leaddb.now()))
             c.commit()
+        mailbox.im_ordner_verschieben(imap, fehler_nums, ordner)
     finally:
         try:
             imap.logout()
@@ -1105,6 +1178,13 @@ def _take(c, msg, mid, start, own):
         sent = None
     if sent and sent < start:
         return False  # älter als der erste Abruf: steht schon in eurem Mailprogramm
+    text = _message_text(msg)
+    art = mailbox.fehler_art(msg, text)
+    if art:  # Zustellfehler und Abwesenheit: Ordner „Fehler“, keine Meldung, keine Einordnung
+        lead_id = match_fehler(c, msg)
+        if lead_id:
+            mailbox.fehler_ablegen(c, lead_id, msg, text, art, message_id=mid)
+        return "fehler"
     lead_id = _match_lead(c, msg)
     if not lead_id:
         if _is_bulk(msg):
@@ -1132,8 +1212,9 @@ def handle_reply(c, lead_id, msg, message_id=None):
         leaddb.update_lead(c, lead_id, unread=1)
         leaddb.add_event(c, lead_id, "reply", text or "(leere Nachricht)", author=name or addr,
                          meta={"from": addr, "subject": subject, "date": str(msg.get("Date", ""))})
-        notify(c, f"Neue Mail von {lead['name']}" if lead["status"] == "kontakt" else f"Neue Antwort von {lead['name']}",
-               (text or subject)[:220], f"/crm/postfach/{lead_id}")
+        if not mailbox.ist_sonstige(c, lead_id):  # Unbekannte landen still unter „Sonstige“
+            notify(c, f"Neue Mail von {lead['name']}" if lead["status"] == "kontakt" else f"Neue Antwort von {lead['name']}",
+                   (text or subject)[:220], f"/crm/postfach/{lead_id}")
         return True
     leaddb.add_event(c, lead_id, "reply", text or "(leere Nachricht)", author=name or addr,
                      meta={"from": addr, "subject": subject, "date": str(msg.get("Date", ""))})
@@ -1193,8 +1274,9 @@ def send_reply(c, lead, text, sent_by, subject=None, sender=None):
 
 
 def _sender(c, key):
-    """Absender aus dem Team; ohne Person der Name aus den Einstellungen (wie bisher)."""
-    if key and team.get(c, key):
+    """Absender aus dem Team; ohne Person der Name aus den Einstellungen (wie bisher). Bei Kunden immer der Absender
+    aus dem Arbeitsbereich (Unterschrift, Firmenname, Fußzeile des Kunden)."""
+    if key and team.get(c, key) and not arbeitsbereiche.ist_kunde():
         return team.sender(c, key, S("ORG_NAME"))
     name = S("LEADS_SENDER_NAME") or S("ORG_NAME")
     return {"key": None, "name": name, "display": name, "gruss": "Viele Grüße",
@@ -1210,7 +1292,7 @@ def _claim(c, lead, key):
 def _deliver(msg):
     """Über das Akquise-Postfach verschicken und eine Kopie in „Gesendet“ ablegen. Fehler mit klarer Meldung."""
     try:
-        smtp = CFG["smtp_connect"](S("OUTREACH_USER"), S("OUTREACH_PASSWORD"))
+        smtp = _smtp()
         try:
             smtp.send_message(msg)
         finally:
@@ -1261,7 +1343,7 @@ def record_reply(c, lead, text, sent_by, subject, to, message_id=None, in_reply_
 
 
 def maybe_reflect(c, force=False):
-    signals = [dict(r) for r in c.execute("SELECT * FROM signals WHERE processed=0 ORDER BY id")]
+    signals = [dict(r) for r in c.execute("SELECT * FROM signals WHERE arbeitsbereich=ab() AND processed=0 ORDER BY id")]
     if not signals:
         return False
     oldest = datetime.fromisoformat(signals[0]["at"])
@@ -1311,7 +1393,7 @@ def test_mailbox():
         return [("Akquise-Postfach", False, "Benutzer oder Passwort fehlt.")]
     out = []
     try:
-        CFG["smtp_connect"](S("OUTREACH_USER"), S("OUTREACH_PASSWORD")).quit()
+        _smtp().quit()
         out.append(("Postausgang (SMTP)", True, f"Anmeldung als {S('OUTREACH_USER')} bei {S('SMTP_HOST')} klappt."))
     except Exception as exc:
         out.append(("Postausgang (SMTP)", False, mail_error(exc)))
@@ -1341,15 +1423,16 @@ def tick():
     with _job_lock:
         c = conn()
         try:
-            # Antworten lesen ist kostenlos, nur das Einordnen einer echten Antwort kostet ein paar Cent
-            if outreach_configured() and S("IMAP_HOST"):
-                last = leaddb.kv_get(c, "last_inbox", 0)
-                if time.time() - last > S("INBOX_MINUTES") * 60 or leaddb.kv_get(c, "request:inbox"):
-                    leaddb.kv_set(c, "last_inbox", time.time())
-                    leaddb.kv_set(c, "request:inbox", False)
-                    fetch_inbox(c)
-            notify_due(c)
-            notify_tasks(c)
+            for a in arbeitsbereiche.alle(c, nur_aktive=True):  # Akquise je Arbeitsbereich (Stufe 11)
+                with arbeitsbereiche.im(a["key"]):
+                    try:
+                        akquise_takt(c)
+                    except ai.AIError:
+                        raise
+                    except Exception:
+                        if a["key"] == arbeitsbereiche.YLVA:
+                            raise
+                        log.exception("Fehler im Arbeitsbereich %s", a["key"])
             try:  # Kalender: Erinnerungen, Ergebnis nachfragen, frei/belegt abgleichen, Serien (Firmen-OS Stufe 3)
                 from . import kalender
                 kalender.takt(c)
@@ -1385,23 +1468,9 @@ def tick():
                 posteingang.takt(c)
             except Exception:
                 log.exception("Fehler beim Abrufen der weiteren Postfächer")
-            reports.notify_released(c, notify)
-            start_scheduled(c)
             run = c.execute("SELECT id FROM runs WHERE status='wartet' ORDER BY id LIMIT 1").fetchone()
-            if run:
+            if run:  # ein Lauf nach dem anderen, im Arbeitsbereich, für den er gestartet wurde
                 execute_run(c, run["id"])
-            if leaddb.kv_get(c, "request:reflect") and ai.available():
-                leaddb.kv_set(c, "request:reflect", False)
-                maybe_reflect(c, force=True)
-            if leaddb.kv_get(c, "request:kreise"):
-                leaddb.kv_set(c, "request:kreise", False)
-                ensure_boundaries(c, force=True)
-                assign_kreise(c, everything=True)
-            wanted = leaddb.kv_get(c, "request:lead")
-            if wanted:
-                leaddb.kv_set(c, "request:lead", None)
-                _local.run_id = None
-                recheck_lead(c, wanted)
             STATE["error"] = None if not run else STATE["error"]
         except ai.AIError as exc:
             log.warning("KI-Fehler: %s", exc)
@@ -1412,6 +1481,29 @@ def tick():
         finally:
             c.close()
             set_activity("Wartet")
+
+
+def akquise_takt(c):
+    """Was der Arbeiter je Arbeitsbereich tut: Postfach lesen, Nachfassen melden, Berichte, Zeitplan, Lernen."""
+    # Antworten lesen ist kostenlos, nur das Einordnen einer echten Antwort kostet ein paar Cent
+    if outreach_configured() and S("IMAP_HOST"):
+        last = leaddb.kv_get(c, "last_inbox", 0)
+        if time.time() - last > S("INBOX_MINUTES") * 60 or leaddb.kv_get(c, "request:inbox"):
+            leaddb.kv_set(c, "last_inbox", time.time())
+            leaddb.kv_set(c, "request:inbox", False)
+            fetch_inbox(c)
+    notify_due(c)
+    notify_tasks(c)
+    reports.notify_released(c, notify)
+    start_scheduled(c)
+    if leaddb.kv_get(c, "request:reflect") and ai.available():
+        leaddb.kv_set(c, "request:reflect", False)
+        maybe_reflect(c, force=True)
+    wanted = leaddb.kv_get(c, "request:lead")
+    if wanted:
+        leaddb.kv_set(c, "request:lead", None)
+        _local.run_id = None
+        recheck_lead(c, wanted)
 
 
 def start_scheduled(c, now=None):
@@ -1440,37 +1532,6 @@ def start_scheduled(c, now=None):
             break
     leaddb.kv_set(c, "schedule_state", state)
     return started
-
-
-def ensure_boundaries(c, force=False):
-    """Kreisgrenzen einmal über OpenStreetMap laden (nur für Schleswig-Holstein). Fehler halten nichts auf."""
-    if S("LEADS_REGION") != "DE-SH" or (leaddb.kv_get(c, "kreise_geo") and not force):
-        return False
-    set_activity("Lädt die Kreisgrenzen von Schleswig-Holstein (einmalig) …")
-    try:
-        geo = regions.load_boundaries(S("OVERPASS_URL"), S("LEADS_REGION"))
-    except Exception as exc:
-        log.warning("Kreisgrenzen nicht geladen: %s", exc)
-        STATE["error"], STATE["error_at"] = f"Kreisgrenzen konnten nicht geladen werden ({exc}).", time.time()
-        return False
-    if len(geo) < 10:  # unvollständig: lieber nicht speichern
-        log.warning("Nur %s Kreise in der Antwort, Grenzen nicht gespeichert", len(geo))
-        return False
-    leaddb.kv_set(c, "kreise_geo", geo)
-    return True
-
-
-def assign_kreise(c, everything=False):
-    """Jedem Betrieb mit Koordinaten seinen Kreis zuordnen (Punkt in Kreisgrenze)."""
-    geo = leaddb.kv_get(c, "kreise_geo")
-    if not geo:
-        return 0
-    where = "lat IS NOT NULL" + ("" if everything else " AND kreis IS NULL")
-    rows = c.execute(f"SELECT id, lat, lon FROM leads WHERE {where}").fetchall()
-    for r in rows:
-        c.execute("UPDATE leads SET kreis=? WHERE id=?", (regions.kreis_of(geo, r["lat"], r["lon"]), r["id"]))
-    c.commit()
-    return len(rows)
 
 
 def recheck_lead(c, lead_id):

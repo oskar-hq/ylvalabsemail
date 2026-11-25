@@ -1,4 +1,4 @@
-"""Seiten der Agenten-Schnittstelle (Stufe 11): OAuth für Grok und Claude, der MCP-Endpunkt, Einstellungen →
+"""Seiten der Agenten-Schnittstelle (Stufe 12): OAuth für Grok und Claude, der MCP-Endpunkt, Einstellungen →
 Agenten mit Einrichtung (Onboarding) und die Freigabe-Karten der Agents."""
 import base64
 import json

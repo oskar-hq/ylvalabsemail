@@ -186,7 +186,7 @@ def _muss_geprueft(c, person):
     if stufe == 1:
         return True
     n = regeln(c)["stufe2" if stufe == 2 else "stufe3"]
-    bisher = c.execute("SELECT COUNT(*) FROM leads WHERE recherche_von=?", (person,)).fetchone()[0]
+    bisher = c.execute("SELECT COUNT(*) FROM leads WHERE arbeitsbereich=ab() AND recherche_von=?", (person,)).fetchone()[0]
     return bisher % n == 0  # der 1., (n+1)., … Lead dieser Person
 
 
@@ -274,7 +274,7 @@ def entscheiden(c, wer, freigabe_id, angenommen, grund=""):
     grund = (grund or "").strip()
     if not angenommen and len(grund) < 3:
         raise BranchentestError("Bitte einen Grund angeben. Daraus lernt die recherchierende Person.")
-    lead = leaddb.get_lead(c, f["objekt_id"])
+    lead = leaddb.get_lead(c, f["objekt_id"], alle=True)
     status = "angenommen" if angenommen else "abgelehnt"
     c.execute("UPDATE freigaben SET status=?, grund=?, entschieden_von=?, entschieden_am=? WHERE id=?",
               (status, grund[:1000] or None, wer, now(), freigabe_id))
@@ -406,7 +406,7 @@ SELECT l.testbranche AS key, IFNULL(l.herkunft, 'kalt') AS herkunft,
        SUM(l.preisgespraech_am IS NOT NULL) AS preisgespraeche,
        SUM(l.stage = 'kunde') AS abschluesse
 FROM leads l
-WHERE l.testbranche IS NOT NULL AND IFNULL(l.pruef_status, '') != 'abgelehnt'
+WHERE l.arbeitsbereich=ab() AND l.testbranche IS NOT NULL AND IFNULL(l.pruef_status, '') != 'abgelehnt'
   AND NOT (l.status = 'aussortiert' AND l.stage IS NULL)
 GROUP BY l.testbranche, IFNULL(l.herkunft, 'kalt')
 """
@@ -438,7 +438,7 @@ def leads_der_branche(c, key):
     rows = c.execute("""SELECT l.id, l.name, l.city, l.stage, l.status, l.herkunft, l.pruef_status, l.preisgespraech_am,
                                l.sent_at, l.replied_at, l.recherche_von, t.name AS recherche_name, l.owner
                         FROM leads l LEFT JOIN team t ON t.key = l.recherche_von
-                        WHERE l.testbranche = ? ORDER BY IFNULL(l.herkunft,'kalt') = 'warm', l.pruef_status = 'abgelehnt',
+                        WHERE l.arbeitsbereich=ab() AND l.testbranche = ? ORDER BY IFNULL(l.herkunft,'kalt') = 'warm', l.pruef_status = 'abgelehnt',
                               l.stage IS NULL, l.name""", (key,)).fetchall()
     return [dict(r) for r in rows]
 
@@ -450,7 +450,7 @@ def kandidaten(c, key, limit=50):
     if not b or not b["nischen"]:
         return []
     rows = c.execute(f"""SELECT id, name, city, fit_score, niche, category FROM leads
-                         WHERE testbranche IS NULL AND status IN ('passt','entwurf','versendet','beantwortet')
+                         WHERE arbeitsbereich=ab() AND testbranche IS NULL AND status IN ('passt','entwurf','versendet','beantwortet')
                            AND IFNULL(interest,'') != 'kein_interesse'
                          ORDER BY fit_score DESC NULLS LAST, id LIMIT 2000""").fetchall()
     out = [dict(r) for r in rows if (r["niche"] or niches.of_category(r["category"] or "")) in b["nischen"]]

@@ -1,19 +1,19 @@
-# Übergabe für den Weiterbau (Stufe 12: Outreach für Kunden)
+# Übergabe für den Weiterbau (nach Stufe 12)
 
-**Stand:** 25.11.2026 · Stufe 1 bis 11 gebaut und gemergt (11: Agenten-Schnittstelle, [AGENTEN.md](AGENTEN.md)) · nächste: **Stufe 12 (Outreach für Kunden)**, Plan abgestimmt
+**Stand:** 25.11.2026 · Stufe 1 bis 12 gebaut und gemergt (12: Agenten-Schnittstelle, [AGENTEN.md](AGENTEN.md)) · nächste: Praxistest mit dem ersten Kunden (Abschnitt 3)
 
 Diese Datei ist für die nächste Sitzung (Mensch oder KI), die am Firmen-OS weiterbaut. **Wer neu einsteigt:**
-erst `CLAUDE.md`, dann diese Datei ganz, dann Abschnitt 3 (Stufe 12, schon mit Oskar abgestimmt) bauen. Sie fasst zusammen, was
+erst `CLAUDE.md`, dann diese Datei ganz (vor allem „Arbeitsbereiche“ in Abschnitt 2). Sie fasst zusammen, was
 steht, wie hier gearbeitet wird und was als Nächstes sinnvoll ist. Ausführlich steht alles in
 [FIRMEN-OS.md](FIRMEN-OS.md) (Bauplan, je Stufe „Umsetzung und Abweichungen“).
 
-## 1. Arbeitsweise (bewährt in Stufe 1 bis 11)
+## 1. Arbeitsweise (bewährt in Stufe 1 bis 12)
 
 1. `CLAUDE.md`, [FIRMEN-OS.md](FIRMEN-OS.md), [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md) und
    [DESIGN.md](DESIGN.md) lesen, dann den betroffenen Code.
 2. Kurzen Plan für die Stufe mit Oskar abstimmen. Oskar hat für Stufe 2 bis 10 gesagt: Plan kurz abstimmen, dann bauen,
    testen, im Browser ansehen, Doku nachziehen, Pull Request und mergen.
-3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 210 Tests, alle grün). Neue Tests für das OS
+3. Bauen mit Tests: `python -m unittest discover tests` (Stand: 227 Tests, alle grün). Neue Tests für das OS
    kommen in `tests/test_os.py` (die Reihenfolge der Testdateien ist wichtig: `test_leads.py` setzt die
    Umgebung, Dateien davor dürfen `app.main` nicht importieren).
 4. Seiten im Browser ansehen (Playwright ist vorinstalliert): Handy 390 px und Desktop, hell und dunkel.
@@ -40,8 +40,9 @@ Requests gehen dorthin. Nach einem Merge den Arbeits-Branch neu von dort abzweig
 | 8 Finanzen | `finanzen.py` (Rechnungen mit Nummernkreis und Storno, Kosten, Kasse, Kennzahlen, Geld-Regel, Export), `pdf.py` | Finanzen, Rechnung, Laufende Kosten, Einstellungen → Finanzen, Projekt → Rechnungen |
 | 9 Posteingang | `posteingang.py` (weitere Postfächer, Kanäle, von Hand festhalten, Wünsche aus Nachrichten, Antwortzeit), `mailbox.py` | CRM → Postfach und Gespräch, Einstellungen → Postfächer, Einstellungen → Unipile |
 | Start | `startklar.py` (Checkliste für den echten Betrieb, nur gespeicherte Werte) | Einstellungen → Startklar, Hinweis auf Mein Tag, Mein Profil → Meldungen aufs Handy |
+| 11 Arbeitsbereiche | `arbeitsbereiche.py` (aktiver Arbeitsbereich, Einstellungen und Postfach je Kunde, Zahlen für Kunden) | Auswahl oben, Einstellungen → Arbeitsbereiche, Kunden-Bereich → Outreach, Postfach-Ordner |
+| 12 Agents (MCP) | `agenten.py` (Agenten-Konten, OAuth, Entwürfe, Zuständigkeit, Freigaben mit Ausführung, Infos), `mcp_server.py` (Protokoll, Werkzeuge), `agenten_prompts.py` | `/mcp/<key>`, `/oauth/*`, Einstellungen → Agents (Einrichten), Freigaben-Karten, Mein Tag → Von den Agents, Boards unter Kunden und Aufgaben |
 | 10 Assistent | `assistent.py` (Fragen mit Werkzeugen und Rechteprüfung, „Was zuerst?“, Entwürfe, Angebote mit PDF und Freigabe), `ai.anfrage` | Assistent, Mein Tag → Was zuerst?, Angebote, Einstellungen → Assistent, Entwurf-Knöpfe in Gespräch/Termin/Projekt |
-| 11 Agents (MCP) | `agenten.py` (Agenten-Konten, OAuth, Entwürfe, Zuständigkeit, Freigaben mit Ausführung, Infos), `mcp_server.py` (Protokoll, Werkzeuge), `agenten_prompts.py` | `/mcp/<key>`, `/oauth/*`, Einstellungen → Agents (Einrichten), Freigaben-Karten, Mein Tag → Von den Agents, Boards unter Kunden und Aufgaben |
 
 Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module wieder nutzen sollten:
 
@@ -60,75 +61,42 @@ Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module
   eintragen; dann erscheint es in der Zentrale, im Zähler und auf Mein Tag. Stufe der Aktion über
   `freigaben.stufe(c, key)` lesen (Katalog `freigaben.AKTIONEN`). Regeländerungen mit
   `firma.log(..., "einstellung", "regel", ...)` landen automatisch im Entscheidungs-Log.
+- **Arbeitsbereiche (Stufe 11), wichtig für jeden neuen Code der Akquise:** Jede Abfrage auf `leads`, `runs`,
+  `ai_usage`, `signals`, `brain_versions`, `known_firms` braucht `arbeitsbereich=ab()` (bzw. `l.arbeitsbereich=ab()`),
+  sonst sieht ein Kunde Leads von Ylva Labs. Neue Zeilen bekommen den Arbeitsbereich automatisch. Gespeicherte Werte
+  der Akquise, die je Kunde getrennt sein sollen, in `leaddb.AB_KV` eintragen. Einstellungen über `agent.S()` lesen
+  (nicht `SETTINGS[...]`), dann gelten die Werte des Kunden. Firmen-OS-Module lesen Leads mit
+  `leaddb.get_lead(c, id, alle=True)`. Im Hintergrund: `with arbeitsbereiche.im(key):`. Tests: `kunde_anlegen` in
+  `tests/test_os.py`.
+- **Agents (Stufe 12):** Jede neue Funktion, die Agents brauchen, bekommt einen Eintrag in `mcp_server.WERKZEUGE`
+  (deutsche Beschreibung, wann man es nutzt, Modul und Stufe). Was nach außen geht, nie direkt: Entwurf +
+  `agenten.anfragen`; das OS führt nach der Freigabe aus. Freigeben kann ein Agent nie (`freigaben._nur_menschen`).
+  Doku: [AGENTEN.md](AGENTEN.md).
 - **Design:** Bausteine in `static/os.css`, `static/os.js`, `templates/_os.html` (Listenzeilen, Sheets mit
   `data-sheet`, schwebende Knöpfe `os-float`, Formulare mit `data-os-fetch="reload"`, Toasts per `flash`).
 
-## 3. Stufe 12: Outreach für Kunden (Arbeitsbereiche)
+## 3. Als Nächstes
 
-**Auftrag (Oskar, 25.11.2026):** „Umbauen, sodass wir auf einem Server sowohl für uns als auch für mehrere Kunden
-Outreach machen können“; die Kunden bezahlen uns dafür. Mit Oskar abgestimmt (siehe auch FIRMEN-OS.md, Stufe 12):
+Stufe 11 (Outreach für Kunden in Arbeitsbereichen) ist gebaut, Details und Abweichungen in FIRMEN-OS.md. Dazu kamen auf
+Oskars Wunsch Ordner im Postfach (Gespräche, Sonstige, Fehler; Fehler-Mails auch im Mailprogramm in „Fehler“) und die
+Karte im CRM ist entfernt.
 
-| Frage | Entscheidung |
-| --- | --- |
-| Trennung | **Arbeitsbereich je Kunde**, eine Datenbank, Spalte `arbeitsbereich` (nicht je Kunde eine eigene Datenbank) |
-| Absender | **Postfach des Kunden** je Arbeitsbereich; Antworten landen dort |
-| Kundensicht | **Ja, im Kunden-Bereich**: Zahlen und interessierte Kontakte; Freigaben bleiben bei uns |
-
-**Datenmodell (Vorschlag):**
-
-- Neue Tabelle `arbeitsbereiche(key, name, projekt_id, aktiv, erstellt_am)`. Startwert `ylva` (Ylva Labs selbst),
-  per DATA_MIGRATIONS anlegen; alle bestehenden Daten gehören zu `ylva`.
-- Spalte `arbeitsbereich TEXT NOT NULL DEFAULT 'ylva'` (über `leaddb.MIGRATIONS`) an: `leads`, `runs`, `ai_usage`
-  (Lead-Läufe), `tasks` (CRM-Wiedervorlagen), `signals`, `brain_versions`, `known_firms`, `run_results`, `notices`
-  (nur Lead-Meldungen), `postfaecher`. `messages`, `lead_events` hängen über `lead_id` dran (kein eigenes Feld nötig).
-- Bisher globale Werte je Arbeitsbereich: Gehirn (`brain_versions`), Nischen und Suchgebiet (heute `config_store`:
-  `LEADS_REGION`, `LEADS_CENTER`, `LEADS_RADIUS_KM`, `LEADS_RULE_MIN` …), `blocklist`, `inbox_state`, `schedule`
-  (automatische Suche), Vorlagen. Muster: kv-Schlüssel mit Präfix `ab:<key>:` und Fallback auf den globalen Wert.
-- Akquise-Postfach je Arbeitsbereich: für `ylva` weiter `OUTREACH_USER`/`OUTREACH_PASSWORD`; für Kunden ein
-  Eintrag in `postfaecher` mit `arbeitsbereich` und Kennzeichen „Akquise“. `OUTREACH_EMAIL` je Arbeitsbereich
-  (Standard aus, bis der Kunde bestätigt, dass er Erstkontakt per Mail will).
-
-**Umsetzung in Schritten (je Schritt Tests grün, dann weiter):**
-
-1. **Arbeitsbereich wählen:** Auswahl in der Navigation (nur sichtbar, wenn es mehr als einen gibt), gespeichert in
-   der Sitzung; `g.arbeitsbereich`. Rechte: neues Modul oder Feld „Arbeitsbereiche“ je Person (wer für welchen
-   Kunden arbeitet), Verwalten in Einstellungen → Arbeitsbereiche.
-2. **Leads und CRM filtern:** Jede Abfrage auf `leads` (rund 80 Stellen, `grep -n "FROM leads\|UPDATE leads\|INTO leads" app/*.py`)
-   bekommt den Arbeitsbereich. Am sichersten über Hilfsfunktionen in `leaddb` (z. B. `leads_where(c, ab)`) statt
-   überall von Hand; neue Leads bekommen den Arbeitsbereich beim Anlegen. Test: Lead aus A ist in B nie sichtbar
-   (Liste, Akte, Suche, Palette, CRM, Postfach, Export, KPIs).
-3. **Hintergrund-Arbeiter:** Läufe, automatische Suche, Postfach-Abruf, Nachfassen und Lernen je Arbeitsbereich
-   (Schleife über aktive Arbeitsbereiche in `agent.tick`), Budget je Arbeitsbereich (KI-Kosten an den Kunden
-   weiterberechenbar).
-4. **Gehirn, Vorlagen, Suchgebiet, Nischen, Sperrliste je Arbeitsbereich** in den Einstellungen; Absender-Postfach
-   des Kunden; Unterschrift im Namen des Kunden.
-5. **Kunden-Bereich:** neuer Abschnitt „Outreach“ für Kunden mit Arbeitsbereich: angeschrieben, Antworten,
-   Interesse, Termine je Woche und die interessierten Kontakte (ohne interne Notizen).
-6. **Abrechnung:** Arbeitsbereich mit Projekt verknüpfen; Monatsrechnung um eine Position „Outreach“ und optional
-   KI-Kosten ergänzen.
-7. Doku: FIRMEN-OS.md Stufe 12 abhaken mit „Umsetzung und Abweichungen“, README, UEBERGABE („Nach dem Update“).
-
-**Agents in Stufe 12:** Seit Stufe 11 arbeiten die Grok-Bots über MCP im OS ([AGENTEN.md](AGENTEN.md)). Für
-Arbeitsbereiche brauchen die Werkzeuge (`app/mcp_server.py`) den Arbeitsbereich: am einfachsten ein Feld
-„Arbeitsbereiche“ am Agenten-Konto (wie bei Personen) und jede Abfrage auf Leads über die neue Hilfsfunktion
-filtern. Test: Ein Agent eines Kunden sieht nie Leads aus dem Arbeitsbereich `ylva`.
-
-**Neue Werkzeuge für Agents:** Jede neue Funktion, die Agents brauchen, bekommt einen Eintrag in
-`mcp_server.WERKZEUGE` (deutsche Beschreibung, wann man es nutzt, Modul und Stufe). Schreibende Werkzeuge laufen
-über eine Funktion, die `firma.log` mit dem Agent als Urheber schreibt. Was nach außen geht, nie direkt: Entwurf +
-`agenten.anfragen`.
-
-**Achtung:** Rechtlich ist der Kunde der Absender. Vor dem ersten Kunden mit dem Anwalt klären: AV-Vertrag
-(wir verarbeiten Kontaktdaten im Auftrag), Erstkontakt per Mail im Namen des Kunden (§ 7 UWG), Impressum und
-Abmeldelink in den Mails des Kunden.
-
-**Danach** (aus der Übergabe nach Stufe 10, weiter gültig): Praxistest im Alltag, Assistent ausbauen, Unipile,
-restliche alte Seiten auf `os.css`.
+1. **Erster Kunde im Alltag:** Postfach des Kunden anlegen, Arbeitsbereich einrichten (UEBERGABE.md, „Nach dem
+   Update“), einen kleinen Lauf, Entwürfe freigeben, Antworten im Postfach prüfen. Vorher mit dem Anwalt: AV-Vertrag,
+   § 7 UWG im Namen des Kunden, Impressum und **Abmeldelink** in seinen Mails (noch nicht gebaut).
+2. **Noch nie mit echten Diensten getestet:** Versand und Abruf aus dem Postfach eines Kunden, das Verschieben in den
+   Ordner „Fehler“ bei Strato (IMAP COPY/EXPUNGE).
+3. **Agents einrichten** (Stufe 12): nach dem Update Einstellungen → Agents → Einrichten (UEBERGABE.md). Danach
+   1–2 Wochen messen (Karten pro Tag, Anteil unverändert freigegebener Entwürfe) und Limits nachstellen.
+4. **Agents für Kunden-Arbeitsbereiche:** Heute arbeiten Agents nur im Arbeitsbereich „Ylva Labs“ (ohne Sitzung gilt
+   der Standard). Für Kunden ein Feld „Arbeitsbereiche“ am Agenten-Konto und `arbeitsbereiche.im(key)` je Aufruf in
+   `agenten_views.mcp`; Test: ein Kunden-Agent sieht nie Leads von `ylva`.
+5. Danach weiter wie bisher: Praxistest im Alltag, Assistent ausbauen, Unipile, restliche alte Seiten auf `os.css`.
 
 ## 4. Für einen neuen Agenten: Umgebung und Fallstricke
 
-- **Tests:** `python -m unittest discover tests` (dauert etwa 25 Sekunden; Meldungen „Kreisgrenzen nicht geladen“
-  und „Fehlgeschlagene Anmeldung“ sind normal). Dazu `python -m pyflakes app tests`; bekannte alte Meldungen in
+- **Tests:** `python -m unittest discover tests` (dauert etwa 30 Sekunden; die Meldung „Fehlgeschlagene Anmeldung“
+  ist normal). Dazu `python -m pyflakes app tests`; bekannte alte Meldungen in
   `branchentest.py:451` und `main.py` (`firma` doppelt importiert) sind nicht neu.
 - **App lokal ansehen:** Den Demo-Modus gibt es nicht mehr. Einmal `python tests/vorschau.py <ordner>` (erfundene
   Beispieldaten, Oskar bekommt das Passwort `vorschau123`), dann

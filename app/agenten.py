@@ -1,4 +1,4 @@
-"""Agenten-Schnittstelle (Firmen-OS, Stufe 11): KI-Agents arbeiten über MCP im OS, Menschen geben frei.
+"""Agenten-Schnittstelle (Firmen-OS, Stufe 12): KI-Agents arbeiten über MCP im OS, Menschen geben frei.
 
 - **Agenten-Konten** (`agenten`): Jeder verbundene Agent (z. B. die Grok-Bots Ops, Delivery, Outreach, Content) hat
   ein eigenes Konto mit Name, Bereich, Rechten je Modul (Rechte-Modell aus `firma`) und Tageslimits. Im Protokoll
@@ -1023,7 +1023,16 @@ def _ausfuehrung_setzen(c, fid, status, text="", extra=None):
 
 
 def ausfuehren(c, wer, fid, data_dir=None):
-    """Nach der Freigabe: das OS führt aus, was es kann, mit genau dem freigegebenen Inhalt."""
+    """Nach der Freigabe: das OS führt aus, was es kann, mit genau dem freigegebenen Inhalt. Läuft im Arbeitsbereich
+    des Leads (Stufe 11), egal in welchem die freigebende Person gerade arbeitet: Postfach und Sperrliste passen."""
+    from . import arbeitsbereiche
+    v = _json(_freigabe(c, fid)["vorschlag"], {})
+    row = c.execute("SELECT arbeitsbereich FROM leads WHERE id=?", (v.get("lead_id") or 0,)).fetchone()
+    with arbeitsbereiche.im((row["arbeitsbereich"] if row else None) or arbeitsbereiche.YLVA):
+        return _ausfuehren(c, wer, fid, data_dir)
+
+
+def _ausfuehren(c, wer, fid, data_dir=None):
     from . import crm, firma, freigaben, leaddb, projekte
     f = _freigabe(c, fid)
     if f["status"] != "angenommen":

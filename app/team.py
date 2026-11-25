@@ -147,7 +147,7 @@ def stats(c):
                SUM(stage IN ('gespraech','angebot')) AS gespraeche,
                SUM(stage='kunde') AS kunden,
                SUM(CASE WHEN stage='kunde' THEN IFNULL(deal_eur,0) ELSE 0 END) AS umsatz
-        FROM leads GROUP BY owner""")}
+        FROM leads WHERE arbeitsbereich=ab() GROUP BY owner""")}
     by_name = {m["name"]: m["key"] for m in people}
     mails = {}
     for r in c.execute("SELECT sent_by, COUNT(*) n FROM messages WHERE direction='out' GROUP BY sent_by"):

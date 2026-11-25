@@ -68,17 +68,6 @@ Mails stehen in der Akte, der Betrieb rückt auf „Kontaktiert“.
   Antworten und Notizen.
 - **Wiedervorlagen** mit Datum („in 1 Woche nachfassen“). Oben im CRM steht, was heute dran ist, die Zahl
   steht auch im Menü, und ihr bekommt einmal Bescheid (Push/Mail).
-- **Karte** (Knopf „Karte“ im CRM): Heatmap der passenden Betriebe in Schleswig-Holstein, gewichtet nach Punkten,
-  dazu die Betriebe im CRM als Punkte nach Stufe und eine Liste der stärksten Gegenden (Umkreis 12 km) mit den
-  besten Betrieben darin. Gedacht für Vor-Ort-Tage. Leaflet liegt in `static/vendor/leaflet` (BSD-Lizenz), nur
-  die Kartenkacheln kommen von OpenStreetMap.
-- **Wachstum je Kreis** (auf der Karte): Gewerbeanmeldungen und Baugenehmigungen je 1.000 Einwohner, als
-  eingefärbte Kreise und als Tabelle. Die Zahlen importiert ihr als CSV aus der
-  [Regionaldatenbank Deutschland](https://www.regionalstatistik.de) (Statistik 52311 Gewerbeanzeigen, 31111
-  Baugenehmigungen; Kreis-Ebene, ein Merkmal, ein Zeitraum; Datenlizenz Deutschland – Namensnennung 2.0).
-  Die 5 stärksten Kreise sind Wachstumsregionen: Betriebe dort bekommen +5 Punkte (Gewerbe), Bau-Gewerke +8
-  (Baugenehmigungen). Die Kreisgrenzen lädt der Server einmal über OpenStreetMap und ordnet jedem Betrieb
-  seinen Kreis zu. Einwohner sind gerundet hinterlegt, ein CSV-Import macht sie genau.
 - **Firma anlegen** von Hand (Messe, Empfehlung) und **CSV importieren** (Spalten Firma, E-Mail, Telefon,
   Webseite, Ansprechpartner, Ort, Adresse, Branche, Notiz; Dubletten werden übersprungen).
   **CSV exportieren** für Excel.
@@ -302,6 +291,31 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
 - **Mögliche Änderungswünsche:** Schreibt oder ruft ein Kunde mit laufendem Projekt an, schlägt das OS vor, daraus
   einen Änderungswunsch zu machen. Die verantwortliche Person entscheidet mit einem Klick.
 - **WhatsApp und LinkedIn über Unipile** sind vorbereitet (Zugang in den Einstellungen), aber noch nicht verbunden.
+- **Ordner im Postfach:** „Gespräche“ (alle, die wir angeschrieben haben, und Kunden), „Sonstige“ (Unbekannte, die uns
+  geschrieben haben und denen wir noch nicht geantwortet haben) und „Fehler“ (Zustellfehler und Abwesenheitsnotizen,
+  an der Akte des Betriebs). Glocke, Zähler und Meldungen gibt es nur für „Gespräche“. Im Mailprogramm verschiebt das
+  OS die Fehler-Mails in den Ordner „Fehler“ (Einstellungen → Postfach und Versand → Posteingang, leer = aus).
+
+## Outreach für Kunden: Arbeitsbereiche (Stufe 11)
+
+- **Arbeitsbereich oben wählen** („Ylva Labs“ oder ein Kunde). Leads, CRM, Postfach, Gehirn, Vorlage, Suchgebiet,
+  Nischen, Sperrliste, Läufe, Wiedervorlagen und KI-Kosten gehören immer zu genau einem Arbeitsbereich. Personen,
+  Aufgaben, Kalender, Finanzen und Freigaben sind gemeinsam; Entwürfe für Kunden stehen in den Freigaben mit Namen.
+  Ein Link auf einen Lead (z. B. aus den Freigaben) wechselt den Arbeitsbereich, wenn man dort arbeiten darf.
+- **Einstellungen → Arbeitsbereiche:** Kunde anlegen, Akquise-Postfach des Kunden (aus Einstellungen → Postfächer)
+  wählen, Absender (Firmenname, Unterschrift, Fußzeile/Impressum), Erstkontakt per Mail (Standard aus),
+  Suchgebiet, Mindestpunkte, Nachfassen, KI-Budget, wer dort arbeitet, Projekt des Kunden, Pauschale und ob die
+  KI-Kosten mit abgerechnet werden. Leere Felder mit Rückfall gelten wie bei Ylva Labs.
+- **Im Namen des Kunden:** Mails gehen aus seinem Postfach raus, mit seinem Absender, nie mit einer Person von uns;
+  Antworten liest der Hintergrund-Arbeiter dort. Ein Kunde startet mit einem leeren Gehirn-Gerüst
+  (`app/brain_seed_kunde.md`), nie mit dem von Ylva Labs.
+- **Kunden-Bereich:** Abschnitt „Outreach“ mit angeschrieben, Antworten, Interesse und Termine (gesamt und je Woche)
+  und den interessierten Kontakten, ohne interne Notizen. Auch im Wochenbericht. Abschaltbar unter
+  Einstellungen → Kunden-Bereich.
+- **Abrechnung:** Die Monatsrechnung des verknüpften Projekts bekommt die Position „Outreach“ (Pauschale, mit Zahl der
+  Angeschriebenen im Vormonat) und auf Wunsch die KI-Kosten des Vormonats.
+- **Vor dem ersten Kunden** mit dem Anwalt klären: AV-Vertrag, Erstkontakt per Mail im Namen des Kunden (§ 7 UWG),
+  Impressum und Abmeldelink in seinen Mails.
 
 ## Assistent und Angebote (Stufe 10)
 
@@ -314,7 +328,7 @@ Bauplan: [docs/FIRMEN-OS.md](docs/FIRMEN-OS.md), Design: [docs/DESIGN.md](docs/D
   die Freigabe (Stufe C: Mail mit PDF, Stufe D: persönlich übergeben), danach angenommen oder abgelehnt.
 - **Einstellungen → Assistent:** ein/aus, Modell, Denk-Aufwand, Schritte, Gültigkeit und Nummern der Angebote.
 
-## Agenten-Schnittstelle: KI-Agents arbeiten im OS (Stufe 11)
+## Agenten-Schnittstelle: KI-Agents arbeiten im OS (Stufe 12)
 
 Die KI-Agents (die Grok-Bots Ops, Delivery, Outreach, Content, später Claude) verbinden sich per **MCP** mit dem OS
 und arbeiten dort: Aufgaben anlegen, ändern, abhaken (mit Dubletten-Prüfung), Notizen, Leads, Entwürfe für Mails,
@@ -486,7 +500,7 @@ app/main.py            Web-App: Login, Vorschau, Upload, Versand, Verlauf
 app/emailbuild.py      Formularfelder → HTML-Mail + Textversion (MIME)
 app/pixel.py           Pixel-Band und Pixel-Icons als mailtaugliche Tabellen
 app/leads_views.py     Akquise: Übersicht, Akte mit Chat, Regeln, Gehirn, Web-App und Push
-app/crm_views.py       CRM: Pipeline-Board, Karte, Wiedervorlagen, Kontaktdaten, Firma anlegen, CSV
+app/crm_views.py       CRM: Pipeline-Board, Wiedervorlagen, Kontaktdaten, Firma anlegen, CSV
 app/crm.py             Pipeline-Stufen, Wiedervorlagen, Import/Export, Versand aus „Verfassen“ in der Akte
 app/firma.py           Firmen-OS: Protokoll (log), Personen, Rollen und Rechte, Bereiche, Einladung, Notfall
 app/aufgaben.py        Aufgaben, Anfragen, Kommentare mit @-Erwähnung, Meldungen an eine Person
@@ -502,7 +516,7 @@ app/cockpit_views.py   Seiten Cockpit, Wochengespräch; Wochenziele, Aufstiege
 app/projekte.py        Projekte, Anforderung, Abnahme, Änderungswünsche, Zeiterfassung, Kosten je Kunde
 app/projekte_views.py  Seiten Kunden, Projekt, Zeiterfassung, Einstellungen → Projekte
 app/scoring.py         Bewertung nach Regeln und Einordnen von Antworten, beides ohne KI
-app/regions.py         Kreise: Grenzen, Statistik je Kreis, Wachstumsregionen
+app/arbeitsbereiche.py Arbeitsbereiche (Stufe 11): aktiver Bereich, Einstellungen je Kunde, Zahlen für Kunden
 app/agent.py           Hintergrund-Arbeiter: suchen, bewerten, Antworten lesen, Entwürfe auf Wunsch
 app/ai.py              KI (Claude) nur zum Schreiben: Entwurf, Chat, Erinnerung, Lernen
 app/finder.py          Betriebe aus OpenStreetMap, Webseiten lesen

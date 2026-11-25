@@ -21,7 +21,7 @@
     <ul class="os-list anim">{% for a in agents %}
       <li style="--i:{{ loop.index0 }}"><a class="os-row" href="{{ url_for('agenten.detail', key=a.key) }}">{{ avatar(a.name, 'red' if a.status != 'aktiv' else '') }}
         <span class="os-txt"><b>{{ a.name }}{% if a.status != 'aktiv' %} · gesperrt{% endif %}</b>
-          <span>{% set v = verbindungen.get(a.key, [])|selectattr('aktiv')|list %}{% if v %}Verbunden{% if a.zuletzt_aktiv %} · zuletzt {{ a.zuletzt_aktiv|kurzdatum }} {{ a.zuletzt_aktiv[11:16] }}{% endif %}{% else %}Nicht verbunden{% endif %} · {{ karten[a.key] }} Karte{{ 'n' if karten[a.key] != 1 }} heute</span></span>
+          <span>{% set v = verbindungen.get(a.key, [])|selectattr('aktiv')|list %}{% if v %}Verbunden{% if a.zuletzt_aktiv %} · zuletzt {{ a.zuletzt_aktiv|kurzdatum }}{% endif %}{% else %}Nicht verbunden{% endif %} · {{ karten[a.key] }} Karte{{ 'n' if karten[a.key] != 1 }} heute</span></span>
         <span class="os-chev">{{ i('chev') }}</span></a></li>
     {% else %}<li class="os-empty">Noch keine Agents.</li>{% endfor %}
     </ul>

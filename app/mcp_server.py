@@ -1,4 +1,4 @@
-"""MCP-Server des Firmen-OS (Stufe 11): die einzige Schnittstelle zwischen KI-Agents und dem OS.
+"""MCP-Server des Firmen-OS (Stufe 12): die einzige Schnittstelle zwischen KI-Agents und dem OS.
 
 Streamable HTTP ohne Sitzung: Jede Anfrage ist ein POST mit einer JSON-RPC-Nachricht, die Antwort kommt als JSON.
 Das passt zum einen Gunicorn-Worker des OS und braucht keine zusätzliche Bibliothek. Unterstützt werden die
@@ -165,7 +165,7 @@ def w_aufgaben(c, wer, a):
 
 def w_leads(c, wer, a):
     from . import crm
-    where, args = ["1"], []
+    where, args = ["arbeitsbereich = ab()"], []  # Agents arbeiten im Arbeitsbereich „Ylva Labs“ (Stufe 11)
     if a.get("stichwort"):
         q = f"%{a['stichwort']}%"
         where.append("(name LIKE ? OR city LIKE ? OR contact_name LIKE ? OR email LIKE ? OR website LIKE ?)")

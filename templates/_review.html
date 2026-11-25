@@ -10,7 +10,7 @@
       <span class="stamp yes">Gut</span><span class="stamp no">Nicht gut</span>
       <header>
         <h2>{{ l.name }}</h2>
-        <p class="muted">{{ p.kategorie }}{% if p.ort %} · {{ p.ort }}{% endif %}{% if p.km is not none %} · {{ p.km|round|int }} km{% endif %}{% if p.kreis %} · {{ p.kreis }}{% endif %}</p>
+        <p class="muted">{{ p.kategorie }}{% if p.ort %} · {{ p.ort }}{% endif %}{% if p.km is not none %} · {{ p.km|round|int }} km{% endif %}</p>
         {% if p.punkte is not none %}<span class="score-badge" title="Punkte nach Regeln">{{ p.punkte }}<small>/100</small></span>{% endif %}
       </header>
       <dl class="swipe-facts">

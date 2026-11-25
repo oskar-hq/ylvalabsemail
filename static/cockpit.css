@@ -80,6 +80,24 @@ code{background:var(--s3);border-radius:5px;color:var(--body)}
 .account-menu a,.account-menu button{display:block;width:100%;text-align:left;padding:9px 10px;border-radius:9px;background:none;border:0;color:var(--ink);font:500 14px/1.2 var(--sans);cursor:pointer;text-decoration:none}
 .account-menu a:hover,.account-menu button:hover{background:var(--s4)}
 .account-menu form{margin:0}
+/* Arbeitsbereich (Stufe 11): oben neben dem Logo, nur wenn es mehr als einen gibt */
+.ab-pick{position:relative;margin-left:8px;flex:0 1 auto;min-width:0}
+.ab-pick summary{list-style:none;display:flex;align-items:center;gap:6px;height:34px;padding:0 10px;border-radius:999px;background:var(--s3);color:var(--ink);font:600 13px/1 var(--sans);cursor:pointer;max-width:190px}
+.ab-pick summary::-webkit-details-marker{display:none}
+.ab-pick summary svg{width:14px;height:14px;flex:none;color:var(--muted)}
+.ab-pick .ab-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ab-pick .ab-dot{width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
+.ab-pick.kunde summary{background:color-mix(in srgb,var(--link) 16%,var(--s3))}
+.ab-pick.kunde .ab-dot{background:var(--link)}
+.ab-menu{left:0;right:auto;top:42px;min-width:250px}
+.ab-menu button.on{background:var(--s4);font-weight:700}
+@media (max-width:600px){.ab-pick summary{max-width:120px}}
+/* Mit Auswahl wird es oben eng: Navigation etwas dichter, Suche nur als Symbol */
+@media (min-width:640px) and (max-width:1439px){
+  .top:has(.ab-pick) nav a{padding:8px 6px}
+  .top:has(.ab-pick) .find-btn span,.top:has(.ab-pick) .find-btn kbd{display:none}
+  .ab-pick summary{max-width:150px}
+}
 
 /* Tab-Leiste unten (Handy) */
 .tabbar{display:none}
@@ -171,7 +189,7 @@ i.new{background:var(--blue)}
 .crumbs{margin:0 0 14px}
 .crumbs a{color:var(--muted);font:500 14px var(--sans)}
 .crumbs a:hover{color:var(--ink)}
-.side-block,.chat-wrap,.draft,.hist,.history,.checks,.checks li,.costs,.tasks li,table.stats th,table.stats td,.change,.hotspots>li,.col-head{border-color:var(--line)}
+.side-block,.chat-wrap,.draft,.hist,.history,.checks,.checks li,.costs,.tasks li,table.stats th,table.stats td,.change,.col-head{border-color:var(--line)}
 .side-block{border-top:0;background:var(--s1);border-radius:14px;padding:16px 18px;margin-bottom:12px}
 .draft{border-top:0}
 .msg{background:var(--s2);border-radius:14px}
@@ -192,7 +210,6 @@ dialog::backdrop{background:var(--backdrop)}
 .check-btn:hover{background:var(--good);border-color:var(--good);color:var(--canvas)}
 .login .band{display:none}
 .login-card h1{text-transform:none;font:700 clamp(40px,7vw,60px)/1 var(--display);letter-spacing:-.035em}
-.map{border:0;border-radius:14px}
 
 /* Segment-Schalter (Reiter) */
 .segmented{display:inline-flex;gap:2px;padding:3px;background:var(--s3);border-radius:10px;margin:0 0 20px;max-width:100%;overflow-x:auto;scrollbar-width:none}

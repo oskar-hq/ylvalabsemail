@@ -24,6 +24,23 @@
     </dl>
   </section>
 
+  {% if a.outreach %}{% set o = a.outreach %}
+  <section class="os-section" id="outreach">
+    <h2 class="os-headline">Outreach</h2>
+    <p class="os-sub">Wen wir in Ihrem Namen angeschrieben haben und was zurückkam. Jede Nachricht geben wir vorher frei.</p>
+    <ul class="os-list" style="margin-top:12px">
+      {% for label, wert in [('Angeschrieben', o.gesamt.angeschrieben), ('Antworten', o.gesamt.antworten ~ (' (' ~ o.gesamt.quote ~ ' %)' if o.gesamt.quote is not none else '')), ('Mit Interesse', o.gesamt.interesse), ('Termine', o.gesamt.termine)] %}
+      <li class="os-row os-kpi"><span class="os-txt"><b>{{ label }}</b><span>bisher insgesamt</span></span><span class="os-wert">{{ wert }}</span></li>{% endfor %}
+    </ul>
+    <div class="os-scroll"><table class="os-table" aria-label="Outreach je Woche">
+      <thead><tr><th>Woche</th><th>Angeschrieben</th><th>Antworten</th><th>Interesse</th><th>Termine</th></tr></thead>
+      <tbody>{% for w in o.wochen %}<tr><td>KW {{ w.kw }}</td><td>{{ w.angeschrieben }}</td><td>{{ w.antworten }}</td><td class="{{ 'hl' if w.interesse }}">{{ w.interesse }}</td><td>{{ w.termine }}</td></tr>{% endfor %}</tbody>
+    </table></div>
+    <h3 class="os-headline" style="margin-top:24px;font-size:17px">Interessierte Kontakte</h3>
+    <ul class="os-list">{% for k in o.kontakte %}<li class="os-row"><span class="os-txt"><b>{{ k.name }}</b><span>{{ k.stand }} · {{ datum(k.seit) }}{% if k.ort %} · {{ k.ort }}{% endif %}{% if k.ansprechperson %} · {{ k.ansprechperson }}{% endif %}{% if k.telefon %} · {{ k.telefon }}{% endif %}{% if k.email %} · <a href="mailto:{{ k.email }}">{{ k.email }}</a>{% endif %}</span></span></li>{% else %}<li class="os-empty">Noch niemand mit Interesse. Sobald jemand antwortet und Interesse zeigt, steht er hier.</li>{% endfor %}</ul>
+  </section>
+  {% endif %}
+
   {% if a.p.anforderung %}
   <section class="os-section" id="anforderung">
     <h2 class="os-headline">Was wir bauen</h2>

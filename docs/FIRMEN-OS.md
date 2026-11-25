@@ -1,6 +1,6 @@
 # Ylva Labs Firmen-OS – Bauplan
 
-**Stand:** 25.11.2026 · Stufe 1 bis 11 gebaut (11: Agenten-Schnittstelle), Stufe 12 geplant · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
+**Stand:** 25.11.2026 · Stufe 1 bis 12 gebaut (11: Arbeitsbereiche, 12: Agenten-Schnittstelle) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
 
 Aus dem Ylva Labs Mailer (Akquise, CRM, Mailer) wird das Betriebssystem der Firma. Diese Datei hält fest, **was**
 gebaut werden soll und **nach welchen Prinzipien**, damit alle, die am Code arbeiten (Menschen und KI), dasselbe
@@ -19,8 +19,8 @@ hier ab und trägt Abweichungen ein.
   ist eingerichtet und in Produktion (4.3). Apple/iCloud und ICS-Abo erst danach.
 - WhatsApp kommt später über Unipile, nicht jetzt.
 
-**Stand des Baus:** Stufe 1 bis 11 sind gebaut (Stufe 11: Agenten-Schnittstelle über MCP, siehe
-[AGENTEN.md](AGENTEN.md)). Als Nächstes Stufe 12 (Outreach für Kunden). Was danach kommt (Ausbau, offene Punkte), steht in
+**Stand des Baus:** Stufe 1 bis 12 sind gebaut (12: Agenten-Schnittstelle über MCP, siehe
+[AGENTEN.md](AGENTEN.md)). Was danach kommt (Ausbau, offene Punkte), steht in
 [BAU-UEBERGABE.md](BAU-UEBERGABE.md).
 
 **Womit der Bau anfing: Stufe 1** (Abschnitt 8). Der Kalender ist Stufe 3. Für Stufe 1 und 2 wird nichts von
@@ -773,8 +773,51 @@ Die Reihenfolge 2 und 3 kann getauscht werden, je nachdem, was im Alltag zuerst 
 
 ---
 
-- [x] **Stufe 11 – Agenten-Schnittstelle (MCP)** (gebaut 25.11.2026, vor der Outreach-Stufe gezogen, weil die
-  Grok-Bots schon täglich laufen; Abweichungen unten)
+- [x] **Stufe 11 – Outreach für Kunden (Arbeitsbereiche)** (geplant 25.11.2026 mit Oskar und Finn, gebaut 25.11.2026,
+  Abweichungen unten)
+  Ziel: Auf einem Server machen wir Outreach für uns **und** für mehrere zahlende Kunden gleichzeitig.
+  Entschieden:
+  - **Arbeitsbereich je Kunde** (eine App, eine Datenbank): Oben wählt man den Arbeitsbereich („Ylva Labs“,
+    „Kunde A“ …). Leads, CRM, Postfach, Gehirn, Suchgebiet und Nischen, Vorlagen, Läufe, Sperrliste und KI-Kosten
+    gehören immer zu genau einem Arbeitsbereich und mischen sich nie. Firmen-OS (Personen, Aufgaben, Kalender,
+    Finanzen, Freigaben) bleibt gemeinsam.
+  - **Absender ist das Postfach des Kunden** (z. B. vertrieb@kunde.de): je Arbeitsbereich ein eigenes
+    Akquise-Postfach; Antworten landen dort. Erstkontakt-Schalter (§ 7 UWG) und Sperrliste gelten je Arbeitsbereich.
+  - **Kunden sehen ihre Ergebnisse im Kunden-Bereich** (angeschrieben, Antworten, Termine, interessierte Kontakte);
+    Freigaben bleiben bei uns.
+  - Abrechnung über das Projekt des Kunden (Pauschale, Finanzen aus Stufe 8). Bauplan: docs/BAU-UEBERGABE.md.
+
+  *Umsetzung und Abweichungen:*
+  - Modul `app/arbeitsbereiche.py`, Seiten `app/arbeitsbereiche_views.py` (Einstellungen → Arbeitsbereiche, Rechte-Modul
+    „Einstellungen“). Startwert `ylva`; alle bisherigen Daten gehören dazu.
+  - **Trennung:** aktiver Arbeitsbereich als ContextVar (`arbeitsbereiche.im(key)`, je Anfrage aus der Sitzung, im
+    Arbeiter je Schleife), in SQL als Funktion `ab()`. Spalte `arbeitsbereich` an `leads`, `runs`, `ai_usage`, `signals`,
+    `brain_versions`, `known_firms`; neue Zeilen bekommen sie über temporäre Trigger (`leaddb.AB_TABELLEN`).
+    Wiedervorlagen, Nachrichten und Ergebnisse der Läufe hängen über den Lead bzw. Lauf dran (kein eigenes Feld,
+    anders als im Plan für `tasks` und `run_results`). `get_lead` gibt nur Leads des aktiven Arbeitsbereichs zurück;
+    Firmen-OS-Module (Projekte, Kalender, Finanzen, Kunden-Bereich, Angebote) lesen mit `alle=True`.
+  - Werte der Akquise in `kv` (Sperrliste, Nischen, Zeitplan, Postfach-Stand …) je Arbeitsbereich über `leaddb.AB_KV`
+    mit Präfix `ab:<key>:`. Derselbe Betrieb darf für uns und für einen Kunden ein Lead sein (`source_id` bekommt bei
+    Kunden `@ab:<key>`).
+  - **Einstellungen je Kunde** in `arbeitsbereiche.einstellungen` (`FELDER`); `agent.S()` liest sie zuerst. Felder ohne
+    Rückfall (Firmenname, Unterschrift, Fußzeile, Erstkontakt) gelten nie von Ylva Labs. Das **Akquise-Postfach** ist ein
+    Postfach aus Stufe 9 (`postfach_id`), nicht ein Kennzeichen am Postfach; der Posteingang ruft es nicht selbst ab,
+    sondern der Arbeiter mit der vollen Akquise-Logik (Einordnen, Nachfassen). Absender bei Kunden ist immer der
+    Kunde (keine Personen-Unterschrift, keine eigenen Vorlagen der Personen).
+  - **Gehirn:** Kunden starten mit `app/brain_seed_kunde.md` (Gerüst zum Ausfüllen), nie mit dem von Ylva Labs.
+  - **Zugriff:** Liste der Personen je Arbeitsbereich (leer = alle mit Leads- oder CRM-Recht); wer Personen verwaltet,
+    sieht alle. Links auf Leads anderer Arbeitsbereiche wechseln (GET) oder geben 404.
+  - **Meldungen** sind gemeinsam, bei Kunden mit Namen davor (kein eigenes Feld an `notices`). Freigaben zeigen
+    „Erstkontakt-Entwurf für <Kunde>“ und nur Personen, die dort arbeiten dürfen.
+  - **KPIs im Cockpit** zählen nur Ylva Labs (unsere Firma); KI-Kosten im Cockpit und das Budget einer Person über alle.
+  - **Kunden-Bereich:** Abschnitt „Outreach“ und Zeile im Wochenbericht (Regel `zeige_outreach`). **Rechnung:**
+    Positionen „Outreach“ (Pauschale `PAUSCHALE_EUR`) und optional KI-Kosten des Vormonats (`KI_WEITERBERECHNEN`).
+  - Zusätzlich auf Wunsch von Oskar: **Postfach-Ordner** (Gespräche, Sonstige, Fehler; Fehler-Mails auch im
+    Mailprogramm in den Ordner „Fehler“, Einstellung `FEHLER_ORDNER`; Meldungen nur für Angeschriebene) und die
+    **Karte entfernt** (Kartenseite, Leaflet, Kreisgrenzen, Regionen-Import, Wachstums-Zuschlag; `regions.py` weg,
+    die Spalte `leads.kreis` bleibt ungenutzt stehen).
+  - Offen: Kunden-Arbeitsbereich mit echtem Postfach testen; Abmeldelink in Kunden-Mails, sobald der Anwalt sagt, wie.
+- [x] **Stufe 12 – Agenten-Schnittstelle (MCP)** (gebaut 25.11.2026, parallel zu Stufe 11; Abweichungen unten)
   Ziel (Oskar, 25.11.2026): Das OS ist die Datenbank der Firma und die **einzige Schnittstelle zwischen den
   KI-Agents und den Menschen**. Die Agents (Grok-Bots Ops, Delivery, Outreach, Content, später Claude) bereiten vor
   und schreiben per MCP ins OS; Oskar und Finn arbeiten nur im Frontend (freigeben, entscheiden, Aufgaben
@@ -810,21 +853,10 @@ Die Reihenfolge 2 und 3 kann getauscht werden, je nachdem, was im Alltag zuerst 
     „Später“ bis morgen 7 Uhr, Zahl in Navigation, Mein Tag und „Was zuerst?“, Push bei 🟥. Tagesüberblick „Von den
     Agents“ auf Mein Tag. Einstellungen → Agents mit Einrichten in 5 Schritten (inkl. Prüfung des
     Cloudflare-Durchlasses). Protokoll-Filter „Agents“. Boards für Projekte (nach Phase) und Aufgaben (nach Status).
+  - Arbeitsbereiche (Stufe 11): Agents arbeiten im Arbeitsbereich „Ylva Labs“ (Standard ohne Sitzung); ihre
+    Lead-Abfragen filtern mit `ab()`. Agents für Kunden-Arbeitsbereiche sind noch nicht gebaut (BAU-UEBERGABE).
   - Einzige Einstellung außerhalb der App: eine Bypass-Regel in Cloudflare Access für `/mcp`, `/oauth`,
     `/.well-known` (Grok und Claude kommen sonst nicht am Einmal-Code vorbei). Die App prüft sie selbst.
-- [ ] **Stufe 12 – Outreach für Kunden (Arbeitsbereiche)** (geplant 25.11.2026 mit Oskar und Finn; bis zur
-  Agenten-Schnittstelle als „Stufe 11“ geführt)
-  Ziel: Auf einem Server machen wir Outreach für uns **und** für mehrere zahlende Kunden gleichzeitig.
-  Entschieden:
-  - **Arbeitsbereich je Kunde** (eine App, eine Datenbank): Oben wählt man den Arbeitsbereich („Ylva Labs“,
-    „Kunde A“ …). Leads, CRM, Postfach, Gehirn, Suchgebiet und Nischen, Vorlagen, Läufe, Sperrliste und KI-Kosten
-    gehören immer zu genau einem Arbeitsbereich und mischen sich nie. Firmen-OS (Personen, Aufgaben, Kalender,
-    Finanzen, Freigaben) bleibt gemeinsam.
-  - **Absender ist das Postfach des Kunden** (z. B. vertrieb@kunde.de): je Arbeitsbereich ein eigenes
-    Akquise-Postfach; Antworten landen dort. Erstkontakt-Schalter (§ 7 UWG) und Sperrliste gelten je Arbeitsbereich.
-  - **Kunden sehen ihre Ergebnisse im Kunden-Bereich** (angeschrieben, Antworten, Termine, interessierte Kontakte);
-    Freigaben bleiben bei uns.
-  - Abrechnung über das Projekt des Kunden (Pauschale, Finanzen aus Stufe 8). Bauplan: docs/BAU-UEBERGABE.md.
 
 ## 9. Was das OS ausdrücklich nicht sein soll
 

@@ -27,7 +27,7 @@
       <div class="os-schritt-txt">
         <h2 class="os-headline">Durchlass für die Agents</h2>
         <p class="os-sub">Grok und Claude rufen das OS von ihren Servern aus auf. Vor der App steht Cloudflare Access mit Einmal-Code; daran kommen sie nicht vorbei. Darum einmalig drei Pfade freigeben. Die Anmeldung selbst (wer verbinden darf) schützt weiter das OS.</p>
-        {% if check %}<p class="os-hinweis" style="margin-top:16px">{{ '✓ ' if check.ok else '' }}{{ check.text }} <span class="os-caption">Geprüft {{ check.am|kurzdatum }} {{ check.am[11:16] }}</span></p>{% endif %}
+        {% if check %}<p class="os-hinweis" style="margin-top:16px">{{ '✓ ' if check.ok else '' }}{{ check.text }} <span class="os-caption">Geprüft {{ check.am|kurzdatum }}</span></p>{% endif %}
         <details class="os-akarte-details" {{ 'open' if not durch_ok }}><summary class="os-link">So geht es in Cloudflare (2 Minuten)</summary>
           <ol class="os-anleitung">
             <li>Auf <b>one.dash.cloudflare.com</b> anmelden → <b>Access → Applications</b> → <b>Add an application</b> → <b>Self-hosted</b>.</li>

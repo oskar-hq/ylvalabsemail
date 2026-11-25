@@ -11,7 +11,7 @@
   </header>
   <dl class="os-kv">
     <dt>Status</dt><dd class="{{ 'late' if a.status != 'aktiv' }}">{{ a.status_label }}</dd>
-    <dt>Zuletzt aktiv</dt><dd>{% if a.zuletzt_aktiv %}{{ a.zuletzt_aktiv|kurzdatum }} {{ a.zuletzt_aktiv[11:16] }} · {{ a.zuletzt_was }}{% else %}noch nie{% endif %}</dd>
+    <dt>Zuletzt aktiv</dt><dd>{% if a.zuletzt_aktiv %}{{ a.zuletzt_aktiv|kurzdatum }} · {{ a.zuletzt_was }}{% else %}noch nie{% endif %}</dd>
     <dt>Karten heute</dt><dd>{{ karten_heute }} von {{ a.max_karten_tag or regeln.max_karten_tag }}</dd>
     <dt>Im Protokoll als</dt><dd>{{ a.wer }}</dd>
   </dl>
@@ -28,7 +28,7 @@
     <ul class="os-list">{% for v in verbindungen %}
       <li class="os-row"><span class="os-ico {{ 'off' if not v.aktiv }}">{{ i('link') }}</span>
         <span class="os-txt"><b>{{ v.client or 'Client' }}{% if not v.aktiv %} · getrennt{% endif %}</b>
-          <span>seit {{ v.seit|kurzdatum }}{% if v.zuletzt %} · zuletzt {{ v.zuletzt|kurzdatum }} {{ v.zuletzt[11:16] }}{% endif %}</span></span>
+          <span>seit {{ v.seit|kurzdatum }}{% if v.zuletzt %} · zuletzt {{ v.zuletzt|kurzdatum }}{% endif %}</span></span>
         {% if v.aktiv and verwalten %}<form method="post" action="{{ url_for('agenten.trennen', familie=v.familie) }}" data-os-fetch="reload">
           <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('agenten.detail', key=a.key) }}">
           <button class="os-link danger" data-confirm="Verbindung trennen? Das Token gilt sofort nicht mehr.">Trennen</button></form>{% endif %}</li>
@@ -67,7 +67,7 @@
   <section class="os-section">
     <h2 class="os-headline">Zuletzt getan</h2>
     <ul class="os-list">{% for e in aktivitaet %}<li class="os-row" style="min-height:0;padding:8px 0">
-      <span class="os-txt"><span>{{ e.at|kurzdatum }} {{ e.at[11:16] }} · {{ art_labels.get(e.art, e.art) }}</span><b style="font-weight:500;font-size:17px">{{ e.text }}</b></span></li>{% endfor %}</ul>
+      <span class="os-txt"><span>{{ e.at|kurzdatum }} · {{ art_labels.get(e.art, e.art) }}</span><b style="font-weight:500;font-size:17px">{{ e.text }}</b></span></li>{% endfor %}</ul>
     <a class="os-link" href="{{ url_for('personen.protokoll', wer=a.wer) }}">Alles im Protokoll</a>
   </section>
   {% endif %}

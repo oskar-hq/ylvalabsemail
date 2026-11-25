@@ -183,8 +183,8 @@ def _w_suche(c, person, a):
     q = f"%{wort}%"
     out, quellen = {}, []
     if firma.darf(c, person, "leads") or firma.darf(c, person, "crm"):
-        rows = c.execute("SELECT id, name, city, stage, status FROM leads WHERE name LIKE ? OR city LIKE ? OR "
-                         "contact_name LIKE ? ORDER BY stage IS NULL, id DESC LIMIT 12", (q, q, q)).fetchall()
+        rows = c.execute("SELECT id, name, city, stage, status FROM leads WHERE arbeitsbereich=ab() AND (name LIKE ? OR city LIKE ? OR "
+                         "contact_name LIKE ?) ORDER BY stage IS NULL, id DESC LIMIT 12", (q, q, q)).fetchall()
         out["leads"] = [dict(r) for r in rows]
     if firma.darf(c, person, "kunden"):
         rows = c.execute("SELECT p.id, p.titel, p.status, l.name AS kunde FROM projekte p LEFT JOIN leads l ON "
@@ -207,7 +207,7 @@ def _w_akte(c, person, a):
     from . import aufgaben, firma, kalender, leaddb, mailbox, projekte
     if not (firma.darf(c, person, "leads") or firma.darf(c, person, "crm")):
         raise _Kein("Keine Berechtigung: Leads und CRM.")
-    lead = leaddb.get_lead(c, a.get("lead_id"))
+    lead = leaddb.get_lead(c, a.get("lead_id"), alle=True)
     if not lead:
         raise _Kein("Diesen Lead gibt es nicht.")
     research = lead.get("research") or {}
@@ -1094,7 +1094,7 @@ def versenden(c, wer, aid, data_dir):
     a = angebot_get(c, aid)
     if not a["email"]:
         raise AssistentError("Am Angebot fehlt die Mailadresse.")
-    lead = leaddb.get_lead(c, a["lead_id"])
+    lead = leaddb.get_lead(c, a["lead_id"], alle=True)
     if not lead or lead["status"] == "gesperrt" or posteingang.sperrliste(c, a["email"]):
         raise AssistentError("Dieser Betrieb möchte keine Nachrichten mehr bekommen.")
     if not agent.outreach_configured():

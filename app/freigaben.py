@@ -102,7 +102,7 @@ AKTIONEN = [
     _a("rechnung", "Rechnung ausstellen und verschicken", "C", ["B", "C"],
        "Bekommt erst mit der Freigabe ihre Nummer, dann PDF, Kunden-Bereich und Mail. Monatsrechnungen bereitet das OS "
        "am eingestellten Tag vor (Einstellungen → Finanzen)."),
-    # Stufe 11: was KI-Agents über die Schnittstelle (MCP) tun. Freigeben kann ein Agent nie (hart im Code).
+    # Stufe 12: was KI-Agents über die Schnittstelle (MCP) tun. Freigeben kann ein Agent nie (hart im Code).
     _a("agent_nachricht", "Agent: Mail oder Nachricht an Leads und Kunden", "C",
        hinweis="Hart im Code: nur nach Freigabe einer Person. Das OS verschickt genau den freigegebenen Text.",
        bereich="Agents"),
@@ -697,10 +697,12 @@ def _projekte_offen(c, person=None):
 def _entwuerfe_offen(c, person=None, alle=False):
     from . import firma, kpis
     out = []
-    rows = c.execute("SELECT id, name, category_label, owner, entwurf_von, updated_at FROM leads "
+    from . import arbeitsbereiche
+    rows = c.execute("SELECT id, name, category_label, owner, entwurf_von, updated_at, arbeitsbereich FROM leads "
                      "WHERE status='entwurf' AND interest IS NULL ORDER BY updated_at").fetchall()
     if not rows:
         return out
+    ab_namen = arbeitsbereiche.namen(c)  # Freigaben sind gemeinsam: Entwürfe aller Arbeitsbereiche, mit Namen
     aktive = [p["key"] for p in firma.aktive_personen(c)]
     verwalten = {p for p in aktive if firma.darf(c, p, "leads", firma.VERWALTEN)}
     freigeben = [p for p in aktive if firma.darf(c, p, "leads", firma.FREIGEBEN)]
@@ -715,12 +717,15 @@ def _entwuerfe_offen(c, person=None, alle=False):
             fuer = [l["owner"]]
         else:
             fuer = freigeben
+        if l["arbeitsbereich"] != arbeitsbereiche.YLVA:
+            fuer = [p for p in fuer if arbeitsbereiche.darf(c, p, l["arbeitsbereich"])]
         if person and person not in fuer:
             continue
         if not person and not alle:
             continue
+        kunde = ab_namen.get(l["arbeitsbereich"]) if l["arbeitsbereich"] != arbeitsbereiche.YLVA else None
         out.append({"art": "erstkontakt", "oid": l["id"], "pruefer": person or (fuer[0] if fuer else None),
-                    "titel": l["name"], "eyebrow": "Erstkontakt-Entwurf",
+                    "titel": l["name"], "eyebrow": f"Erstkontakt-Entwurf für {kunde}" if kunde else "Erstkontakt-Entwurf",
                     "text": " · ".join(x for x in (l["category_label"],
                                                    f"von {firma.name_von(c, l['entwurf_von'])}" if l["entwurf_von"]
                                                    else "Vorlage oder KI") if x),
