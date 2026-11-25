@@ -1,9 +1,9 @@
-# Übergabe für den Weiterbau (nach Stufe 10)
+# Übergabe für den Weiterbau (Stufe 11: Outreach für Kunden)
 
-**Stand:** 01.11.2026 · alle zehn Baustufen gebaut und gemergt · weiter mit Ausbau und Praxistest
+**Stand:** 25.11.2026 · Stufe 1 bis 10 gebaut und gemergt · nächste: **Stufe 11 (Outreach für Kunden)**, Plan abgestimmt
 
 Diese Datei ist für die nächste Sitzung (Mensch oder KI), die am Firmen-OS weiterbaut. **Wer neu einsteigt:**
-erst `CLAUDE.md`, dann diese Datei ganz, dann Abschnitt 3 mit Oskar abstimmen. Sie fasst zusammen, was
+erst `CLAUDE.md`, dann diese Datei ganz, dann Abschnitt 3 (Stufe 11, schon mit Oskar abgestimmt) bauen. Sie fasst zusammen, was
 steht, wie hier gearbeitet wird und was als Nächstes sinnvoll ist. Ausführlich steht alles in
 [FIRMEN-OS.md](FIRMEN-OS.md) (Bauplan, je Stufe „Umsetzung und Abweichungen“).
 
@@ -62,33 +62,57 @@ Je Modul gibt es `*_views.py` mit den Seiten. Gemeinsame Muster, die neue Module
 - **Design:** Bausteine in `static/os.css`, `static/os.js`, `templates/_os.html` (Listenzeilen, Sheets mit
   `data-sheet`, schwebende Knöpfe `os-float`, Formulare mit `data-os-fetch="reload"`, Toasts per `flash`).
 
-## 3. Nach Stufe 10: was als Nächstes sinnvoll ist
+## 3. Stufe 11: Outreach für Kunden (Arbeitsbereiche)
 
-Alle Baustufen aus FIRMEN-OS.md Abschnitt 8 sind gebaut. Vorschläge für die nächsten Schritte (mit Oskar abstimmen,
-jeweils die erste Option ist die Empfehlung):
+**Auftrag (Oskar, 25.11.2026):** „Umbauen, sodass wir auf einem Server sowohl für uns als auch für mehrere Kunden
+Outreach machen können“; die Kunden bezahlen uns dafür. Mit Oskar abgestimmt (siehe auch FIRMEN-OS.md, Stufe 11):
 
-1. **Praxistest vor Ausbau:** Zwei Wochen echter Alltag mit dem OS, Fehler und Wünsche als Aufgaben im Bereich
-   Technik sammeln, dann gezielt nachbessern. Besonders noch nie echt getestet: Google-Kalender, Mailversand der
-   Angebote und Rechnungen, weitere Postfächer, Assistent mit echtem Schlüssel (in den Tests nachgebaut).
-2. **Assistent ausbauen:** weitere Werkzeuge (z. B. Entscheidungs-Log durchsuchen, Kosten je Projekt), „Was zuerst?“
-   optional jeden Morgen automatisch, Fragen per Push-Meldung beantworten lassen.
-3. **Unipile** für WhatsApp und LinkedIn verbinden (vorbereitet in Stufe 9), sobald Budget da ist.
-4. **Restliche alte Seiten** (CRM-Board, Leads, Akte, Mailer, Einstellungen) nach und nach auf `os.css` umstellen;
-   das Postfach im CRM ist schon umgestellt. Die alten Seiten sehen in hell und dunkel ordentlich aus, eilig ist das
-   nicht.
+| Frage | Entscheidung |
+| --- | --- |
+| Trennung | **Arbeitsbereich je Kunde**, eine Datenbank, Spalte `arbeitsbereich` (nicht je Kunde eine eigene Datenbank) |
+| Absender | **Postfach des Kunden** je Arbeitsbereich; Antworten landen dort |
+| Kundensicht | **Ja, im Kunden-Bereich**: Zahlen und interessierte Kontakte; Freigaben bleiben bei uns |
 
-**Vor dem ersten echten Arbeitstag:** Einstellungen → Startklar abarbeiten (neue Prüfpunkte als `_punkt(...)` in
-`app/startklar.py` ergänzen), dann Systemcheck.
+**Datenmodell (Vorschlag):**
 
-**Bausteine des Assistenten** (für Erweiterungen):
+- Neue Tabelle `arbeitsbereiche(key, name, projekt_id, aktiv, erstellt_am)`. Startwert `ylva` (Ylva Labs selbst),
+  per DATA_MIGRATIONS anlegen; alle bestehenden Daten gehören zu `ylva`.
+- Spalte `arbeitsbereich TEXT NOT NULL DEFAULT 'ylva'` (über `leaddb.MIGRATIONS`) an: `leads`, `runs`, `ai_usage`
+  (Lead-Läufe), `tasks` (CRM-Wiedervorlagen), `signals`, `brain_versions`, `known_firms`, `run_results`, `notices`
+  (nur Lead-Meldungen), `postfaecher`. `messages`, `lead_events` hängen über `lead_id` dran (kein eigenes Feld nötig).
+- Bisher globale Werte je Arbeitsbereich: Gehirn (`brain_versions`), Nischen und Suchgebiet (heute `config_store`:
+  `LEADS_REGION`, `LEADS_CENTER`, `LEADS_RADIUS_KM`, `LEADS_RULE_MIN` …), `blocklist`, `inbox_state`, `schedule`
+  (automatische Suche), Vorlagen. Muster: kv-Schlüssel mit Präfix `ab:<key>:` und Fallback auf den globalen Wert.
+- Akquise-Postfach je Arbeitsbereich: für `ylva` weiter `OUTREACH_USER`/`OUTREACH_PASSWORD`; für Kunden ein
+  Eintrag in `postfaecher` mit `arbeitsbereich` und Kennzeichen „Akquise“. `OUTREACH_EMAIL` je Arbeitsbereich
+  (Standard aus, bis der Kunde bestätigt, dass er Erstkontakt per Mail will).
 
-- Neues Werkzeug: Funktion `_w_<name>(c, person, eingabe)` in `assistent.py` (Recht mit `_darf` prüfen, bei Fehlern
-  `_Kein` werfen, Rückgabe `(daten, quellen)`), Schema in `WERKZEUGE` (strikt, `additionalProperties: false`) und
-  Eintrag in `AUSFUEHREN`.
-- KI-Aufruf: `ai.anfrage(stage, model, effort, system, messages, tools=None, schema=None)` in
-  `with agent.acting_as(c, person):`; `ai.text_von(response)` für den Text. Tests mit `FakeClaude` in
-  `tests/test_os.py` (nie gegen die echte API).
-- Alles, was an Kunden geht, bleibt Entwurf oder läuft über `freigaben` (Art `angebot` als Muster).
+**Umsetzung in Schritten (je Schritt Tests grün, dann weiter):**
+
+1. **Arbeitsbereich wählen:** Auswahl in der Navigation (nur sichtbar, wenn es mehr als einen gibt), gespeichert in
+   der Sitzung; `g.arbeitsbereich`. Rechte: neues Modul oder Feld „Arbeitsbereiche“ je Person (wer für welchen
+   Kunden arbeitet), Verwalten in Einstellungen → Arbeitsbereiche.
+2. **Leads und CRM filtern:** Jede Abfrage auf `leads` (rund 80 Stellen, `grep -n "FROM leads\|UPDATE leads\|INTO leads" app/*.py`)
+   bekommt den Arbeitsbereich. Am sichersten über Hilfsfunktionen in `leaddb` (z. B. `leads_where(c, ab)`) statt
+   überall von Hand; neue Leads bekommen den Arbeitsbereich beim Anlegen. Test: Lead aus A ist in B nie sichtbar
+   (Liste, Akte, Suche, Palette, CRM, Postfach, Export, KPIs).
+3. **Hintergrund-Arbeiter:** Läufe, automatische Suche, Postfach-Abruf, Nachfassen und Lernen je Arbeitsbereich
+   (Schleife über aktive Arbeitsbereiche in `agent.tick`), Budget je Arbeitsbereich (KI-Kosten an den Kunden
+   weiterberechenbar).
+4. **Gehirn, Vorlagen, Suchgebiet, Nischen, Sperrliste je Arbeitsbereich** in den Einstellungen; Absender-Postfach
+   des Kunden; Unterschrift im Namen des Kunden.
+5. **Kunden-Bereich:** neuer Abschnitt „Outreach“ für Kunden mit Arbeitsbereich: angeschrieben, Antworten,
+   Interesse, Termine je Woche und die interessierten Kontakte (ohne interne Notizen).
+6. **Abrechnung:** Arbeitsbereich mit Projekt verknüpfen; Monatsrechnung um eine Position „Outreach“ und optional
+   KI-Kosten ergänzen.
+7. Doku: FIRMEN-OS.md Stufe 11 abhaken mit „Umsetzung und Abweichungen“, README, UEBERGABE („Nach dem Update“).
+
+**Achtung:** Rechtlich ist der Kunde der Absender. Vor dem ersten Kunden mit dem Anwalt klären: AV-Vertrag
+(wir verarbeiten Kontaktdaten im Auftrag), Erstkontakt per Mail im Namen des Kunden (§ 7 UWG), Impressum und
+Abmeldelink in den Mails des Kunden.
+
+**Danach** (aus der Übergabe nach Stufe 10, weiter gültig): Praxistest im Alltag, Assistent ausbauen, Unipile,
+restliche alte Seiten auf `os.css`.
 
 ## 4. Für einen neuen Agenten: Umgebung und Fallstricke
 
