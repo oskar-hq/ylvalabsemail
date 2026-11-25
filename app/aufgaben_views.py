@@ -1,7 +1,7 @@
 """Seiten „Mein Tag“ und „Aufgaben“ (mit Anfragen an andere Bereiche) und Kommentare mit @-Erwähnung."""
 import json
 import re
-from datetime import datetime, timedelta
+from datetime import date, datetime, timedelta
 
 from markupsafe import Markup, escape
 from flask import Blueprint, abort, flash, g, jsonify, redirect, render_template, request, url_for
@@ -87,6 +87,11 @@ def mein_tag():
     woche = kpis.woche_von()
     ziele = kpis.ziele_der_woche(c, woche, key) if darf("cockpit") else []
     offene_freigaben = freigaben.offen(c, key)
+    from . import agenten
+    agent_gruppen, _ = agenten.karten(c, key)
+    agent_infos = agenten.infos_fuer(c, key)
+    agenten_einrichten = (firma.darf(c, key, "personen", firma.VERWALTEN)
+                          and not agenten.einrichtung(c)["fertig"])
     meine_leads = branchentest.recherche_kpis(c, key) if darf("leads") else None
     person = firma.person(c, key)
     wochentag = ["Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag", "Sonntag"]
@@ -103,6 +108,8 @@ def mein_tag():
                            was_zuerst_ki=assistent.letzte_prioritaeten(c, key) if darf("assistent") else None,
                            was_zuerst_knopf=darf("assistent") and assistent.regeln(c)["prioritaeten_ki"],
                            startklar_offen=_startklar_offen(c, key),
+                           agent_gruppen=agent_gruppen, agent_infos=agent_infos,
+                           agenten_einrichten=agenten_einrichten,
                            **_form_kontext())
     aufgaben.erwaehnungen_gesehen(c, key)  # einmal gezeigt, danach nicht mehr „neu“
     return html
@@ -123,9 +130,20 @@ def liste():
     if bereich and not firma.bereich(c, bereich):
         bereich = None
     erledigt = request.args.get("erledigt") == "1"
-    rows = aufgaben.liste(c, me(), ansicht, bereich=bereich, erledigt=erledigt)
+    board = request.args.get("board") == "1"
+    rows = aufgaben.liste(c, me(), ansicht, bereich=bereich, erledigt=erledigt and not board)
+    spalten = []
+    if board:  # Spalten je Status: angefragt, überfällig, heute, diese Woche, später, zuletzt erledigt
+        h, w = aufgaben.heute(), (date.today() + timedelta(days=7)).isoformat()
+        erl = aufgaben.liste(c, me(), ansicht, bereich=bereich, erledigt=True)[:20]
+        spalten = [("Angefragt", [a for a in rows if a["status"] == "angefragt"]),
+                   ("Überfällig", [a for a in rows if a["status"] == "offen" and a["faellig"] < h]),
+                   ("Heute", [a for a in rows if a["status"] == "offen" and a["faellig"] == h]),
+                   ("Diese Woche", [a for a in rows if a["status"] == "offen" and h < a["faellig"] <= w]),
+                   ("Später", [a for a in rows if a["status"] == "offen" and a["faellig"] > w]),
+                   ("Erledigt", erl)]
     return render_template("aufgaben.html", account=g.account, rows=rows, ansicht=ansicht, ansichten=ANSICHTEN,
-                           bereich=bereich, erledigt=erledigt, **_form_kontext())
+                           bereich=bereich, erledigt=erledigt, board=board, spalten=spalten, **_form_kontext())
 
 
 @bp.post("/aufgaben/neu")

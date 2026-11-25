@@ -11,12 +11,22 @@
     {% for key, label in ansichten %}<a href="{{ url_for('aufgaben.liste', ansicht=key, erledigt='1' if erledigt else None) }}" class="{{ 'on' if ansicht == key and not bereich }}" {{ 'aria-current=page' if ansicht == key and not bereich }}>{{ label }}</a>{% endfor %}
   </nav>
   <div class="os-chips" aria-label="Filter">
-    <a href="{{ url_for('aufgaben.liste', ansicht=ansicht) }}" class="{{ 'on' if not erledigt and not bereich }}">Offen</a>
-    <a href="{{ url_for('aufgaben.liste', ansicht=ansicht, erledigt='1') }}" class="{{ 'on' if erledigt and not bereich }}">Erledigt (30 Tage)</a>
+    <a href="{{ url_for('aufgaben.liste', ansicht=ansicht) }}" class="{{ 'on' if not erledigt and not bereich and not board }}">Offen</a>
+    <a href="{{ url_for('aufgaben.liste', ansicht=ansicht, erledigt='1') }}" class="{{ 'on' if erledigt and not bereich and not board }}">Erledigt (30 Tage)</a>
+    <a href="{{ url_for('aufgaben.liste', ansicht=ansicht, board='1') }}" class="{{ 'on' if board }}">Board</a>
     {% for b in bereiche %}<a href="{{ url_for('aufgaben.liste', ansicht='alle', bereich=b.key, erledigt='1' if erledigt else None) }}" class="{{ 'on' if bereich == b.key }}">{{ b.name }}</a>{% endfor %}
   </div>
 
-  {% if rows %}
+  {% if board %}
+  <div class="os-board" aria-label="Aufgaben nach Status">{% for label, liste in spalten %}
+    <section class="os-spalte"><h2 class="os-spalte-kopf {{ 'late' if label == 'Überfällig' and liste }}">{{ label }} <span>{{ liste|length }}</span></h2>
+      {% for a in liste %}<a class="os-bkarte" href="{{ url_for('aufgaben.detail', aid=a.id) }}"><b>{{ a.titel }}</b>
+        <span>{{ a.tag }}{% if ansicht != 'meine' %} · {{ a.person_name }}{% endif %}{% if a.objekt_name %} · {{ a.objekt_name }}{% endif %}{% if a.erstellt_von.startswith('agent:') %} · von {{ a.erstellt_von_name }}{% endif %}</span>
+        {% if a.prio == 1 and a.status in ('offen', 'angefragt') %}<span class="os-tag red">Hoch</span>{% endif %}</a>
+      {% else %}<p class="os-caption">–</p>{% endfor %}
+    </section>{% endfor %}
+  </div>
+  {% elif rows %}
   <ul class="os-list anim">{% for a in rows %}{{ aufgabe_zeile(a, me, loop.index0, ansicht != 'meine', hier) }}{% endfor %}</ul>
   {% else %}
   <p class="os-empty">{% if erledigt %}In den letzten 30 Tagen ist hier nichts erledigt worden.

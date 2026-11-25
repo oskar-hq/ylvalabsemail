@@ -1,12 +1,13 @@
 {% extends "base.html" %}
 {% from "_os.html" import i, toasts, avatar %}
+{% from "_agent_karte.html" import karte, buendel %}
 {% block title %}Freigaben · Ylva Labs{% endblock %}
 {% block content %}
 {% set hier = url_for('freigaben.zentrale', alle='1' if alle else None) %}
 <main class="os-page">
   {{ toasts() }}
   <header class="os-head">
-    <span class="os-eyebrow">Freigabe-Zentrale</span>
+    <span class="os-eyebrow">{{ "Alle Freigaben" if alle else "Meine Freigaben" }}</span>
     <h1 class="os-title-l">{% if n %}{{ n }} {{ 'wartet' if n == 1 else 'warten' }} auf {{ 'Freigabe' if alle else 'dich' }}{% else %}Nichts offen{% endif %}</h1>
     <p class="os-sub os-lead">Alles, was ohne Freigabe nicht passiert, an einer Stelle. Ablehnen geht nur mit Grund, damit das Team daraus lernt.</p>
   </header>
@@ -15,7 +16,17 @@
     <a href="{{ url_for('freigaben.zentrale', alle='1') }}" class="{{ 'on' if alle }}" aria-current="{{ 'page' if alle else 'false' }}">Alle offenen</a>
   </div>{% endif %}
 
-  {% if not gruppen %}<p class="os-empty" style="margin-top:24px">Hier ist gerade nichts. Neue Freigaben kommen auch in die Glocke.</p>{% endif %}
+  {% if agent_karten %}
+  <section class="os-section" id="agents" style="margin-top:24px">
+    <h2 class="os-headline">Von den Agents</h2>
+    <p class="os-sub">Dringendes zuerst. Ein Tipp entscheidet, Details klappen auf.{% if agent_spaeter %} {{ agent_spaeter }} auf später gelegt.{% endif %}
+      {% if einzeln %}<a class="os-link" href="{{ url_for('freigaben.zentrale', alle='1' if alle else None) }}">Gebündelt zeigen</a>{% endif %}</p>
+    <div class="os-akarten">{% for g in agent_karten %}
+      {% if g.buendel and g.eintraege|length > 1 %}{{ buendel(g, hier, alle) }}{% else %}{% for k in g.eintraege %}{{ karte(k, hier, alle) }}{% endfor %}{% endif %}
+    {% endfor %}</div>
+  </section>
+  {% elif agent_spaeter %}<p class="os-caption" style="margin-top:24px">{{ agent_spaeter }} Freigabe{{ 'n' if agent_spaeter != 1 }} von Agents auf später gelegt, kommen morgen früh wieder.</p>{% endif %}
+  {% if not gruppen and not agent_karten %}<p class="os-empty" style="margin-top:24px">Hier ist gerade nichts. Neue Freigaben kommen auch in die Glocke.</p>{% endif %}
   {% for label, liste in gruppen.items() %}
   <section class="os-section" {{ 'style=margin-top:24px' if loop.first }}>
     <h2 class="os-headline">{{ label }}</h2>

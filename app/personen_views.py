@@ -265,7 +265,10 @@ def protokoll():
     vor = request.args.get("vor", type=int)
     rows = firma.protokoll(c, art=art, wer=wer, limit=100, vor=vor)
     namen = {p["key"]: p["name"] for p in firma.personen(c, mit_archiv=True)}
+    from . import agenten
+    agents = agenten.liste(c)
+    namen.update({a["wer"]: f"{a['name']} (Agent)" for a in agents})
     arten = [r[0] for r in c.execute("SELECT DISTINCT art FROM ereignisse ORDER BY art")]
-    return render_template("protokoll.html", rows=rows, namen=namen, art=art, wer=wer, arten=arten,
+    return render_template("protokoll.html", rows=rows, namen=namen, art=art, wer=wer, arten=arten, agents=agents,
                            art_labels=firma.ART_LABELS, personen=firma.personen(c, mit_archiv=True),
                            weiter=rows[-1]["id"] if len(rows) == 100 else None, **_basis())

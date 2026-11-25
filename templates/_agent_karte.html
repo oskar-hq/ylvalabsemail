@@ -1,0 +1,101 @@
+{# Freigabe-Karte eines Agents im Kurzformat: in 5 Sekunden lesbar, ein Tipp zum Entscheiden, Details erst auf Tippen. #}
+{% from "_os.html" import i %}
+{% macro frist_text(f) -%}
+{%- if f %}{% set d = f[8:10] ~ '.' ~ f[5:7] ~ '.' %}bis {{ d }}{% if f[11:16] and f[11:16] != '18:00' %} {{ f[11:16] }}{% endif %}{% endif -%}
+{%- endmacro %}
+
+{% macro karte(k, hier, alle=False) -%}
+<article class="os-akarte {{ k.dringlichkeit }}" id="a{{ k.id }}">
+  <div class="os-akarte-kopf">
+    <span class="os-akarte-sym" aria-label="{{ {'dringend': 'Dringend', 'normal': 'Normal', 'niedrig': 'Kann warten'}[k.dringlichkeit] }}">{{ k.symbol }}</span>
+    <span class="os-caption">{{ k.agent }}{% if k.bezug %} · <a href="{{ k.bezug.url }}">{{ k.bezug.name }}</a>{% endif %}{% if alle %} · bei {{ k.pruefer_name }}{% endif %}</span>
+    {% if k.frist %}<span class="os-akarte-frist {{ 'um' if k.frist_um }}">{{ 'Frist vorbei' if k.frist_um else frist_text(k.frist) }}</span>{% endif %}
+  </div>
+  <h3 class="os-akarte-titel">{{ k.titel }}</h3>
+  <p class="os-akarte-was">{{ k.was }}</p>
+
+  {% if k.typ == 'entscheidung' %}
+  <div class="os-akarte-optionen">{% for o in k.optionen %}
+    <form method="post" action="{{ url_for('agenten.entscheiden', fid=k.id) }}" data-os-fetch="reload">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}">
+      <input type="hidden" name="aktion" value="option"><input type="hidden" name="option" value="{{ o.key }}">
+      <button class="os-akarte-option {{ 'empfohlen' if o.key == k.empfehlung }}"><b>{{ o.key }}</b><span>{{ o.text }}</span>{% if o.key == k.empfehlung %}<em>Empfohlen</em>{% endif %}</button>
+    </form>{% endfor %}
+  </div>
+  {% else %}
+  {% if k.empfehlung %}<p class="os-akarte-empf"><em>Empfehlung</em> {{ k.empfehlung }}</p>{% endif %}
+  <div class="os-btns os-akarte-knoepfe">
+    <form method="post" action="{{ url_for('agenten.entscheiden', fid=k.id) }}" data-os-fetch="reload">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}"><input type="hidden" name="aktion" value="freigeben">
+      <button class="os-btn small ink">{% if k.art == 'mail' %}Freigeben und senden{% else %}Freigeben{% endif %}</button></form>
+    {% if k.entwurf %}<button type="button" class="os-btn small quiet" data-aufklappen="d{{ k.id }}">Ändern</button>{% endif %}
+  {% endif %}
+  {% if k.typ == 'entscheidung' %}<div class="os-btns os-akarte-knoepfe">{% endif %}
+    <form method="post" action="{{ url_for('agenten.entscheiden', fid=k.id) }}" data-os-fetch="reload">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}"><input type="hidden" name="aktion" value="ablehnen">
+      <button class="os-btn small quiet">Ablehnen</button></form>
+    <form method="post" action="{{ url_for('agenten.entscheiden', fid=k.id) }}" data-os-fetch="reload">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}"><input type="hidden" name="aktion" value="spaeter">
+      <button class="os-link">Später</button></form>
+  </div>
+
+  <details class="os-akarte-details" id="d{{ k.id }}">
+    <summary class="os-link">Details{% if k.entwurf %} und Entwurf{% endif %}</summary>
+    {% if k.details %}<p class="os-akarte-text">{{ k.details }}</p>{% endif %}
+    {% if k.entwurf %}
+    <form method="post" action="{{ url_for('agenten.entscheiden', fid=k.id) }}" data-os-fetch="reload" class="os-akarte-entwurf">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}"><input type="hidden" name="aktion" value="freigeben">
+      <span class="os-eyebrow">{{ k.entwurf.art_label }}{% if k.entwurf.kanal %} · {{ k.entwurf.kanal }}{% endif %}{% if k.entwurf.antwort %} · Antwort im Verlauf{% endif %}</span>
+      {% if k.entwurf.art == 'mail' %}<label class="os-field"><span>An</span><input name="an" value="{{ k.entwurf.an or '' }}" maxlength="300"></label>
+      <label class="os-field"><span>Betreff</span><input name="betreff" value="{{ k.entwurf.betreff or '' }}" maxlength="200"></label>{% endif %}
+      <label class="os-field"><span>Text</span><textarea name="text" rows="9">{{ k.entwurf.text }}</textarea></label>
+      <button class="os-btn small ink">{% if k.art == 'mail' %}So freigeben und senden{% else %}So freigeben{% endif %}</button>
+      <p class="os-caption">Freigegeben wird genau diese Fassung. Der Agent sieht deine Änderung und lernt daraus.</p>
+    </form>
+    {% endif %}
+    {% if k.aktion %}<p class="os-caption">Danach setzt das OS selbst: {% if k.aktion.typ == 'lead_stufe' %}Stufe „{{ k.aktion.ziel }}“{% else %}Projekt auf „{{ k.aktion.ziel }}“{% endif %}.</p>{% endif %}
+    <dl class="os-kv os-akarte-kv">
+      <dt>Art</dt><dd>{{ k.art_label }}</dd>
+      <dt>Recht</dt><dd>{{ k.recht_titel }}</dd>
+      {% if k.betrag is not none %}<dt>Betrag</dt><dd>{{ '%.2f'|format(k.betrag)|replace('.', ',') }} €</dd>{% endif %}
+      {% if k.vorschlag_person %}<dt>Agent schlug vor</dt><dd>{{ k.vorschlag_person }}</dd>{% endif %}
+      <dt>Angefragt</dt><dd>{{ k.seit|kurzdatum }}</dd>
+    </dl>
+    <form method="post" action="{{ url_for('agenten.entscheiden', fid=k.id) }}" data-os-fetch="reload" style="margin-top:16px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}"><input type="hidden" name="aktion" value="ablehnen">
+      <label class="os-field"><span>Mit Grund ablehnen (der Agent lernt daraus)</span><input name="grund" maxlength="500" placeholder="Warum nicht?"></label>
+      <button class="os-btn small quiet">Ablehnen</button>
+    </form>
+  </details>
+</article>
+{%- endmacro %}
+
+{% macro buendel(g, hier, alle=False) -%}
+{% set k0 = g.erste %}
+<article class="os-akarte {{ ('dringend', 'normal', 'niedrig')[g.rang] }}" id="b{{ k0.id }}">
+  <div class="os-akarte-kopf">
+    <span class="os-akarte-sym">{{ g.symbol }}</span>
+    <span class="os-caption">{{ k0.agent }} · {{ k0.art_label }}{% if alle %} · bei {{ k0.pruefer_name }}{% endif %}</span>
+    {% if g.frist %}<span class="os-akarte-frist">{{ frist_text(g.frist) }}</span>{% endif %}
+  </div>
+  <h3 class="os-akarte-titel">{{ g.eintraege|length }} × {{ g.buendel }}</h3>
+  <p class="os-akarte-was">Alle ausgewählt. Häkchen weg = bleibt offen.</p>
+  <form method="post" action="{{ url_for('agenten.buendel') }}" data-os-fetch="reload" id="bf{{ k0.id }}">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ hier }}">
+    <ul class="os-list os-akarte-liste">{% for k in g.eintraege %}
+      <li><label class="os-akarte-zeile"><input type="checkbox" name="ids" value="{{ k.id }}" checked>
+        <span class="os-txt"><b>{{ k.titel }}</b><span>{{ k.was }}</span></span></label>
+        {% if k.entwurf %}<details class="os-akarte-details"><summary class="os-link">Entwurf</summary>
+          {% if k.entwurf.betreff %}<p class="os-caption">{{ k.entwurf.an }} · {{ k.entwurf.betreff }}</p>{% endif %}
+          <p class="os-akarte-text">{{ k.entwurf.text }}</p>
+          <a class="os-link" href="{{ url_for('freigaben.zentrale', einzeln='1', alle='1' if alle else None) }}#a{{ k.id }}">Einzeln ändern</a></details>{% endif %}
+      </li>{% endfor %}
+    </ul>
+    <div class="os-btns os-akarte-knoepfe">
+      <button class="os-btn small ink" name="aktion" value="freigeben">Ausgewählte freigeben</button>
+      <button class="os-btn small quiet" name="aktion" value="ablehnen">Ablehnen</button>
+      <button class="os-link" name="aktion" value="spaeter">Später</button>
+    </div>
+  </form>
+</article>
+{%- endmacro %}

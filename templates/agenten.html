@@ -1,0 +1,86 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts, avatar %}
+{% block title %}Agents · Einstellungen{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Einstellungen</span>
+    <h1 class="os-title-l">Agents</h1>
+    <p class="os-sub os-lead">KI-Agents wie die Grok-Bots arbeiten über die Schnittstelle (MCP) im OS. Sie bereiten vor, ihr entscheidet. Freigeben kann ein Agent nie.</p>
+  </header>
+
+  <ul class="os-list">
+    <li><a class="os-row" href="{{ url_for('agenten.einrichten') }}"><span class="os-ico {{ 'red' if not einrichtung.fertig }}">{{ i('check') }}</span>
+      <span class="os-txt"><b>Einrichten</b><span>{% if einrichtung.fertig %}Eingerichtet · {{ einrichtung.n_verbunden }} von {{ agents|length }} verbunden{% else %}Schritt für Schritt: Durchlass, Verbinden in Grok und Claude, Umzugs-Prompts{% endif %}</span></span>
+      <span class="os-chev">{{ i('chev') }}</span></a></li>
+  </ul>
+
+  <section class="os-section">
+    <h2 class="os-headline">Verbundene Agents</h2>
+    <ul class="os-list anim">{% for a in agents %}
+      <li style="--i:{{ loop.index0 }}"><a class="os-row" href="{{ url_for('agenten.detail', key=a.key) }}">{{ avatar(a.name, 'red' if a.status != 'aktiv' else '') }}
+        <span class="os-txt"><b>{{ a.name }}{% if a.status != 'aktiv' %} · gesperrt{% endif %}</b>
+          <span>{% set v = verbindungen.get(a.key, [])|selectattr('aktiv')|list %}{% if v %}Verbunden{% if a.zuletzt_aktiv %} · zuletzt {{ a.zuletzt_aktiv|kurzdatum }}{% endif %}{% else %}Nicht verbunden{% endif %} · {{ karten[a.key] }} Karte{{ 'n' if karten[a.key] != 1 }} heute</span></span>
+        <span class="os-chev">{{ i('chev') }}</span></a></li>
+    {% else %}<li class="os-empty">Noch keine Agents.</li>{% endfor %}
+    </ul>
+    {% if verwalten %}<button type="button" class="os-btn small quiet" style="margin-top:16px" data-sheet="sheet-agent-neu">Agent anlegen</button>{% endif %}
+  </section>
+
+  <section class="os-section">
+    <h2 class="os-headline">Regeln</h2>
+    <p class="os-sub">Gelten für alle Agents. Limits lassen sich je Agent abweichend setzen.</p>
+    <form method="post" action="{{ url_for('agenten.regeln_speichern') }}" data-os-fetch="reload" style="margin-top:24px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <div class="os-grid2">
+        {% for k in ['max_karten_tag', 'max_schreiben_tag', 'access_h', 'refresh_tage'] %}
+        <label class="os-field"><span>{{ labels[k] }}</span><input type="number" name="{{ k }}" value="{{ regeln[k] }}" min="1" {{ 'disabled' if not verwalten }}></label>{% endfor %}
+      </div>
+      {% for k in ['buendeln', 'push_dringend', 'localhost'] %}
+      <label class="os-field" style="display:flex;align-items:center;justify-content:space-between;gap:16px"><span style="margin:0">{{ labels[k] }}</span>
+        <span class="os-toggle"><input type="checkbox" name="{{ k }}" value="1" {{ 'checked' if regeln[k] }} {{ 'disabled' if not verwalten }}><span></span></span></label>{% endfor %}
+      <label class="os-field"><span>Erlaubte Rücksprung-Adressen (eine je Zeile)</span>
+        <textarea name="redirects" rows="5" {{ 'disabled' if not verwalten }}>{{ regeln.redirects|join('\n') }}</textarea>
+        <span class="os-caption">Nur dorthin darf die Anmeldung zurückspringen. Grok braucht beide Fassungen (mit und ohne Schrägstrich), Claude seine eigene.</span></label>
+
+      <h3 class="os-headline" style="margin-top:32px">Wer entscheidet was</h3>
+      <p class="os-sub">Je Art der Freigabe das Entscheidungsrecht. Daraus und aus dem Bezug (Lead, Projekt, Bereich des Agents) bestimmt das OS die Person. Freigeben kann nur, wer im Modul „Freigeben“ hat.</p>
+      <table class="os-matrix" style="margin-top:16px"><tbody>
+        {% for key, art in arten.items() %}<tr><td>{{ art.label }}<span class="os-caption" style="display:block">{{ art.hinweis }}</span></td>
+          <td><select class="os-input" name="art_{{ key }}" aria-label="{{ art.label }}" {{ 'disabled' if not verwalten }}>
+            {% for r in rechte %}<option value="{{ r.key }}" {{ 'selected' if regeln.arten[key] == r.key }}>{{ r.titel }}</option>{% endfor %}</select></td></tr>{% endfor %}
+      </tbody></table>
+      {% if verwalten %}<button class="os-btn small ink" style="margin-top:24px">Speichern</button>{% endif %}
+    </form>
+  </section>
+
+  <ul class="os-list" style="margin-top:40px">
+    <li><a class="os-row" href="{{ url_for('freigaben.einstellungen') }}"><span class="os-ico">{{ i('schloss') }}</span>
+      <span class="os-txt"><b>Freigabe-Stufen für Agents</b><span>A automatisch, C mit Freigabe: Lead-Stufe, Aufgaben, Nachrichten</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>
+    <li><a class="os-row" href="{{ url_for('personen.protokoll', wer='agent:*') }}"><span class="os-ico">{{ i('protokoll') }}</span>
+      <span class="os-txt"><b>Was die Agents getan haben</b><span>Firmen-Protokoll, nur Agents</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>
+  </ul>
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('settings.settings') }}" aria-label="Zurück zu den Einstellungen">{{ i('back') }}</a>
+</div>
+{% if verwalten %}
+<dialog class="os-sheet" id="sheet-agent-neu" aria-label="Agent anlegen">
+  <div class="os-sheet-grab" aria-hidden="true"></div>
+  <div class="os-sheet-body">
+    <form method="post" action="{{ url_for('agenten.neu') }}" data-os-fetch="ziel">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <h2 class="os-title-m">Wie heißt der Agent?</h2>
+      <label class="os-field" style="margin-top:24px"><span>Name</span><input name="name" maxlength="40" required placeholder="z. B. Claude Assistent"></label>
+      <label class="os-field"><span>Wofür</span><input name="beschreibung" maxlength="300"></label>
+      <label class="os-field"><span>Bereich</span><select name="bereich"><option value="">–</option>{% for b in bereiche %}<option value="{{ b.key }}">{{ b.voll }}</option>{% endfor %}</select></label>
+      <div class="os-sheet-foot">
+        <button type="button" class="os-back" data-sheet-close aria-label="Schließen">{{ i('back') }}</button>
+        <button type="submit" class="os-btn"><span>Anlegen</span>{{ i('check') }}</button>
+      </div>
+    </form>
+  </div>
+</dialog>
+{% endif %}
+{% endblock %}

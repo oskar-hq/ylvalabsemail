@@ -110,6 +110,17 @@
     grab.addEventListener('pointerup', end);
     grab.addEventListener('pointercancel', end);
   });
+  // Agent-Freigaben: „Ändern“ klappt die Details mit dem Entwurf auf und setzt den Cursor in den Text
+  document.querySelectorAll('[data-aufklappen]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const box = document.getElementById(btn.dataset.aufklappen);
+      if (!box) return;
+      box.open = true;
+      const feld = box.querySelector('textarea');
+      if (feld) { feld.focus(); feld.scrollIntoView({ block: 'center', behavior: reduce.matches ? 'auto' : 'smooth' }); }
+    });
+  });
+
   // Sheets, die die Seite schon offen haben will (z. B. „Termin vereinbaren“ aus der Akte)
   document.querySelectorAll('dialog.os-sheet[data-open]').forEach((dlg) => openSheet(dlg));
 
@@ -164,9 +175,12 @@
   }
 
   // ---------------------------------------------------------------- Formulare per fetch (Toast statt Neuladen)
-  async function post(form) {
+  async function post(form, submitter) {
+    const body = new FormData(form);
+    // Welcher Knopf gedrückt wurde (z. B. „Ausgewählte freigeben“ oder „Ablehnen“), zählt mit
+    if (submitter && submitter.name) body.append(submitter.name, submitter.value);
     const res = await fetch(form.action, {
-      method: 'POST', body: new FormData(form),
+      method: 'POST', body,
       headers: { 'X-CSRF-Token': csrf, 'X-Requested-With': 'fetch', Accept: 'application/json' },
     });
     let data = {};
@@ -211,10 +225,10 @@
     const form = ev.target;
     if (ev.defaultPrevented || !form.matches('form[data-os-fetch]')) return;
     ev.preventDefault();
-    const btn = form.querySelector('button[type="submit"], button:not([type])');
+    const btn = ev.submitter || form.querySelector('button[type="submit"], button:not([type])');
     if (btn) btn.disabled = true;
     try {
-      const data = await post(form);
+      const data = await post(form, ev.submitter);
       buzz(15);
       sessionStorageSafe('os-toast', data.message || 'Gespeichert.');
       const to = form.dataset.osFetch;
@@ -297,7 +311,7 @@
   document.querySelectorAll('[data-os-copy]').forEach((btn) => btn.addEventListener('click', async () => {
     const input = document.getElementById(btn.dataset.osCopy);
     try { await navigator.clipboard.writeText(input.value); } catch (_) { input.select(); document.execCommand('copy'); }
-    toast('Link kopiert.');
+    toast(btn.dataset.osCopyToast || 'Link kopiert.');
   }));
 
   // Bestätigen vor folgenreichen Knöpfen

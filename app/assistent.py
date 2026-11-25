@@ -525,6 +525,14 @@ def reihenfolge(c, person, limit=8):
         out.append({"punkte": 80 if b else 60, "titel": f"Freigabe: {f.get('titel') or f['art_label']}",
                     "warum": "Läuft ohne Einspruch von selbst" if b else "Wartet auf deine Entscheidung",
                     "url": f.get("url") or "/freigaben"})
+    from . import agenten
+    for g in agenten.karten(c, person)[0]:  # Freigaben der Agents: dringend vor allem außer Notfällen
+        k = g["erste"]
+        mehrere = g["buendel"] and len(g["eintraege"]) > 1
+        out.append({"punkte": (90, 62, 45)[g["rang"]],
+                    "titel": f"Freigabe: {len(g['eintraege'])} × {g['buendel']}" if mehrere else f"Freigabe: {k['titel']}",
+                    "warum": f"{k['agent']}" + (f", Frist {g['frist'][8:10]}.{g['frist'][5:7]}." if g["frist"] else ""),
+                    "url": f"/freigaben#{'b' if mehrere else 'a'}{k['id']}"})
     jetzt = datetime.now().strftime("%Y-%m-%dT%H:%M")
     if firma.darf(c, person, "kalender"):
         for t in kalender.liste(c, jetzt, date.today().isoformat() + "T23:59", person):

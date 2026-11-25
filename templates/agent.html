@@ -1,0 +1,95 @@
+{% extends "base.html" %}
+{% from "_os.html" import i, toasts %}
+{% block title %}{{ a.name }} · Agents{% endblock %}
+{% block content %}
+<main class="os-page">
+  {{ toasts() }}
+  <header class="os-head">
+    <span class="os-eyebrow">Agent{% if a.status != 'aktiv' %} · Gesperrt{% endif %}</span>
+    <h1 class="os-title-l">{{ a.name }}</h1>
+    <p class="os-sub os-lead">{{ a.beschreibung or 'Ohne Beschreibung' }}</p>
+  </header>
+  <dl class="os-kv">
+    <dt>Status</dt><dd class="{{ 'late' if a.status != 'aktiv' }}">{{ a.status_label }}</dd>
+    <dt>Zuletzt aktiv</dt><dd>{% if a.zuletzt_aktiv %}{{ a.zuletzt_aktiv|kurzdatum }} · {{ a.zuletzt_was }}{% else %}noch nie{% endif %}</dd>
+    <dt>Karten heute</dt><dd>{{ karten_heute }} von {{ a.max_karten_tag or regeln.max_karten_tag }}</dd>
+    <dt>Im Protokoll als</dt><dd>{{ a.wer }}</dd>
+  </dl>
+
+  <section class="os-section">
+    <h2 class="os-headline">Verbindungsadresse</h2>
+    <p class="os-sub">In Grok oder Claude als eigenen Connector eintragen. Diese Adresse gehört nur zu {{ a.name }}.</p>
+    <div class="os-copy" style="margin-top:16px"><input class="os-input" id="mcp-url" value="{{ basis }}/mcp/{{ a.key }}" readonly>
+      <button type="button" class="os-btn small ink" data-os-copy="mcp-url">Kopieren</button></div>
+  </section>
+
+  <section class="os-section">
+    <h2 class="os-headline">Verbindungen</h2>
+    <ul class="os-list">{% for v in verbindungen %}
+      <li class="os-row"><span class="os-ico {{ 'off' if not v.aktiv }}">{{ i('link') }}</span>
+        <span class="os-txt"><b>{{ v.client or 'Client' }}{% if not v.aktiv %} · getrennt{% endif %}</b>
+          <span>seit {{ v.seit|kurzdatum }}{% if v.zuletzt %} · zuletzt {{ v.zuletzt|kurzdatum }}{% endif %}</span></span>
+        {% if v.aktiv and verwalten %}<form method="post" action="{{ url_for('agenten.trennen', familie=v.familie) }}" data-os-fetch="reload">
+          <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="next" value="{{ url_for('agenten.detail', key=a.key) }}">
+          <button class="os-link danger" data-confirm="Verbindung trennen? Das Token gilt sofort nicht mehr.">Trennen</button></form>{% endif %}</li>
+    {% else %}<li class="os-empty">Noch nicht verbunden. Schritte unter <a href="{{ url_for('agenten.einrichten') }}">Einrichten</a>.</li>{% endfor %}
+    </ul>
+  </section>
+
+  <section class="os-section">
+    <h2 class="os-headline">Rechte und Limits</h2>
+    <p class="os-sub">Höchstens „Bearbeiten“: Freigeben und Verwalten gibt es für Agents nicht. Ohne Recht sieht der Agent das Werkzeug gar nicht.</p>
+    <form method="post" action="{{ url_for('agenten.speichern', key=a.key) }}" data-os-fetch="reload" style="margin-top:24px">
+      <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+      <label class="os-field"><span>Name</span><input name="name" value="{{ a.name }}" maxlength="40" required {{ 'disabled' if not verwalten }}></label>
+      <label class="os-field"><span>Wofür</span><input name="beschreibung" value="{{ a.beschreibung or '' }}" maxlength="300" {{ 'disabled' if not verwalten }}></label>
+      <label class="os-field"><span>Bereich (dort landen Freigaben ohne Lead oder Projekt)</span><select name="bereich" {{ 'disabled' if not verwalten }}><option value="">–</option>
+        {% for b in bereiche %}<option value="{{ b.key }}" {{ 'selected' if b.key == a.bereich }}>{{ b.voll }}</option>{% endfor %}</select></label>
+      <table class="os-matrix"><tbody>
+        {% for k, label in module %}<tr><td>{{ label }}</td><td><select class="os-input" name="r_{{ k }}" aria-label="{{ label }}" {{ 'disabled' if not verwalten }}>
+          {% for v, l in stufen %}<option value="{{ v }}" {{ 'selected' if a.rechte[k] == v }}>{{ l }}</option>{% endfor %}</select></td></tr>{% endfor %}
+      </tbody></table>
+      <div class="os-grid2" style="margin-top:24px">
+        <label class="os-field"><span>Karten je Tag (leer = {{ regeln.max_karten_tag }})</span><input type="number" min="1" name="max_karten_tag" value="{{ a.max_karten_tag or '' }}" {{ 'disabled' if not verwalten }}></label>
+        <label class="os-field"><span>Schreibende Aufrufe je Tag (leer = {{ regeln.max_schreiben_tag }})</span><input type="number" min="10" name="max_schreiben_tag" value="{{ a.max_schreiben_tag or '' }}" {{ 'disabled' if not verwalten }}></label>
+      </div>
+      {% if verwalten %}<button class="os-btn small ink">Speichern</button>{% endif %}
+    </form>
+  </section>
+
+  <section class="os-section">
+    <h2 class="os-headline">Werkzeuge</h2>
+    <p class="os-sub">Was {{ a.name }} mit diesen Rechten sieht.</p>
+    <div class="os-chips" style="margin-top:16px">{% for name, titel, ok in werkzeuge %}<span class="os-tag {{ '' if ok else 'off' }}" title="{{ name }}" style="{{ '' if ok else 'opacity:.4;text-decoration:line-through' }}">{{ titel }}</span>{% endfor %}</div>
+  </section>
+
+  {% if aktivitaet %}
+  <section class="os-section">
+    <h2 class="os-headline">Zuletzt getan</h2>
+    <ul class="os-list">{% for e in aktivitaet %}<li class="os-row" style="min-height:0;padding:8px 0">
+      <span class="os-txt"><span>{{ e.at|kurzdatum }} · {{ art_labels.get(e.art, e.art) }}</span><b style="font-weight:500;font-size:17px">{{ e.text }}</b></span></li>{% endfor %}</ul>
+    <a class="os-link" href="{{ url_for('personen.protokoll', wer=a.wer) }}">Alles im Protokoll</a>
+  </section>
+  {% endif %}
+
+  {% if verwalten %}
+  <section class="os-section">
+    <h2 class="os-headline">Zugang</h2>
+    <ul class="os-list">
+      <li><form method="post" action="{{ url_for('agenten.status', key=a.key) }}" data-os-fetch="reload"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        {% if a.status == 'aktiv' %}<button class="os-row danger" name="status" value="gesperrt" style="width:100%;border:0;background:none;text-align:left;cursor:pointer" data-confirm="{{ a.name }} sperren? Alle Zugänge gelten sofort nicht mehr.">
+          <span class="os-ico red">{{ i('schloss') }}</span><span class="os-txt"><b>Sperren</b><span>Sofort kein Zugriff mehr, Verbindungen bleiben für später</span></span></button>
+        {% else %}<button class="os-row" name="status" value="aktiv" style="width:100%;border:0;background:none;text-align:left;cursor:pointer">
+          <span class="os-ico">{{ i('person') }}</span><span class="os-txt"><b>Wieder aktivieren</b><span>Bestehende Verbindungen gelten wieder</span></span><span class="os-chev">{{ i('chev') }}</span></button>{% endif %}
+      </form></li>
+      <li><form method="post" action="{{ url_for('agenten.loeschen', key=a.key) }}" data-os-fetch="{{ url_for('agenten.einstellungen') }}"><input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+        <button class="os-row danger" style="width:100%;border:0;background:none;text-align:left;cursor:pointer" data-confirm="{{ a.name }} löschen? Verbindungen werden getrennt, was er angelegt hat, bleibt.">
+          <span class="os-ico red">{{ i('protokoll') }}</span><span class="os-txt"><b>Löschen</b><span>Konto weg, Einträge im Protokoll bleiben</span></span></button></form></li>
+    </ul>
+  </section>
+  {% endif %}
+</main>
+<div class="os-float">
+  <a class="os-back" href="{{ url_for('agenten.einstellungen') }}" aria-label="Zurück zu den Agents">{{ i('back') }}</a>
+</div>
+{% endblock %}

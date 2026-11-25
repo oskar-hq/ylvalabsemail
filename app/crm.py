@@ -264,12 +264,12 @@ def create_lead(conn, data, author, source="hand"):
          (data.get("category_label") or data.get("branche") or "").strip() or "Betrieb", address, city,
          website or None, email or None, (data.get("phone") or "").strip() or None,
          (data.get("contact_name") or "").strip() or None, "passt", "neu", now,
-         "Von Hand angelegt." if source == "hand" else "Importiert."))
+         {"hand": "Von Hand angelegt.", "agent": "Von einem Agent angelegt."}.get(source, "Importiert.")))
     lead_id = cur.lastrowid
     known.remember(conn, name, city, website, email, source_id, source, author, lead_id, commit=False)
     conn.commit()
-    leaddb.add_event(conn, lead_id, "status", "Von Hand angelegt." if source == "hand" else "Aus CSV importiert.",
-                     author=author)
+    leaddb.add_event(conn, lead_id, "status", {"hand": "Von Hand angelegt.", "agent": "Von einem Agent angelegt."}
+                     .get(source, "Aus CSV importiert."), author=author)
     if (data.get("note") or "").strip():
         leaddb.add_event(conn, lead_id, "note", data["note"].strip(), author=author)
     return lead_id, None

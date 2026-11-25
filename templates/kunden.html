@@ -10,11 +10,22 @@
     <p class="os-sub os-lead">Vom unterschriebenen Angebot bis zum laufenden Betrieb, in derselben Akte. Oskar entscheidet, was geliefert wird, Finn, wie gebaut wird.</p>
   </header>
   <div class="os-chips">
-    <a href="{{ url_for('kunden.uebersicht') }}" class="{{ 'on' if not beendet }}">Aktiv</a>
+    <a href="{{ url_for('kunden.uebersicht') }}" class="{{ 'on' if not beendet and not board }}">Aktiv</a>
+    <a href="{{ url_for('kunden.uebersicht', ansicht='board') }}" class="{{ 'on' if board }}">Board</a>
     <a href="{{ url_for('kunden.uebersicht', beendet='1') }}" class="{{ 'on' if beendet }}">Beendet</a>
     {% if darf('kunden', 4) %}<a href="{{ url_for('kunden.einstellungen') }}">Regeln</a>{% endif %}
   </div>
 
+  {% if board %}
+  <div class="os-board" aria-label="Projekte nach Phase">{% for key, label, hint, liste in spalten %}
+    <section class="os-spalte"><h2 class="os-spalte-kopf">{{ label }} <span>{{ liste|length }}</span></h2>
+      {% for p in liste %}<a class="os-bkarte" href="{{ url_for('kunden.detail', pid=p.id) }}"><b>{{ p.kunde }}</b>
+        <span>{{ p.verantwortlich_name or '' }}{% if p.status == 'bau' and p.bau_ende_plan %} · bis {{ tag(p.bau_ende_plan) }}{% endif %}</span>
+        {% if p.status == 'anforderung' and not (p.freigabe_markt_von and p.freigabe_technik_von) %}<span class="os-tag muted">Freigabe offen</span>{% endif %}</a>
+      {% else %}<p class="os-caption">–</p>{% endfor %}
+    </section>{% endfor %}
+  </div>
+  {% else %}
   {% for key, label, hint, liste in gruppen %}
   <section class="os-section" style="{{ 'margin-top:24px' if loop.first }}">
     <h2 class="os-headline">{{ label }} <span class="os-sub" style="display:inline">· {{ liste|length }}</span></h2>
@@ -30,6 +41,7 @@
   {% else %}
   <p class="os-empty" style="margin-top:24px">Noch keine Projekte. Ein Projekt entsteht automatisch, sobald ein Lead im CRM auf „Kunde“ steht.</p>
   {% endfor %}
+  {% endif %}
 </main>
 <div class="os-float">
   <a class="os-back" href="{{ url_for('aufgaben.mein_tag') }}" aria-label="Zurück">{{ i('back') }}</a>

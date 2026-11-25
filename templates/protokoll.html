@@ -16,6 +16,10 @@
     <a href="{{ url_for('personen.protokoll', art=art) }}" class="{{ 'on' if not wer }}">Alle Personen</a>
     {% for p in personen %}<a href="{{ url_for('personen.protokoll', art=art, wer=p.key) }}" class="{{ 'on' if wer == p.key }}">{{ p.name.split(' ')[0] }}</a>{% endfor %}
   </div>
+  {% if agents %}<div class="os-chips">
+    <a href="{{ url_for('personen.protokoll', art=art, wer='agent:*') }}" class="{{ 'on' if wer == 'agent:*' }}">Alle Agents</a>
+    {% for a in agents %}<a href="{{ url_for('personen.protokoll', art=art, wer=a.wer) }}" class="{{ 'on' if wer == a.wer }}">{{ a.name }}</a>{% endfor %}
+  </div>{% endif %}
   <ul class="os-list">
     {% for e in rows %}<li class="os-row">
       {{ avatar(namen.get(e.wer, e.wer)) }}

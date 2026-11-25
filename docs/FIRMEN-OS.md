@@ -1,6 +1,6 @@
 # Ylva Labs Firmen-OS – Bauplan
 
-**Stand:** 01.11.2026 · alle zehn Baustufen gebaut · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
+**Stand:** 25.11.2026 · Stufe 1 bis 12 gebaut (11: Arbeitsbereiche, 12: Agenten-Schnittstelle) · gehört zu [ROLLEN-UND-ABLAEUFE.md](ROLLEN-UND-ABLAEUFE.md)
 
 Aus dem Ylva Labs Mailer (Akquise, CRM, Mailer) wird das Betriebssystem der Firma. Diese Datei hält fest, **was**
 gebaut werden soll und **nach welchen Prinzipien**, damit alle, die am Code arbeiten (Menschen und KI), dasselbe
@@ -19,7 +19,8 @@ hier ab und trägt Abweichungen ein.
   ist eingerichtet und in Produktion (4.3). Apple/iCloud und ICS-Abo erst danach.
 - WhatsApp kommt später über Unipile, nicht jetzt.
 
-**Stand des Baus:** Stufe 1 bis 10 sind gebaut. Was danach kommt (Ausbau, offene Punkte), steht in
+**Stand des Baus:** Stufe 1 bis 12 sind gebaut (12: Agenten-Schnittstelle über MCP, siehe
+[AGENTEN.md](AGENTEN.md)). Was danach kommt (Ausbau, offene Punkte), steht in
 [BAU-UEBERGABE.md](BAU-UEBERGABE.md).
 
 **Womit der Bau anfing: Stufe 1** (Abschnitt 8). Der Kalender ist Stufe 3. Für Stufe 1 und 2 wird nichts von
@@ -816,6 +817,46 @@ Die Reihenfolge 2 und 3 kann getauscht werden, je nachdem, was im Alltag zuerst 
     **Karte entfernt** (Kartenseite, Leaflet, Kreisgrenzen, Regionen-Import, Wachstums-Zuschlag; `regions.py` weg,
     die Spalte `leads.kreis` bleibt ungenutzt stehen).
   - Offen: Kunden-Arbeitsbereich mit echtem Postfach testen; Abmeldelink in Kunden-Mails, sobald der Anwalt sagt, wie.
+- [x] **Stufe 12 – Agenten-Schnittstelle (MCP)** (gebaut 25.11.2026, parallel zu Stufe 11; Abweichungen unten)
+  Ziel (Oskar, 25.11.2026): Das OS ist die Datenbank der Firma und die **einzige Schnittstelle zwischen den
+  KI-Agents und den Menschen**. Die Agents (Grok-Bots Ops, Delivery, Outreach, Content, später Claude) bereiten vor
+  und schreiben per MCP ins OS; Oskar und Finn arbeiten nur im Frontend (freigeben, entscheiden, Aufgaben
+  erledigen). Freigaben ziehen aus Slack #entscheidungen und den Second-Brain-Notizen ins OS um. Das Second Brain
+  bleibt Oskars Meta-Ebene; das OS synchronisiert nichts dorthin. Ausführlich: [AGENTEN.md](AGENTEN.md).
+  *Umsetzung und Abweichungen:*
+  - `app/agenten.py` (Konten, OAuth-Speicher, Entwürfe, Zuständigkeit, Freigaben, Ausführung, Infos),
+    `app/mcp_server.py` (Protokoll und 26 Werkzeuge), `app/agenten_views.py` (Discovery, OAuth, `/mcp`,
+    Einstellungen → Agents, Einrichten, Karten-Aktionen), `app/agenten_prompts.py` (Umzugs-Prompts).
+  - **Abweichung: kein Python-MCP-SDK im Server.** Das SDK (2.x) ist für ASGI gebaut und hätte rund 20 Pakete und
+    eine Brücke in den einen Gunicorn-Worker gebracht. Stattdessen spricht `/mcp` das Protokoll selbst
+    (Streamable HTTP ohne Sitzung, JSON-Antworten, Versionen 2024-11-05 bis 2026-07-28). Damit braucht das Update
+    keine neuen Pakete. Geprüft mit dem offiziellen SDK als Client (beide Protokoll-Varianten, ganzer OAuth-Ablauf).
+  - OAuth 2.1 selbst gebaut nach dem Muster von brain-mcp/mail-mcp: Registrierung (RFC 7591) nur für erlaubte
+    Rücksprung-Adressen, PKCE S256, `resource`, `iss`, Erneuern mit Rotation, Code nur einmal. Verbinden darf nur,
+    wer Personen verwaltet; dabei wählt die Person, welcher Agent das ist. **Je Agent eine eigene Adresse**
+    (`/mcp/<key>`), weil Grok Connectors je Konto teilt: so bekommt jeder Bot sein eigenes Konto.
+  - Agenten-Konten in `agenten` mit Rechten aus dem Modell von `firma`, **gedeckelt auf „Bearbeiten“**;
+    `firma.rechte`/`firma.name_von` kennen `agent:<key>`. Startwerte für die vier Bots per `DATA_MIGRATIONS`.
+  - Freigaben als Zeilen in `freigaben` (art `agent`) mit Kurzformat im Vorschlag; neue Spalten `spaeter_bis`,
+    `ausfuehrung`. Zuständigkeit: Art → Entscheidungsrecht (Einstellung) → `wer_entscheidet` mit Bezug (Lead,
+    Projekt, Bereich des Agents), nur Personen mit „Freigeben“ im Modul, sonst den Bereich hinauf. Modus „alle“:
+    eine Karte je Person, ausgeführt nach allen. Entscheidungen mit Optionen landen über `entscheiden_festhalten`
+    im Entscheidungs-Log.
+  - Hart im Code: `freigaben._nur_menschen` in `entscheiden`, `stoppen`, `entscheiden_festhalten`,
+    `entscheidung_bestaetigen`; `agenten.entscheiden`/`ausfuehren` lehnen Agents ab; kein Werkzeug zum Freigeben.
+  - Ausführung mit Inhalts-Hash (beim Ausführen neu gerechnet). Mail über das Akquise-Postfach im Namen der
+    freigebenden Person, mit Sperrliste und Erstkontakt-Schalter; Lead-Stufe und Projekt-Schritt setzt das OS;
+    Content und Nachrichten ohne Kanal gehen als „bitte ausführen“ zurück. Angebote laufen über das bestehende
+    Modul (`entwurf_anlegen` art=angebot, `freigabe_anfragen` art=angebot).
+  - Katalog `AKTIONEN` um vier Agent-Aktionen erweitert (Bereich „Agents“).
+  - Frontend: Karten im Kurzformat in der Freigabe-Zentrale („Meine Freigaben“), Bündel mit Einzelauswahl,
+    „Später“ bis morgen 7 Uhr, Zahl in Navigation, Mein Tag und „Was zuerst?“, Push bei 🟥. Tagesüberblick „Von den
+    Agents“ auf Mein Tag. Einstellungen → Agents mit Einrichten in 5 Schritten (inkl. Prüfung des
+    Cloudflare-Durchlasses). Protokoll-Filter „Agents“. Boards für Projekte (nach Phase) und Aufgaben (nach Status).
+  - Arbeitsbereiche (Stufe 11): Agents arbeiten im Arbeitsbereich „Ylva Labs“ (Standard ohne Sitzung); ihre
+    Lead-Abfragen filtern mit `ab()`. Agents für Kunden-Arbeitsbereiche sind noch nicht gebaut (BAU-UEBERGABE).
+  - Einzige Einstellung außerhalb der App: eine Bypass-Regel in Cloudflare Access für `/mcp`, `/oauth`,
+    `/.well-known` (Grok und Claude kommen sonst nicht am Einmal-Code vorbei). Die App prüft sie selbst.
 
 ## 9. Was das OS ausdrücklich nicht sein soll
 

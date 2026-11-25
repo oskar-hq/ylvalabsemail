@@ -403,3 +403,88 @@ body.os-sheet-open .os-page,body.os-sheet-open main.page{transform:scale(.94);bo
 .os-wunsch{margin-top:6px;padding-top:10px;border-top:1px solid var(--border-hairline)}
 .os-festhalten summary{list-style:none;cursor:pointer}
 .os-festhalten summary::-webkit-details-marker{display:none}
+
+/* Stufe 11: Freigabe-Karten der Agents im Kurzformat (in 5 Sekunden lesbar, ein Tipp entscheidet) */
+.os-akarten{display:flex;flex-direction:column;gap:12px;margin-top:16px}
+.os-akarte{padding:20px;border-radius:var(--radius-md);background:var(--surface);border:1px solid var(--border-hairline);
+  box-shadow:var(--shadow-tile);scroll-margin-top:88px}
+.os-akarte.dringend{box-shadow:inset 3px 0 0 var(--negative),var(--shadow-tile)}
+.os-akarte:target{box-shadow:0 0 0 2px var(--text-primary),var(--shadow-tile)}
+.os-akarte-kopf{display:flex;align-items:center;gap:8px;min-width:0}
+.os-akarte-kopf .os-caption{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.os-akarte-kopf .os-caption a{color:inherit}
+.os-akarte-sym{flex:none;font-size:14px;line-height:1}
+.os-akarte-frist{flex:none;font:600 13px/18px var(--sans);color:var(--text-secondary);font-variant-numeric:tabular-nums}
+.os-akarte-frist.um{color:var(--negative)}
+.os-akarte-titel{margin:10px 0 4px;font:700 22px/28px var(--display);letter-spacing:-.02em;overflow-wrap:anywhere}
+.os-akarte-was{margin:0;font:500 16px/22px var(--sans);color:var(--text-secondary);overflow-wrap:anywhere}
+.os-akarte-empf{margin:12px 0 0;font:600 15px/20px var(--sans)}
+.os-akarte-empf em,.os-akarte-option em{font-style:normal;color:var(--accent-text);font-weight:600;font-size:13px}
+.os-akarte-optionen{display:flex;flex-direction:column;gap:8px;margin-top:16px}
+.os-akarte-optionen form{margin:0}
+.os-akarte-option{display:flex;align-items:center;gap:12px;width:100%;min-height:56px;padding:12px 16px;border:0;
+  border-radius:var(--radius-sm);background:var(--surface-sunken);color:var(--text-primary);text-align:left;cursor:pointer;
+  font:500 16px/21px var(--sans);transition:transform 250ms var(--spring-snappy)}
+.os-akarte-option:active{transform:scale(.98)}
+.os-akarte-option b{flex:none;display:grid;place-items:center;width:28px;height:28px;border-radius:var(--radius-full);
+  background:var(--surface);font:700 14px/1 var(--sans)}
+.os-akarte-option span{flex:1;min-width:0;overflow-wrap:anywhere}
+.os-akarte-option.empfohlen{background:var(--ink-solid);color:var(--on-ink)}
+.os-akarte-option.empfohlen b{background:var(--on-ink);color:var(--ink-solid)}
+.os-akarte-option.empfohlen em{color:inherit;opacity:.75}
+.os-akarte-knoepfe{margin-top:16px;align-items:center}
+.os-akarte-knoepfe form{margin:0}
+.os-akarte-details{margin-top:12px}
+.os-akarte-details>summary{cursor:pointer;list-style:none;display:inline-block}
+.os-akarte-details>summary::-webkit-details-marker{display:none}
+.os-akarte-details[open]>summary{margin-bottom:12px}
+.os-akarte-text{margin:0 0 16px;font:500 15px/22px var(--sans);white-space:pre-line;overflow-wrap:anywhere}
+.os-akarte-entwurf{margin-top:8px}
+.os-akarte-entwurf .os-eyebrow{display:block;margin-bottom:12px}
+.os-akarte-kv{margin-top:16px;row-gap:8px}
+.os-akarte-kv dt,.os-akarte-kv dd{font-size:15px;line-height:20px}
+.os-akarte-liste{margin-top:12px}
+.os-akarte-liste>li{padding:12px 0}
+.os-akarte-liste>li+li{border-top:1px solid var(--border-hairline)}
+.os-akarte-zeile{display:flex;align-items:flex-start;gap:12px;cursor:pointer}
+.os-akarte-zeile input{flex:none;width:22px;height:22px;margin:2px 0 0;accent-color:var(--ink-solid)}
+.os-akarte-zeile .os-txt{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+.os-akarte-zeile .os-txt b{font:600 17px/22px var(--sans);overflow-wrap:anywhere}
+.os-akarte-zeile .os-txt span{font:500 15px/20px var(--sans);color:var(--text-secondary);overflow-wrap:anywhere}
+.os-akarte-liste .os-akarte-details{margin:8px 0 0 34px}
+@media (max-width:600px){.os-akarte{padding:16px}.os-akarte-knoepfe .os-btn.small{flex:1}}
+
+/* Stufe 11: Einrichten in Schritten (Onboarding der Agents) */
+.os-schritte{list-style:none;margin:32px 0 0;padding:0;display:flex;flex-direction:column;gap:32px}
+.os-schritte>li{display:flex;gap:16px;align-items:flex-start}
+.os-schritt-nr{flex:none;display:grid;place-items:center;width:36px;height:36px;border-radius:var(--radius-full);
+  background:var(--surface-sunken);font:700 16px/1 var(--sans);font-variant-numeric:tabular-nums}
+.os-schritt-nr svg{width:18px;height:18px}
+.os-schritte>li.fertig .os-schritt-nr{background:var(--ink-solid);color:var(--on-ink)}
+.os-schritt-txt{flex:1;min-width:0}
+.os-schritt-txt .os-headline{margin:4px 0 4px}
+.os-schritt-txt>.os-btn,.os-schritt-txt>form{margin-top:16px}
+.os-anleitung{margin:12px 0 0;padding-left:20px;font:500 15px/22px var(--sans)}
+.os-anleitung li+li{margin-top:6px}
+.os-anleitung code,.os-schritt-txt code{font-size:13px;padding:1px 6px;border-radius:6px;background:var(--surface-sunken);overflow-wrap:anywhere}
+.os-prompt{min-height:220px;font:500 13px/19px ui-monospace,SFMono-Regular,Menlo,monospace!important;white-space:pre-wrap}
+.os-verbinden{max-width:520px}
+
+/* Stufe 11: Boards (Projekte nach Phase, Aufgaben nach Status) */
+.os-board{display:grid;grid-auto-flow:column;grid-auto-columns:minmax(220px,1fr);gap:16px;overflow-x:auto;scroll-snap-type:x mandatory;
+  margin:24px calc(var(--gut,16px) * -1) 0;padding:0 var(--gut,16px) 16px;scroll-padding:0 var(--gut,16px)}
+.os-spalte{scroll-snap-align:start;min-width:0;display:flex;flex-direction:column;gap:8px}
+.os-spalte-kopf{display:flex;justify-content:space-between;margin:0 0 4px;font:700 15px/20px var(--sans)}
+.os-spalte-kopf span{color:var(--text-secondary);font-weight:500;font-variant-numeric:tabular-nums}
+.os-spalte-kopf.late{color:var(--negative)}
+.os-bkarte{display:flex;flex-direction:column;gap:4px;padding:14px;border-radius:var(--radius-sm);background:var(--surface);
+  border:1px solid var(--border-hairline);box-shadow:var(--shadow-tile);color:inherit;text-decoration:none;transition:transform 250ms var(--spring-snappy)}
+.os-bkarte:active{transform:scale(.98)}
+.os-bkarte b{font:600 16px/21px var(--sans);overflow-wrap:anywhere}
+.os-bkarte span{font:500 14px/19px var(--sans);color:var(--text-secondary);overflow-wrap:anywhere}
+.os-bkarte .os-tag{align-self:flex-start}
+@media (max-width:720px){.os-board{grid-auto-columns:78%}}
+@media (min-width:900px){
+  .os-board{width:min(1240px,calc(100vw - 2 * var(--gut,16px)));position:relative;left:50%;transform:translateX(-50%);
+    margin:24px 0 0;padding:0 0 16px;grid-auto-columns:minmax(200px,1fr)}
+}
