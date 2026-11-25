@@ -58,6 +58,13 @@ def start():
                            katalog=[k for k in kpis.KATALOG if k["fn"] and k["je_person"]], **_form_kontext())
 
 
+@bp.get("/heute")
+@bp.get("/leads")
+def alt_start():
+    """Frühere Startseiten (Web-App auf dem Handy, Lesezeichen) führen zu den Aufgaben."""
+    return redirect(url_for("stapel.start"))
+
+
 @bp.get("/aufgaben/fokus")
 @login_required
 def fokus():

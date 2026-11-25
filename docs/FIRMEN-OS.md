@@ -135,9 +135,11 @@ und eine Einstellung (`OUTREACH_EMAIL`, Standard an).
 Jedes Modul baut auf dem Firmen-Protokoll (Ereignisse) und den Aufgaben auf. Reihenfolge der Umsetzung siehe
 Abschnitt 8.
 
-### 4.1 Start: „Mein Tag“
+### 4.1 Start: „Mein Tag“ (seit Stufe 13: „Aufgaben“ als Stapel)
 
-Die erste Seite nach dem Login, für jede Person anders. Das OS sagt der Person, was sie heute tun soll:
+Die erste Seite nach dem Login, für jede Person anders. Das OS sagt der Person, was sie heute tun soll.
+Seit Stufe 13 (25.11.2026) als Aufgabenstapel wie im Outreach-Cockpit: eine große Zahl, „Starten“, dann eine Karte
+pro Bildschirm (Freigaben, Antworten, Anfragen, Aufgaben), Ja oder Nein mit einem Tipp oder einer Taste.
 
 - Freigaben, die auf mich warten (mit Zähler in der Glocke)
 - Meine Aufgaben, sortiert nach Fälligkeit und Priorität, überfällige oben
@@ -235,6 +237,11 @@ Gebaut (Stufe 3): Client-ID und Clientschlüssel trägt man unter Einstellungen 
 
 Was heute „Leads“ und „CRM“ ist, bleibt der Kern dieses Moduls.
 
+> **Geändert mit Stufe 13 (Oskar, 25.11.2026):** Die automatische Lead-Suche (Kartensuche, Läufe, Nischen,
+> Claude-Recherche, Prüf-Stapel), der Branchentest und die Lead-Prüfung sind raus. Leads suchen die Agents
+> (Outreach) und tragen sie per MCP ein; LinkedIn sucht später ein eigenes Programm. Das CRM bleibt. Die Punkte
+> „Branchentest“ und „Lead-Prüfung“ unten gelten nicht mehr (früher: gebaut in Stufe 8, bis 2026-11).
+
 - **Branchentest:** die vier Testbranchen als feste Gruppen mit je 50 Betrieben, Zuordnung zu Hamza/Omid,
   Herkunft **warm** (Oskars Kontakte, zählen nicht mit) oder **kalt**. Auswertung je Branche: Kontakte,
   Antworten, Gespräche, **ernsthafte Preisgespräche**, Abschlüsse. Ampel bei 3 ernsthaften Preisgesprächen.
@@ -296,6 +303,8 @@ Ziel: keine Firmenkommunikation mehr außerhalb des OS.
   Person, „wartet auf Antwort seit“.
 - **Intern:** Kommentare an Aufgaben, Kunden und Projekten statt Chat. @-Erwähnung erzeugt eine Meldung in der
   Glocke. Kein allgemeiner Chat-Kanal: Wer etwas will, legt eine Aufgabe oder einen Kommentar am richtigen Ding an.
+- **Seit Stufe 13:** Der Posteingang ist der **Chat** (`/chat`): jede Akte ein Verlauf als Sprechblasen über alle
+  Kanäle. Slack, WhatsApp und LinkedIn tragen die Agents ein und verschicken Antworten aus dem Chat (AGENTEN.md).
 - **Später, sobald Budget da ist:** WhatsApp (und LinkedIn-Nachrichten) über **Unipile** in denselben Posteingang.
   Bis dahin gilt: Kommt über WhatsApp etwas Wichtiges, wird es mit einem Klick als Notiz/Aufgabe ins OS übertragen.
   Der Code sieht dafür schon jetzt eine Kanal-Spalte vor (`kanal`: mail, brief, telefon, linkedin, whatsapp, portal).
@@ -857,6 +866,43 @@ Die Reihenfolge 2 und 3 kann getauscht werden, je nachdem, was im Alltag zuerst 
     Lead-Abfragen filtern mit `ab()`. Agents für Kunden-Arbeitsbereiche sind noch nicht gebaut (BAU-UEBERGABE).
   - Einzige Einstellung außerhalb der App: eine Bypass-Regel in Cloudflare Access für `/mcp`, `/oauth`,
     `/.well-known` (Grok und Claude kommen sonst nicht am Einmal-Code vorbei). Die App prüft sie selbst.
+- [x] **Stufe 13 – Aufgeräumt wie das Cockpit** (gebaut 25.11.2026)
+  Ziel (Oskar, 25.11.2026): Die Software soll viel aufgeräumter sein, wie das Outreach-Cockpit (Scraper):
+  oben nur vier Reiter **Aufgaben, Pipeline, CRM, Chat**; eine Aufgabenpipeline, in der Freigaben und Aufgaben für
+  jede Person einlaufen und schnell mit Ja oder Nein entschieden werden; eine Pipeline, die visuell zeigt, wie weit
+  die Projekte sind und was die Agents gerade tun („Textform ist so schlecht“); Mails und Slack wie ein Chat zum
+  Nachlesen; Einstellungen radikal neu wie im Cockpit. Hell und dunkel bleiben wie bisher (folgt dem Browser).
+  Die automatische Lead-Suche fliegt raus, „weil das machen ja die Agents für uns“.
+  *Umsetzung und Abweichungen:*
+  - **Navigation:** Aufgaben (Start), Pipeline, CRM, Chat; alles andere (Kalender, Kunden und Projekte, Finanzen,
+    Entscheidungs-Log, Mailer, Einstellungen) im Konto-Menü und in der Schnellsuche (Strg K). Unten auf dem Handy
+    dieselben vier Reiter.
+  - **Aufgaben** (`app/stapel.py`, `app/stapel_views.py`, `stapel*.html`, `static/stapel.js`): Start mit großer
+    Zahl und „Starten“, Fokus mit einer Karte pro Bildschirm. Reihenfolge: Agent-Freigaben (dringend zuerst),
+    andere Freigaben, Antworten von Kunden, Anfragen, fällige Aufgaben, Termin-Ergebnisse. „Jetzt nicht“ merkt
+    sich die Sitzung, „Später“ legt Aufgaben auf morgen und Agent-Karten auf morgen 7 Uhr. Tasten wie im Cockpit.
+    Die alte Liste liegt unter `/aufgaben/alle`; alte Links (`/mein-tag`, `/aufgaben?ansicht=…`) leiten weiter.
+    Wochenziele und „Zeit läuft“ bleiben auf der Seite. **Abweichung:** „Was zuerst?“ ist keine eigene Liste mehr;
+    die Reihenfolge des Stapels ersetzt sie.
+  - **Pipeline** (`app/pipeline_views.py`): je Agent eine Karte (Status-Ring, Stundenbalken 7–21 Uhr, farbige
+    Punkte je Aktion aus dem Firmen-Protokoll, Zähler, „wartet auf Oskar“), darunter die Projekte als Board nach
+    Phase mit Fortschritt, Freigaben, Wünschen und Aufgaben, oben fünf Kennzahlen.
+  - **Chat** (`/chat`, `chat.html`, `static/chat.js`): links die Gespräche („Wartet auf euch“ zuerst, Meine/Alle,
+    Suche), rechts der Verlauf als Sprechblasen mit Datum, Kanal und Versand-Status; Antworten per Mail, Slack,
+    WhatsApp, LinkedIn oder „Festhalten“. Änderungswünsche aus Nachrichten lassen sich direkt übernehmen. Der alte
+    Posteingang leitet in den Chat; Ordner „Sonstige“ und „Fehler“ bleiben.
+  - **Slack über die Agents** statt eigenem Slack-Zugang (einfacher, die Agents haben den Connector schon): drei
+    neue Werkzeuge `nachricht_eintragen`, `nachrichten_zu_senden`, `nachricht_gesendet_melden`; Spalte
+    `messages.versand` (wartet, gesendet, fehler). Umzugs-Prompts ergänzt.
+  - **Einstellungen** wie im Cockpit: Suche über alle Punkte und Feldnamen, „Neue Version da · Update“, „Auf einen
+    Blick“ (Startklar, Agents, Postfach, Software), Kategorien Firma und Team, Agents und Freigaben, Kunden und Geld,
+    Verbindungen, Texte und Hinweise, System. Bereich „Suche und Bewertung“ und die Lauf-Budgets sind weg;
+    „Nachfassen nach Tagen“ steht jetzt unter Postfach und Versand.
+  - **Entfernt:** Lead-Suche (OpenStreetMap, Läufe, Zeitplan, Nischen, Claude-Recherche, Websuche, Berichte,
+    Prüf-Stapel, Regeln-Seite), Branchentest und Lead-Prüfung (Module, Seiten, Freigabe-Art). Die Tabellen bleiben
+    in der Datenbank (nichts geht verloren); Testbranchen-Daten werden nicht mehr angezeigt. Kennzahl „Kontakte“
+    zählt weiter alle Kontakte aus dem Verlauf.
+
 
 ## 9. Was das OS ausdrücklich nicht sein soll
 

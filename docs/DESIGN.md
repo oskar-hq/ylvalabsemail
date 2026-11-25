@@ -266,3 +266,22 @@ Web-Fallback, wenn keine Spring-Lib: `cubic-bezier(0.32, 0.72, 0, 1)` mit 400–
 - [ ] Alle Übergänge Springs, Press-States auf allem Tappbaren, unterbrechbar
 - [ ] `prefers-reduced-motion` berücksichtigt
 - [ ] Keine fremden Logos/Marken
+
+---
+
+## 11. Aufbau der App (seit Stufe 13, 25.11.2026)
+
+Struktur wie im Outreach-Cockpit, Farben und Schrift bleiben „Clean Finance“ mit hell und dunkel (folgt dem
+Browser, fest wählbar im Konto-Menü). Neue Seiten nutzen die Tokens aus `os.css`, nie feste Farben ohne
+Dunkel-Variante.
+
+- **Vier Reiter** oben (Desktop) bzw. unten (Handy): Aufgaben, Pipeline, CRM, Chat. Alles andere ins Konto-Menü
+  und in die Schnellsuche (`app/palette.py`, neue Seiten dort eintragen).
+- **Aufgabenstapel** (`st-*`): Start mit einer großen Zahl und einem Knopf; Fokus mit einer Karte pro Bildschirm,
+  Titel zentriert, Knöpfe fest unten (Haupt-Aktion dunkel, rechts). Jede Aktion hat eine Taste (`data-taste`,
+  `static/stapel.js`). Keine `transform`-Animation an der Karte, sonst hängen die festen Knöpfe an ihr.
+- **Pipeline** (`pl-*`): Zustände als Farbe am Ring (grün arbeitet, orange wartet auf euch, mint heute aktiv,
+  grau ruhig, rot gesperrt oder nicht verbunden), Aktivität als Balken und Punkte statt Text.
+- **Chat** (`ch-*`): zwei Spalten ab 820 px, am Handy erst Liste, dann Verlauf. Eingehend links grau, ausgehend
+  rechts dunkel; Kanal und Versand-Status klein über der Blase.
+- **Einstellungen** (`ein-*`): Suche oben, „Auf einen Blick“ als vier Kacheln, dann Kategorien als Listen.

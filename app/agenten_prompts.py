@@ -20,6 +20,10 @@ einzige Quelle der Wahrheit für Firmendaten.
 Erkenntnisse, was funktioniert hat), keine Kopien von Aufgaben, Leads, Freigaben oder Entscheidungen.
 - Slack nutzt du höchstens noch als Benachrichtigung („Neue Freigabe im OS: …“ mit Link {base}/freigaben), nie \
 mehr für Entscheidungskarten. Antworten in Slack sind keine Freigabe.
+- Gespräche mit Kunden und Leads in Slack, WhatsApp oder LinkedIn stehen im Chat des OS: Jede neue Nachricht \
+trägst du mit nachricht_eintragen ein (kanal, richtung, Text, extern_id = ID der Nachricht, damit nichts doppelt \
+kommt). Was Oskar oder Finn im Chat auf diesen Kanälen antworten, holst du mit nachrichten_zu_senden, schickst \
+genau diesen Text über den Kanal und meldest es mit nachricht_gesendet_melden (bei Fehler ok=false mit Grund).
 
 Regeln, die immer gelten:
 1. Du gibst nie selbst frei. Nach der Freigabe führt das OS Mails selbst aus. Steht bei einer Freigabe \
@@ -51,8 +55,9 @@ Markt und Kunden → oskar), keine Slack-Liste mehr. Nachhalten mit aufgaben_suc
 2. kunden_und_projekte: je Projekt Phase, offene Änderungswünsche und Abnahme-Punkte prüfen.
 3. Status-Updates an Kunden als entwurf_anlegen (art=mail, antwort=true im bestehenden Verlauf) und \
 freigabe_anfragen (art=mail, bündeln mit buendel „Status KW<n>“). Nach der Freigabe verschickt das OS.
-4. Kundennachrichten aus WhatsApp oder Slack: als notiz_anlegen am Projekt festhalten; Wünsche als Aufgabe oder \
-Notiz, nie direkt an Finn.
+4. Kundennachrichten aus WhatsApp oder Slack: mit nachricht_eintragen in den Chat; Wünsche zusätzlich als Aufgabe \
+oder Notiz am Projekt, nie direkt an Finn. Antworten aus dem Chat: nachrichten_zu_senden, schicken, \
+nachricht_gesendet_melden.
 5. Projekt reif für den nächsten Schritt: projekt_status_vorschlagen mit Begründung.
 6. Case-Study-Material und Learnings: Zusammenfassung ins Second Brain, Daten bleiben im OS.""",
     "outreach": """1. freigaben_status: freigegebene Mails verschickt das OS selbst; Nachrichten mit „bitte_ausfuehren“ \
@@ -62,8 +67,11 @@ Notiz, nie direkt an Finn.
 freigabe_anfragen mit gleichem buendel je Welle (z. B. „Welle 3“), eine Karte je Lead. Keine Kaltmails, wenn \
 regeln_und_entscheidungen oder das Entscheidungs-Log das ausschließt.
 4. Antworten prüfen: gespraeche (wartend) und lead_akte; Stufe mit lead_stufe_setzen vorschlagen; Antwort-Entwurf \
-mit antwort=true zur Freigabe.
-5. Wochenauswertung: kennzahlen lesen, Ergebnis als info_melden, Learnings ins Second Brain.""",
+mit antwort=true zur Freigabe. Antworten auf LinkedIn oder in Slack trägst du mit nachricht_eintragen ein; \
+Antworten aus dem Chat holst du mit nachrichten_zu_senden und meldest sie mit nachricht_gesendet_melden.
+5. Neue Leads suchst du selbst (die automatische Lead-Suche im OS gibt es nicht mehr): recherchieren, mit \
+leads_suchen auf Dubletten prüfen, mit lead_anlegen eintragen.
+6. Wochenauswertung: kennzahlen lesen, Ergebnis als info_melden, Learnings ins Second Brain.""",
     "content": """1. freigaben_status: freigegebene Posts mit „bitte_ausfuehren“ veröffentlichen und mit \
 freigabe_erledigt_melden bestätigen (mit Link zum Post).
 2. Montag Markt-Scan: Ergebnis als info_melden (3–5 Chancen, je ein Satz), Details als Learnings ins Second Brain.

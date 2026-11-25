@@ -591,7 +591,7 @@ WERKZEUGE = {
         "wenn du eine ID nicht kennst, und vor dem Anlegen (Dubletten).", _obj({"stichwort": S}, ["stichwort"]),
         w_suche, None, 0, False),
     "mein_tag": (
-        "Mein Tag einer Person",
+        "Tagesüberblick einer Person",
         "Was eine Person heute tun soll: überfällige und heutige Aufgaben, die Woche, Anfragen, Termine heute, Zahl der "
         "offenen Freigaben. Für Briefings und Erinnerungen.", _obj({"person": S}, ["person"]), w_mein_tag,
         "aufgaben", 1, False),

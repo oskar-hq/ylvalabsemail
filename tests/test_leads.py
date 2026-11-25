@@ -973,7 +973,9 @@ class ViewsTest(unittest.TestCase):
         html = self.client.get("/crm?wer=alle").get_data(as_text=True)  # Gesamt: auch noch niemandem zugeordnete
         self.assertIn("Pipeline.", html)
         self.assertIn("Anrufen, vormittags", html)  # Wiedervorlage von heute aus den Beispieldaten
-        for alt in ("/leads/regeln", "/heute", "/leads/pruefen", "/leads/automatik", "/leads/claude", "/leads/suche",
+        self.assertEqual(self.client.get("/heute").headers["Location"], "/aufgaben")  # Web-App auf dem Handy
+        self.assertEqual(self.client.get("/leads").headers["Location"], "/aufgaben")
+        for alt in ("/leads/regeln", "/leads/pruefen", "/leads/automatik", "/leads/claude", "/leads/suche",
                     "/leads/nischen", "/leads/schon-gefunden", "/branchentest"):
             self.assertEqual(self.client.get(alt).status_code, 404, alt)  # Lead-Suche und Branchentest sind raus
         # Mail-Fenster: Vorlage wird eingesetzt, mit eingeschaltetem Erstkontakt per Mail senden

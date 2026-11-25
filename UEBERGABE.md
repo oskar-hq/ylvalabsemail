@@ -159,14 +159,32 @@ Benachrichtigungen kommen per Push aufs Handy (installierbare Web-App, kein App 
   Neu außerdem: Board-Ansicht unter Kunden (Projekte nach Phase) und Aufgaben (nach Status), Filter „Agents“ im
   Firmen-Protokoll. Sperren oder Trennen unter Einstellungen → Agents wirkt sofort.
 
+- **Firmen-OS Stufe 13: aufgeräumt wie das Cockpit (25.11.2026).** Oben gibt es nur noch vier Reiter:
+  **Aufgaben, Pipeline, CRM, Chat**. Alles andere (Kalender, Kunden und Projekte, Finanzen, Entscheidungs-Log,
+  Mailer, Einstellungen) steht im Menü hinter deinem Profilbild und in der Suche (Strg K).
+  - **Aufgaben** ist die Startseite: eine große Zahl, „Starten“, dann kommt eine Karte nach der anderen
+    (Freigaben der Agents zuerst, dann Antworten von Kunden, Anfragen, fällige Aufgaben). Ein Tipp oder eine
+    Taste entscheidet: Enter = freigeben, ← = ablehnen, 1–3 = Option, J = jetzt nicht, W = später.
+  - **Pipeline** zeigt je Agent, ob er gerade arbeitet, auf euch wartet oder ruhig ist, mit Balken und farbigen
+    Punkten für den Tag, darunter die Projekte nach Phase.
+  - **Chat:** Mails, Slack, WhatsApp, LinkedIn und Telefonnotizen eines Kontakts in einem Verlauf als Sprechblasen.
+    Slack läuft über die Agents: Sie tragen neue Nachrichten ein und verschicken eure Antworten aus dem Chat.
+  - **Einstellungen** neu sortiert, mit Suche, „Auf einen Blick“ und Update-Zeile.
+  - **Entfernt:** die automatische Lead-Suche (Läufe, Kartensuche, Nischen, Zeitplan, Claude-Recherche,
+    Prüf-Stapel), der Branchentest und die Lead-Prüfung. Leads suchen jetzt die Agents. Nichts wird gelöscht; die
+    alten Daten bleiben in der Datenbank.
+  - **Nach dem Update:** in der App nichts einzustellen. Den vier Grok-Bots einmal den neuen Prompt geben
+    (Einstellungen → Agents → Einrichten, Schritt „Prompts“, Kopier-Knopf). Neu darin: Slack-Nachrichten mit
+    `nachricht_eintragen` ins OS, Antworten aus dem Chat mit `nachrichten_zu_senden` abholen und mit
+    `nachricht_gesendet_melden` bestätigen; Outreach sucht Leads selbst.
+
 - Die automatischen Tests sind grün (`python -m unittest discover tests`). Die Oberfläche lief im Browser auf
   Desktop und Handy ohne Fehler.
 - Einrichtungs-Skript, Docker-Container, HTTPS über Caddy, Sicherung und Zurückspielen wurden
   echt in Docker durchgespielt, ebenso Updates aus der App (auch eine kaputte Version, die automatisch
   zurückgerollt wurde) und das Speichern von Einstellungen mit Neustart.
-- **Noch nie getestet:** die echte Kartensuche über ganz Schleswig-Holstein, echte Firmen-Webseiten, das
-  echte Postfach und ein echter KI-Schlüssel. In der Entwicklungsumgebung waren diese Dienste gesperrt.
-  Deshalb sollte der erste echte Lauf klein sein, danach die Gewichte unter „So wird bewertet“ nachjustieren.
+- **Noch nie getestet:** echte Firmen-Webseiten, das echte Postfach und ein echter KI-Schlüssel. In der
+  Entwicklungsumgebung waren diese Dienste gesperrt. (Die Kartensuche gibt es seit Stufe 13 nicht mehr.)
 
 ---
 
