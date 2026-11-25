@@ -278,6 +278,7 @@ def einstellungen():
     return render_template("agenten.html", account=g.account, agents=alle, verbindungen=je,
                            regeln=agenten.regeln(c), labels=agenten.REGEL_LABEL, arten=agenten.ARTEN,
                            rechte=freigaben.rechte(c), bereiche=firma.bereiche(c), verwalten=_verwalten(),
+                           personen=firma.aktive_personen(c),
                            basis=_basis(), einrichtung=agenten.einrichtung(c),
                            karten={a["key"]: agenten.karten_heute(c, a["key"]) for a in alle})
 

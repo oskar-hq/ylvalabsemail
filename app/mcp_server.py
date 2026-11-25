@@ -400,7 +400,18 @@ def w_lead_anlegen(c, wer, a):
     if not lead_id:
         dup = crm.find_duplicate(c, daten["name"], daten["email"], crm.website_url(daten["website"]))
         return {"angelegt": False, "grund": grund, "vorhandener_lead_id": dup["id"] if dup else None}
+    if a.get("zustaendig"):
+        _zustaendig_setzen(c, wer, lead_id, a["zustaendig"])
     return {"angelegt": True, "lead_id": lead_id}
+
+
+def _zustaendig_setzen(c, wer, lead_id, person):
+    """Zuständige Person eines Leads (owner): an sie gehen Freigaben, Aufgaben und Meldungen zu diesem Lead."""
+    from . import firma, leaddb
+    if not firma.aktive_person(c, person):
+        raise Werkzeugfehler("zustaendig: Schlüssel einer aktiven Person (personen_und_bereiche), z. B. oskar.")
+    leaddb.update_lead(c, lead_id, owner=person)
+    leaddb.add_event(c, lead_id, "note", f"Zuständig: {firma.name_von(c, person)}", author=agenten.name_von(c, wer))
 
 
 LEAD_FELDER = {"contact_name": "Ansprechperson", "email": "E-Mail", "phone": "Telefon", "website": "Webseite",
@@ -424,6 +435,10 @@ def w_lead_aendern(c, wer, a):
                 v = crm.website_url(v)
             if v != (lead.get(k) or ""):
                 neu[k] = v
+    if a.get("zustaendig") and a["zustaendig"] != lead.get("owner"):
+        _zustaendig_setzen(c, wer, lead["id"], a["zustaendig"])
+        if not neu:
+            return {"geaendert": True, "felder": ["zustaendig"]}
     if not neu:
         return {"geaendert": False}
     leaddb.update_lead(c, lead["id"], **neu)
@@ -698,14 +713,15 @@ WERKZEUGE = {
     "lead_anlegen": (
         "Lead anlegen",
         "Neuen Lead (Firma) ins CRM, Stufe „Neu“. Prüft selbst auf Dubletten (Name, E-Mail, Webseite) und meldet einen "
-        "vorhandenen Lead zurück.",
-        _obj({"name": S, "email": S, "website": S, "phone": S, "contact_name": S, "city": S, "branche": S, "note": S},
-             ["name"]), w_lead_anlegen, "leads", 2, True),
+        "vorhandenen Lead zurück. zustaendig = Schlüssel der Person, die den Lead betreut (z. B. oskar); an sie gehen "
+        "Freigaben und Aufgaben zu diesem Lead.",
+        _obj({"name": S, "email": S, "website": S, "phone": S, "contact_name": S, "city": S, "branche": S, "note": S,
+              "zustaendig": S}, ["name"]), w_lead_anlegen, "leads", 2, True),
     "lead_aendern": (
         "Lead aktualisieren",
         "Kontaktdaten eines Leads ändern (Ansprechperson, E-Mail, Telefon, Webseite, Ort, Adresse, Branche). Die Stufe "
         "geht über lead_stufe_setzen.",
-        _obj({"lead_id": I, **{k: S for k in LEAD_FELDER}}, ["lead_id"]), w_lead_aendern, ("leads", "crm"), 2, True),
+        _obj({"lead_id": I, "zustaendig": S, **{k: S for k in LEAD_FELDER}}, ["lead_id"]), w_lead_aendern, ("leads", "crm"), 2, True),
     "lead_stufe_setzen": (
         "Lead-Stufe setzen",
         "Stufe eines Leads ändern (neu, kontaktiert, antwort, gespraech, angebot, kunde, verloren). Je nach Freigabe-"

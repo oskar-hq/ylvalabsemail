@@ -69,7 +69,7 @@ Rechten; anpassbar in der App.
 | `aufgabe_aendern` | Aufgabe ändern oder zuweisen | schreibt | aufgaben (Bearbeiten) | Titel, Notiz, Termin (faellig), Priorität (1 hoch, 2 normal, 3 niedrig), Bereich oder Person einer Aufgabe ändern. Zuweisen = person setzen. |
 | `aufgabe_erledigen` | Aufgabe abhaken | schreibt | aufgaben (Bearbeiten) | Aufgabe als erledigt markieren (erledigt=false öffnet sie wieder). Nur, wenn sie wirklich erledigt ist, z. B. laut Meeting-Protokoll. |
 | `notiz_anlegen` | Notiz anlegen | schreibt | aufgaben oder leads oder crm oder kunden (Bearbeiten) | Notiz an einen Lead/Kunden (lead_id), ein Projekt (projekt_id) oder eine Aufgabe (aufgabe_id, als Kommentar). Für Gesprächsnotizen, Meeting-Ergebnisse, Recherche. |
-| `lead_anlegen` | Lead anlegen | schreibt | leads (Bearbeiten) | Neuen Lead (Firma) ins CRM, Stufe „Neu“. Prüft selbst auf Dubletten (Name, E-Mail, Webseite) und meldet einen vorhandenen Lead zurück. |
+| `lead_anlegen` | Lead anlegen | schreibt | leads (Bearbeiten) | Neuen Lead (Firma) ins CRM, Stufe „Neu“. Prüft selbst auf Dubletten (Name, E-Mail, Webseite) und meldet einen vorhandenen Lead zurück. zustaendig = Schlüssel der Person, die den Lead betreut (z. B. oskar); an sie gehen Freigaben und Aufgaben zu diesem Lead. |
 | `lead_aendern` | Lead aktualisieren | schreibt | leads oder crm (Bearbeiten) | Kontaktdaten eines Leads ändern (Ansprechperson, E-Mail, Telefon, Webseite, Ort, Adresse, Branche). Die Stufe geht über lead_stufe_setzen. |
 | `lead_stufe_setzen` | Lead-Stufe setzen | schreibt | leads oder crm (Bearbeiten) | Stufe eines Leads ändern (neu, kontaktiert, antwort, gespraech, angebot, kunde, verloren). Je nach Freigabe-Stufe direkt oder als Freigabe-Karte; „kunde“ immer als Freigabe. |
 | `aufraeumen_vorschlagen` | Alte Daten aufräumen (Vorschlag) | schreibt | einstellungen (Bearbeiten) | Schlägt vor, alle Leads außer den genannten zu entfernen (mit ihren Nachrichten, Terminen, Projekten und Aufgaben), dazu einzelne Aufgaben. Erst mit nur_ansehen=true prüfen, was wegfiele. Immer als Freigabe fürs Gründerteam; das OS löscht erst nach dem Ja. Leads mit Rechnungen oder erfasster Zeit bleiben immer. Nur auf ausdrücklichen Wunsch von Oskar oder Finn. |
@@ -176,7 +176,9 @@ Sperrliste und Erstkontakt-Regel prüft das OS schon beim Freigeben. Antworten a
 über `nachrichten_zu_senden`.
 
 Agents anlegen: Bereich „Alle Bereiche“ und Zugriff „Alles lesen und bearbeiten“ gibt einem Agent (z. B. Claude)
-Bearbeiten in jedem Modul. Freigeben und Verwalten gibt es für Agents nie.
+Bearbeiten in jedem Modul. Freigeben und Verwalten gibt es für Agents nie. Wer bei solchen Agents entscheidet, wenn
+kein Lead, Projekt oder Bereich jemanden ergibt, steht unter Einstellungen → Agents → Regeln („Zuständig, wenn kein
+Lead, Projekt oder Bereich passt“). Leads bekommen mit `zustaendig` (lead_anlegen, lead_aendern) eine Person.
 
 ## 6. Regeln für Agents (Kurzfassung)
 
