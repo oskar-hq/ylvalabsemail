@@ -27,7 +27,7 @@ from email.message import EmailMessage
 from email.utils import formataddr, formatdate, make_msgid, parseaddr, parsedate_to_datetime
 from urllib.parse import urlparse
 
-from . import ai, arbeitsbereiche, crm, emailbuild, finder, known, leaddb, mailbox, niches, regions, reports, schedule, scoring, team, \
+from . import ai, arbeitsbereiche, crm, emailbuild, finder, known, leaddb, mailbox, niches, reports, schedule, scoring, team, \
     websearch, webpush
 
 log = logging.getLogger("ylva.leads")
@@ -325,7 +325,7 @@ def stage_score(c, lead_id, learned, promote=False):
     research["nische_gewaehlt"] = bool(lead["niche"]) and lead["niche"] in (
         set(niches.load(c, "manuell")) | set(niches.load(c, "auto")))
     research["empfehlung"] = (imported or {}).get("begruendung") or ""
-    result = scoring.score(lead, research, learned, regions.bonus_info(leaddb.kv_get(c, "regionen")))
+    result = scoring.score(lead, research, learned)
     if imported:
         result["zeitfresser"] = list(dict.fromkeys([*imported.get("zeitfresser", []), *result["zeitfresser"]]))
     threshold = S("LEADS_RULE_MIN")
@@ -779,8 +779,6 @@ def _execute_run(c, run_id, run, p):
             counts["web_neu"], counts["web_gemeldet"] = new, reported
             counts["neu_gefunden"] += new
         counts["grobfilter"] += learned_filter(c)
-        ensure_boundaries(c)
-        assign_kreise(c)
 
         # Schritt 2: nach Regeln bewerten (kostenlos, nur die Webseite wird gelesen)
         learned = scoring.learned_adjustments(leaddb.category_outcomes(c))
@@ -1474,10 +1472,6 @@ def tick():
             run = c.execute("SELECT id FROM runs WHERE status='wartet' ORDER BY id LIMIT 1").fetchone()
             if run:  # ein Lauf nach dem anderen, im Arbeitsbereich, für den er gestartet wurde
                 execute_run(c, run["id"])
-            if leaddb.kv_get(c, "request:kreise"):
-                leaddb.kv_set(c, "request:kreise", False)
-                ensure_boundaries(c, force=True)
-                assign_kreise(c, everything=True)
             STATE["error"] = None if not run else STATE["error"]
         except ai.AIError as exc:
             log.warning("KI-Fehler: %s", exc)
@@ -1538,37 +1532,6 @@ def start_scheduled(c, now=None):
             break
     leaddb.kv_set(c, "schedule_state", state)
     return started
-
-
-def ensure_boundaries(c, force=False):
-    """Kreisgrenzen einmal über OpenStreetMap laden (nur für Schleswig-Holstein). Fehler halten nichts auf."""
-    if S("LEADS_REGION") != "DE-SH" or (leaddb.kv_get(c, "kreise_geo") and not force):
-        return False
-    set_activity("Lädt die Kreisgrenzen von Schleswig-Holstein (einmalig) …")
-    try:
-        geo = regions.load_boundaries(S("OVERPASS_URL"), S("LEADS_REGION"))
-    except Exception as exc:
-        log.warning("Kreisgrenzen nicht geladen: %s", exc)
-        STATE["error"], STATE["error_at"] = f"Kreisgrenzen konnten nicht geladen werden ({exc}).", time.time()
-        return False
-    if len(geo) < 10:  # unvollständig: lieber nicht speichern
-        log.warning("Nur %s Kreise in der Antwort, Grenzen nicht gespeichert", len(geo))
-        return False
-    leaddb.kv_set(c, "kreise_geo", geo)
-    return True
-
-
-def assign_kreise(c, everything=False):
-    """Jedem Betrieb mit Koordinaten seinen Kreis zuordnen (Punkt in Kreisgrenze)."""
-    geo = leaddb.kv_get(c, "kreise_geo")
-    if not geo:
-        return 0
-    where = "lat IS NOT NULL" + ("" if everything else " AND kreis IS NULL")
-    rows = c.execute(f"SELECT id, lat, lon FROM leads WHERE {where}").fetchall()
-    for r in rows:
-        c.execute("UPDATE leads SET kreis=? WHERE id=?", (regions.kreis_of(geo, r["lat"], r["lon"]), r["id"]))
-    c.commit()
-    return len(rows)
 
 
 def recheck_lead(c, lead_id):

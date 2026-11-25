@@ -183,7 +183,7 @@ i.new{background:var(--blue)}
 .crumbs{margin:0 0 14px}
 .crumbs a{color:var(--muted);font:500 14px var(--sans)}
 .crumbs a:hover{color:var(--ink)}
-.side-block,.chat-wrap,.draft,.hist,.history,.checks,.checks li,.costs,.tasks li,table.stats th,table.stats td,.change,.hotspots>li,.col-head{border-color:var(--line)}
+.side-block,.chat-wrap,.draft,.hist,.history,.checks,.checks li,.costs,.tasks li,table.stats th,table.stats td,.change,.col-head{border-color:var(--line)}
 .side-block{border-top:0;background:var(--s1);border-radius:14px;padding:16px 18px;margin-bottom:12px}
 .draft{border-top:0}
 .msg{background:var(--s2);border-radius:14px}
@@ -204,7 +204,6 @@ dialog::backdrop{background:var(--backdrop)}
 .check-btn:hover{background:var(--good);border-color:var(--good);color:var(--canvas)}
 .login .band{display:none}
 .login-card h1{text-transform:none;font:700 clamp(40px,7vw,60px)/1 var(--display);letter-spacing:-.035em}
-.map{border:0;border-radius:14px}
 
 /* Segment-Schalter (Reiter) */
 .segmented{display:inline-flex;gap:2px;padding:3px;background:var(--s3);border-radius:10px;margin:0 0 20px;max-width:100%;overflow-x:auto;scrollbar-width:none}

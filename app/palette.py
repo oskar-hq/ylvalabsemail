@@ -34,7 +34,6 @@ PAGES = [
     ("CRM als Tabelle", "CRM", "crm.board", {"ansicht": "tabelle"}, "tabelle liste sortieren"),
     ("Postfach", "CRM", "crm.inbox", {}, "antworten mails inbox nachrichten"),
     ("Neue Mail schreiben", "Postfach", "crm.compose_mail", {}, "mail senden schreiben email neue nachricht"),
-    ("Karte", "CRM", "crm.heatmap", {}, "map heatmap orte kreise"),
     ("CRM exportieren", "CRM", "crm.export_csv", {}, "export csv excel download"),
     ("Mailer", "Mailer", "compose", {}, "mail schreiben newsletter verschicken"),
     ("Verlauf des Mailers", "Mailer", "history", {}, "gesendet history verlauf"),

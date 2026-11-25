@@ -22,7 +22,6 @@ FAIL_HINTS = {
                           "Die Firewall des Servers muss ausgehend Port 465 bzw. 587 erlauben.",
     "Posteingang (IMAP)": "IMAP_HOST prüfen (Strato: imap.strato.de) und ausgehend Port 993 erlauben.",
     "KI-Schlüssel und Modelle": "Schlüssel in console.anthropic.com prüfen; der Server muss api.anthropic.com erreichen.",
-    "Kreise und Wachstumszahlen": "Datenbank prüfen; notfalls CRM → Karte → Kreisgrenzen neu laden.",
     "Kartensuche (OpenStreetMap)": "Der Server muss overpass-api.de erreichen. Ist der Dienst überlastet, später erneut prüfen.",
     "Webseiten lesen": "Der Server muss ausgehend beliebige Webseiten über HTTPS (Port 443) erreichen.",
     "Datenordner": "Rechte des Datenordners prüfen (Docker: Volume mailer-data).",
@@ -111,24 +110,6 @@ def run(settings, smtp_connect, sent_folder, data_dir):
                 return FAIL, f"Modell {model} nicht verfügbar: {exc}", "AI_MODEL / AI_MODEL_ANALYSE in der .env prüfen."
         return OK, "Schlüssel gültig, freigeschaltet: " + ", ".join(models), None
 
-    def regions_check():
-        if S["LEADS_REGION"] != "DE-SH":
-            return OK, f"Suchgebiet: Umkreis {S['LEADS_RADIUS_KM']:g} km (keine Kreisdaten nötig)", None
-        c = leaddb.connect(data_dir / "mailer.db")
-        try:
-            geo = leaddb.kv_get(c, "kreise_geo")
-            store = leaddb.kv_get(c, "regionen", {}) or {}
-        finally:
-            c.close()
-        stand = " ".join((store.get("stand") or {}).values())
-        if not geo:
-            return WARN, "Kreisgrenzen noch nicht geladen", \
-                "Werden beim ersten Lauf automatisch über OpenStreetMap geladen (oder CRM → Karte)."
-        if not (store.get("gewerbe") or store.get("bau")) or "erfunden" in stand:
-            return WARN, f"Kreisgrenzen da ({len(geo)} Kreise), aber keine echten Wachstumszahlen", \
-                "CRM → Karte: Gewerbeanmeldungen und Baugenehmigungen als CSV vom Statistikamt Nord importieren."
-        return OK, f"{len(geo)} Kreise, Wachstumszahlen: {stand or 'importiert'}", None
-
     def overpass_check():
         url = S["OVERPASS_URL"].rsplit("/", 1)[0] + "/status"
         req = urllib.request.Request(url, headers={"User-Agent": finder.USER_AGENT})
@@ -189,7 +170,7 @@ def run(settings, smtp_connect, sent_folder, data_dir):
     checks = [
         ("Grundeinstellungen", config), ("HTTPS-Adresse", https), ("Datenordner", storage),
         ("Postausgang (SMTP)", smtp_check), ("Posteingang (IMAP)", imap_check), ("KI-Schlüssel und Modelle", ai_check),
-        ("Kartensuche (OpenStreetMap)", overpass_check), ("Kreise und Wachstumszahlen", regions_check), ("Webseiten lesen", web_check), ("Push-Benachrichtigungen", push_check),
+        ("Kartensuche (OpenStreetMap)", overpass_check), ("Webseiten lesen", web_check), ("Push-Benachrichtigungen", push_check),
 ("Budget und Versand", budget_check), ("Updates aus der App", updater_check), ("Hintergrund-Arbeiter", worker_check),
     ]
     return [_check(name, func) for name, func in checks]

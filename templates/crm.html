@@ -14,7 +14,6 @@
           <button type="button" id="importBtn">CSV importieren</button>
           <a href="{{ url_for('crm.export_csv') }}">CSV exportieren</a>
           <a href="{{ url_for('crm.board', ansicht='tabelle') if view == 'board' else url_for('crm.board') }}">{{ 'Als Tabelle anzeigen' if view == 'board' else 'Als Board anzeigen' }}</a>
-          <a href="{{ url_for('crm.heatmap') }}">Karte</a>
           <a href="{{ url_for('leads.search') }}">Neue Betriebe finden</a>
         </div>
       </details>
@@ -96,7 +95,7 @@
             <select class="row-move" aria-label="Stufe ändern">{% for k, l, _ in stages %}<option value="{{ k }}" {{ 'selected' if k == key }}>{{ l }}</option>{% endfor %}</select></td>
           <td>{{ p.kategorie }}</td>
           <td>{{ p.groesse or '–' }}</td>
-          <td>{{ p.ort or '–' }}{% if p.kreis %}<span class="t-sub">{{ p.kreis }}</span>{% endif %}</td>
+          <td>{{ p.ort or '–' }}</td>
           <td class="num" data-v="{{ p.km if p.km is not none else 9999 }}">{{ p.km|round|int if p.km is not none else '–' }}</td>
           <td class="num" data-v="{{ p.punkte if p.punkte is not none else -1 }}">{{ p.punkte if p.punkte is not none else '–' }}</td>
           <td>{{ p.kontakt or '–' }}</td>
