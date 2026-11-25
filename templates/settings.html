@@ -82,6 +82,7 @@
   <ul class="menu">
     {{ zeile(url_for('settings.software'), icon('software'), 'Software und Updates', ('Version ' ~ up.version.version) if up.version and up.version.version else 'Version und neue Updates', 'Update' if up.version and up.version.behind else None, worte='aktualisieren') }}
     {{ zeile(url_for('settings.backup_page'), icon('sicherung'), 'Sicherung', 'Herunterladen, zurückspielen', worte='backup') }}
+    {% if admin %}{{ zeile(url_for('settings.aufraeumen_seite'), osi('protokoll'), 'Alte Daten entfernen', 'Neustart: alte Leads, Projekte und Aufgaben löschen', worte='aufräumen löschen neustart') }}{% endif %}
     {{ zeile(url_for('leads.system'), icon('system'), 'Systemcheck', 'Ist alles eingerichtet?', worte='fehler status') }}
     {{ zeile(url_for('settings.access'), icon('zugang'), 'Zugang und Sicherheit', 'Anmeldung mit dem Postfach, Notfall-Zugang', worte='login domain') }}
     {% if darf('protokoll') %}{{ zeile(url_for('personen.protokoll'), osi('protokoll'), 'Firmen-Protokoll', 'Wer hat wann was geändert', worte='log verlauf') }}{% endif %}

@@ -3528,3 +3528,27 @@ class AufgabenstapelWebTest(WebBasis):
         c.execute("UPDATE messages SET versand=NULL WHERE lead_id=?", (lid,))
         c.commit()
         self.assertEqual(self.client.get(f"/crm/postfach/{lid}").headers["Location"], f"/chat/{lid}")
+
+
+class AufraeumenWebTest(WebBasis):
+    """Stufe 15: Neustart über Einstellungen → Alte Daten entfernen (nur mit „Einstellungen: Verwalten“)."""
+
+    def test_seite_und_loeschen(self):
+        c = self.c
+        alt = lead_anlegen(c, "Uralt Tischlerei", stage="kontaktiert")
+        neu = lead_anlegen(c, "Frische Filmproduktion", stage="neu")
+        bleiben = [r[0] for r in c.execute("SELECT id FROM leads WHERE id != ?", (alt,))]
+        html = self.client.get(f"/einstellungen/aufraeumen?behalten={neu}").get_data(as_text=True)
+        self.assertIn("Alte Daten entfernen", html)
+        self.assertIn("Uralt Tischlerei", html)
+        self.assertIn("Alte Daten entfernen", self.client.get("/einstellungen").get_data(as_text=True))
+        self.als("hamza")
+        self.assertEqual(self.post("/einstellungen/aufraeumen", {"behalten": [str(neu)]}).status_code, 403)
+        self.als("oskar")
+        r = self.post("/einstellungen/aufraeumen", {"behalten": [str(x) for x in bleiben]})
+        self.assertEqual(r.status_code, 302)
+        self.assertIsNone(leaddb.get_lead(c, alt, alle=True))
+        self.assertTrue(leaddb.get_lead(c, neu, alle=True))
+        self.addCleanup(lambda: (c.execute("DELETE FROM leads WHERE id=?", (neu,)), c.commit()))
+        from app import main
+        self.assertTrue(list(main.SETTINGS["DATA_DIR"].glob("vor-aufraeumen-*.tar.gz")))
