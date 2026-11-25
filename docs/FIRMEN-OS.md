@@ -772,7 +772,8 @@ Die Reihenfolge 2 und 3 kann getauscht werden, je nachdem, was im Alltag zuerst 
 
 ---
 
-- [ ] **Stufe 11 – Outreach für Kunden (Arbeitsbereiche)** (geplant 25.11.2026 mit Oskar und Finn)
+- [x] **Stufe 11 – Outreach für Kunden (Arbeitsbereiche)** (geplant 25.11.2026 mit Oskar und Finn, gebaut 25.11.2026,
+  Abweichungen unten)
   Ziel: Auf einem Server machen wir Outreach für uns **und** für mehrere zahlende Kunden gleichzeitig.
   Entschieden:
   - **Arbeitsbereich je Kunde** (eine App, eine Datenbank): Oben wählt man den Arbeitsbereich („Ylva Labs“,
@@ -784,6 +785,37 @@ Die Reihenfolge 2 und 3 kann getauscht werden, je nachdem, was im Alltag zuerst 
   - **Kunden sehen ihre Ergebnisse im Kunden-Bereich** (angeschrieben, Antworten, Termine, interessierte Kontakte);
     Freigaben bleiben bei uns.
   - Abrechnung über das Projekt des Kunden (Pauschale, Finanzen aus Stufe 8). Bauplan: docs/BAU-UEBERGABE.md.
+
+  *Umsetzung und Abweichungen:*
+  - Modul `app/arbeitsbereiche.py`, Seiten `app/arbeitsbereiche_views.py` (Einstellungen → Arbeitsbereiche, Rechte-Modul
+    „Einstellungen“). Startwert `ylva`; alle bisherigen Daten gehören dazu.
+  - **Trennung:** aktiver Arbeitsbereich als ContextVar (`arbeitsbereiche.im(key)`, je Anfrage aus der Sitzung, im
+    Arbeiter je Schleife), in SQL als Funktion `ab()`. Spalte `arbeitsbereich` an `leads`, `runs`, `ai_usage`, `signals`,
+    `brain_versions`, `known_firms`; neue Zeilen bekommen sie über temporäre Trigger (`leaddb.AB_TABELLEN`).
+    Wiedervorlagen, Nachrichten und Ergebnisse der Läufe hängen über den Lead bzw. Lauf dran (kein eigenes Feld,
+    anders als im Plan für `tasks` und `run_results`). `get_lead` gibt nur Leads des aktiven Arbeitsbereichs zurück;
+    Firmen-OS-Module (Projekte, Kalender, Finanzen, Kunden-Bereich, Angebote) lesen mit `alle=True`.
+  - Werte der Akquise in `kv` (Sperrliste, Nischen, Zeitplan, Postfach-Stand …) je Arbeitsbereich über `leaddb.AB_KV`
+    mit Präfix `ab:<key>:`. Derselbe Betrieb darf für uns und für einen Kunden ein Lead sein (`source_id` bekommt bei
+    Kunden `@ab:<key>`).
+  - **Einstellungen je Kunde** in `arbeitsbereiche.einstellungen` (`FELDER`); `agent.S()` liest sie zuerst. Felder ohne
+    Rückfall (Firmenname, Unterschrift, Fußzeile, Erstkontakt) gelten nie von Ylva Labs. Das **Akquise-Postfach** ist ein
+    Postfach aus Stufe 9 (`postfach_id`), nicht ein Kennzeichen am Postfach; der Posteingang ruft es nicht selbst ab,
+    sondern der Arbeiter mit der vollen Akquise-Logik (Einordnen, Nachfassen). Absender bei Kunden ist immer der
+    Kunde (keine Personen-Unterschrift, keine eigenen Vorlagen der Personen).
+  - **Gehirn:** Kunden starten mit `app/brain_seed_kunde.md` (Gerüst zum Ausfüllen), nie mit dem von Ylva Labs.
+  - **Zugriff:** Liste der Personen je Arbeitsbereich (leer = alle mit Leads- oder CRM-Recht); wer Personen verwaltet,
+    sieht alle. Links auf Leads anderer Arbeitsbereiche wechseln (GET) oder geben 404.
+  - **Meldungen** sind gemeinsam, bei Kunden mit Namen davor (kein eigenes Feld an `notices`). Freigaben zeigen
+    „Erstkontakt-Entwurf für <Kunde>“ und nur Personen, die dort arbeiten dürfen.
+  - **KPIs im Cockpit** zählen nur Ylva Labs (unsere Firma); KI-Kosten im Cockpit und das Budget einer Person über alle.
+  - **Kunden-Bereich:** Abschnitt „Outreach“ und Zeile im Wochenbericht (Regel `zeige_outreach`). **Rechnung:**
+    Positionen „Outreach“ (Pauschale `PAUSCHALE_EUR`) und optional KI-Kosten des Vormonats (`KI_WEITERBERECHNEN`).
+  - Zusätzlich auf Wunsch von Oskar: **Postfach-Ordner** (Gespräche, Sonstige, Fehler; Fehler-Mails auch im
+    Mailprogramm in den Ordner „Fehler“, Einstellung `FEHLER_ORDNER`; Meldungen nur für Angeschriebene) und die
+    **Karte entfernt** (Kartenseite, Leaflet, Kreisgrenzen, Regionen-Import, Wachstums-Zuschlag; `regions.py` weg,
+    die Spalte `leads.kreis` bleibt ungenutzt stehen).
+  - Offen: Kunden-Arbeitsbereich mit echtem Postfach testen; Abmeldelink in Kunden-Mails, sobald der Anwalt sagt, wie.
 
 ## 9. Was das OS ausdrücklich nicht sein soll
 
