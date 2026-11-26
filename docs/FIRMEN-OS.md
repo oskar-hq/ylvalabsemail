@@ -997,3 +997,5 @@ Bitte direkt hier beantworten (Antwort: …), dann wird der Plan angepasst.
 9. **Wer darf Personen und Rechte verwalten?** Vorschlag: Oskar und Finn als Gründer; Hamza und Omid nicht, bis ihr
    Status geklärt ist. In der App später jederzeit änderbar.
    Antwort (01.11.2026): So machen wir es, Oskar und Finn.
+
+**Stand übernehmen (26.11.2026):** Projekte, die schon vor dem OS liefen, lassen sich direkt auf ihre echte Phase setzen (Projekt → „Stand übernehmen“, mit Beauftragt-, Bau-, Live- und Betriebsdatum). Agents schlagen das mit `projekt_status_vorschlagen` vor (Ziel beliebig, optional Daten, Preise, Anforderung); nach dem Ja übernimmt das OS den Stand und schließt die Aufgaben übersprungener Schritte.

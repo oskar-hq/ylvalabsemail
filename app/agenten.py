@@ -1126,8 +1126,12 @@ def _ausfuehren(c, wer, fid, data_dir=None):
             if p and idx + 1 < len(projekte.STATUS_KEYS) and projekte.STATUS_KEYS[idx + 1] == akt["ziel"]:
                 projekte.weiter(c, f["entschieden_von"], p["id"], f"vorgeschlagen von {a_name}")
                 return _ausfuehrung_setzen(c, fid, "ausgefuehrt", f"Projekt: {projekte.STATUS_LABEL[akt['ziel']]}.")
-            return _ausfuehrung_setzen(c, fid, "bitte_ausfuehren", "Nicht der nächste Schritt: bitte im Projekt von "
-                                       "Hand weiterschalten.")
+            if p and akt["ziel"] in projekte.STATUS_KEYS:  # Stand übernehmen: Mensch hat genau diese Phase bestätigt
+                projekte.stand_setzen(c, f["entschieden_von"], p["id"], akt["ziel"], akt.get("daten") or {},
+                                      f"vorgeschlagen von {a_name}")
+                return _ausfuehrung_setzen(c, fid, "ausgefuehrt",
+                                           f"Stand übernommen: {projekte.STATUS_LABEL[akt['ziel']]}.")
+            return _ausfuehrung_setzen(c, fid, "bitte_ausfuehren", "Dieses Projekt gibt es nicht mehr.")
         if v.get("entwurf_id"):
             c.execute("UPDATE agent_entwuerfe SET status='freigegeben' WHERE id=?", (v["entwurf_id"],))
             c.commit()

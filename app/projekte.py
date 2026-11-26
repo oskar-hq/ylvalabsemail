@@ -333,6 +333,71 @@ def _setze_status(c, wer, p, nach, extra=None):
     leaddb.add_event(c, p["lead_id"], "status", f"Projekt: {STATUS_LABEL[nach]}.", author=firma.name_von(c, wer))
 
 
+# Datumsfelder, die beim Übernehmen eines laufenden Projekts nachgetragen werden dürfen
+STAND_DATEN = ("beauftragt_am", "bau_start", "bau_ende_plan", "live_am", "betrieb_am")
+
+
+def _datum(v):
+    if v in (None, ""):
+        return None
+    try:
+        return date.fromisoformat(str(v).strip()[:10]).isoformat()
+    except ValueError as exc:
+        raise ProjektError("Datum bitte als JJJJ-MM-TT.") from exc
+
+
+def stand_setzen(c, wer, pid, ziel, daten=None, notiz=""):
+    """Stand übernehmen: ein Projekt, das schon vor dem OS lief (oder weiter ist als eingetragen), direkt auf seine
+    echte Phase setzen, ohne die Schritte einzeln zu durchlaufen. Trägt Daten (Beauftragt, Live, Betrieb …),
+    Preise und Anforderung mit nach. Aufgaben übersprungener Schritte schließt das OS. Nur Menschen mit
+    „Kunden: Verwalten“ oder die verantwortliche Person; Agents nur über eine Freigabe."""
+    from . import firma
+    p = get(c, pid)
+    if not p:
+        raise ProjektError("Dieses Projekt gibt es nicht.")
+    if ziel not in STATUS_KEYS or ziel == "beendet":
+        raise ProjektError("Phase: " + ", ".join(k for k in STATUS_KEYS if k != "beendet") + ".")
+    if wer != p["verantwortlich"] and not firma.darf(c, wer, "kunden", firma.VERWALTEN):
+        raise ProjektError("Den Stand setzt die verantwortliche Person.")
+    daten = daten or {}
+    extra = {k: _datum(daten.get(k)) for k in STAND_DATEN if daten.get(k)}
+    for k in ("preis_einmal", "pauschale_monat"):
+        if daten.get(k) not in (None, ""):
+            extra[k] = _zahl(daten[k])
+    if (daten.get("anforderung") or "").strip():
+        extra["anforderung"] = daten["anforderung"].strip()[:20000]
+    pos = STATUS_KEYS.index(ziel)
+    if pos >= STATUS_KEYS.index("bau") and (extra.get("anforderung") or p["anforderung"]):
+        extra.setdefault("kunde_bestaetigt_am", p["kunde_bestaetigt_am"] or now())
+    heute = now()
+    if pos >= STATUS_KEYS.index("bau"):
+        extra.setdefault("bau_start", p["bau_start"] or extra.get("beauftragt_am") or heute)
+    if pos >= STATUS_KEYS.index("live"):
+        extra.setdefault("live_am", p["live_am"] or heute)
+    if ziel == "betrieb":
+        extra.setdefault("betrieb_am", p["betrieb_am"] or extra.get("live_am") or heute)
+    # Aufgaben der übersprungenen und der verlassenen Schritte schließen (die des Ziels bleiben)
+    for schritt in STATUS_KEYS[:pos]:
+        for praefix in SCHRITT_AUFGABEN.get(schritt, ()):
+            c.execute("UPDATE aufgaben SET status='erledigt', erledigt_am=?, erledigt_von=? WHERE objekt_typ='projekt' "
+                      "AND objekt_id=? AND quelle='projekt' AND status='offen' AND titel LIKE ?",
+                      (heute, wer, pid, praefix + "%"))
+    if ziel == "abnahme" and not p["punkte"]:
+        for i, text in enumerate(regeln(c)["checkliste"]):
+            c.execute("INSERT INTO abnahme_punkte (projekt_id, text, sort) VALUES (?,?,?)", (pid, text, i))
+    felder = {"status": ziel, **extra}
+    c.execute(f"UPDATE projekte SET {', '.join(k + '=?' for k in felder)} WHERE id=?", [*felder.values(), pid])
+    from . import leaddb
+    firma.log(c, wer, "projekt", "projekt", pid,
+              f"{p['titel']}: Stand übernommen, {STATUS_LABEL[p['status']]} → {STATUS_LABEL[ziel]}"
+              + (f" ({notiz[:200]})" if notiz else ""),
+              {"von": p["status"], "nach": ziel, **{k: v for k, v in extra.items() if k != "anforderung"}})
+    leaddb.add_event(c, p["lead_id"], "status", f"Projekt: {STATUS_LABEL[ziel]} (Stand übernommen).",
+                     author=firma.name_von(c, wer))
+    c.commit()
+    return get(c, pid)
+
+
 def weiter(c, wer, pid, notiz=""):
     """Nächster Schritt der Customer Journey, mit den Regeln je Schritt."""
     from . import aufgaben, firma

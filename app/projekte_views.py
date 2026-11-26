@@ -114,6 +114,11 @@ def aktion(pid):
             if vorher == "abnahme" and p["status"] == "bau":
                 return _fertig("Nicht alles abgehakt: zurück in den Bau. Die Technik hat eine Aufgabe.", ziel)
             text = f"Weiter: {p['status_label']}."
+        elif was == "stand":
+            p = projekte.stand_setzen(c, me(), pid, f.get("ziel", ""),
+                                      {k: f.get(k) for k in (*projekte.STAND_DATEN, "preis_einmal", "pauschale_monat")},
+                                      f.get("notiz", ""))
+            text = f"Stand übernommen: {p['status_label']}."
         elif was == "aendern":
             projekte.aendern(c, me(), pid, **{k: f[k] for k in ("titel", "preis_einmal", "pauschale_monat",
                                                                 "verantwortlich", "technik", "anforderung") if k in f})

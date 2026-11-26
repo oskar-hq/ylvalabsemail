@@ -502,9 +502,26 @@ def w_projekt_status(c, wer, a):
         raise Werkzeugfehler("Dieses Projekt gibt es nicht.")
     if a["ziel"] not in projekte.STATUS_KEYS:
         raise Werkzeugfehler("Phase: " + ", ".join(projekte.STATUS_KEYS) + ".")
-    aktion = {"typ": "projekt_status", "projekt_id": p["id"], "ziel": a["ziel"]}
-    r = agenten.anfragen(c, wer, "status", f"Projekt: {projekte.STATUS_LABEL[a['ziel']]}"[:60],
-                         a.get("begruendung") or f"{p['kunde']}: weiter auf „{projekte.STATUS_LABEL[a['ziel']]}“.",
+    if a["ziel"] == "beendet":
+        raise Werkzeugfehler("Beenden macht ein Mensch im Projekt („Kunde beendet“).")
+    daten = {k: a[k] for k in (*projekte.STAND_DATEN, "preis_einmal", "pauschale_monat", "anforderung")
+             if a.get(k) not in (None, "")}
+    for k in projekte.STAND_DATEN:  # früh prüfen, damit die Karte nicht erst beim Ja scheitert
+        if k in daten:
+            try:
+                daten[k] = projekte._datum(daten[k])
+            except projekte.ProjektError as exc:
+                raise Werkzeugfehler(f"{k}: {exc}") from exc
+    aktion = {"typ": "projekt_status", "projekt_id": p["id"], "ziel": a["ziel"], **({"daten": daten} if daten else {})}
+    naechster = projekte.STATUS_KEYS.index(p["status"]) + 1 == projekte.STATUS_KEYS.index(a["ziel"]) \
+        if p["status"] in projekte.STATUS_KEYS else False
+    text = a.get("begruendung") or (f"{p['kunde']}: weiter auf „{projekte.STATUS_LABEL[a['ziel']]}“." if naechster else
+                                    f"{p['kunde']}: Stand übernehmen, {p['status_label']} → "
+                                    f"{projekte.STATUS_LABEL[a['ziel']]}.")
+    if daten:
+        text += " Daten: " + ", ".join(f"{k}={v}" for k, v in daten.items() if k != "anforderung") \
+            + (" + Anforderung" if "anforderung" in daten else "")
+    r = agenten.anfragen(c, wer, "status", f"Projekt: {projekte.STATUS_LABEL[a['ziel']]}"[:60], text,
                          projekt_id=p["id"], aktion=aktion, frist=a.get("frist"),
                          dringlichkeit=a.get("dringlichkeit") or "normal")
     return {"als_freigabe": r}
@@ -738,9 +755,12 @@ WERKZEUGE = {
               "begruendung": S, "nur_ansehen": B}, ["behalten_lead_ids"]), w_aufraeumen, "einstellungen", 2, True),
     "projekt_status_vorschlagen": (
         "Projekt weiterschalten (Vorschlag)",
-        "Schlägt vor, ein Projekt in die nächste Phase zu schalten. Immer als Freigabe; das OS schaltet nach dem Ja "
-        "selbst weiter, wenn es der nächste Schritt ist.",
-        _obj({"projekt_id": I, "ziel": S, "begruendung": S, "frist": S, "dringlichkeit": DRING},
+        "Schlägt vor, ein Projekt in eine Phase zu schalten. Immer als Freigabe; nach dem Ja schaltet das OS selbst. "
+        "Ist das Ziel nicht der nächste Schritt (Projekt lief schon vor dem OS), übernimmt das OS den Stand direkt, "
+        "mit den optionalen Daten (JJJJ-MM-TT) und Preisen.",
+        _obj({"projekt_id": I, "ziel": S, "begruendung": S, "frist": S, "dringlichkeit": DRING,
+              "beauftragt_am": S, "bau_start": S, "bau_ende_plan": S, "live_am": S, "betrieb_am": S,
+              "preis_einmal": {"type": "number"}, "pauschale_monat": {"type": "number"}, "anforderung": S},
              ["projekt_id", "ziel"]), w_projekt_status, "kunden", 2, True),
     "entwurf_anlegen": (
         "Entwurf anlegen",

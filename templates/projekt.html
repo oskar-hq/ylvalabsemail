@@ -244,6 +244,7 @@
   <section class="os-section">
     <ul class="os-list">
       <li><a class="os-row" href="#" data-sheet="sheet-projekt"><span class="os-ico">{{ i('aufgabe') }}</span><span class="os-txt"><b>Projekt bearbeiten</b><span>Titel, Preise, Verantwortlich, Technik</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>
+      <li><a class="os-row" href="#" data-sheet="sheet-stand" data-testid="projekt-stand"><span class="os-ico">{{ i('pfeil') }}</span><span class="os-txt"><b>Stand übernehmen</b><span>Projekt läuft schon weiter: Phase und Daten direkt setzen</span></span><span class="os-chev">{{ i('chev') }}</span></a></li>
       <li><a class="os-row danger" href="#" data-sheet="sheet-beenden"><span class="os-ico red">–</span><span class="os-txt"><b>Kunde beendet</b><span>Projekt abschließen, Daten bleiben</span></span></a></li>
     </ul>
   </section>
@@ -334,6 +335,20 @@
     <label class="os-field"><span>Technik</span><select name="technik">{% for x in personen %}<option value="{{ x.key }}" {{ 'selected' if x.key == p.technik }}>{{ x.name }}</option>{% endfor %}</select></label>
   </div>
   {{ fuss() }}</form>
+{% endcall %}
+{% call sheet('sheet-stand', 'Stand übernehmen') %}
+<form method="post" action="{{ url_for('kunden.aktion', pid=p.id) }}" data-os-fetch="reload">
+  <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="was" value="stand">
+  <p class="os-caption">Für Projekte, die schon vor dem OS liefen oder weiter sind als eingetragen. Die Schritte dazwischen werden übersprungen, ihre offenen Aufgaben geschlossen.</p>
+  <label class="os-field"><span>Echte Phase</span><select name="ziel">{% for k, n, _ in status if k != 'beendet' %}<option value="{{ k }}" {{ 'selected' if k == p.status }}>{{ n }}</option>{% endfor %}</select></label>
+  <div class="os-grid2">
+    <label class="os-field"><span>Beauftragt am</span><input type="date" name="beauftragt_am" value="{{ (p.beauftragt_am or '')[:10] }}"></label>
+    <label class="os-field"><span>Bau seit</span><input type="date" name="bau_start" value="{{ (p.bau_start or '')[:10] }}"></label>
+    <label class="os-field"><span>Live seit</span><input type="date" name="live_am" value="{{ (p.live_am or '')[:10] }}"></label>
+    <label class="os-field"><span>Im Betrieb seit</span><input type="date" name="betrieb_am" value="{{ (p.betrieb_am or '')[:10] }}"></label>
+  </div>
+  <label class="os-field"><span>Warum (optional)</span><input type="text" name="notiz" maxlength="200"></label>
+  {{ fuss('Übernehmen') }}</form>
 {% endcall %}
 {% call sheet('sheet-beenden', 'Kunde beendet') %}
 <form method="post" action="{{ url_for('kunden.aktion', pid=p.id) }}" data-os-fetch="reload">
