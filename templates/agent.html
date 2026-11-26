@@ -58,6 +58,13 @@
     {% if verwalten %}<form method="post" action="{{ url_for('agenten.alles', key=a.key) }}" data-os-fetch="reload" style="margin-top:12px">
       <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
       <button class="os-btn small quiet">Alles lesen und bearbeiten erlauben</button></form>{% endif %}
+    <div class="os-row" style="margin-top:20px;gap:14px">
+      <span class="os-txt"><b>Intern direkt ändern</b><span>Projektphasen, Projektdaten und Lead-Stufen sofort ändern, ohne Freigabe-Karte. Mails, Nachrichten und Angebote brauchen weiter eure Freigabe.</span></span>
+      {% if verwalten %}<form method="post" action="{{ url_for('agenten.direkt', key=a.key) }}" data-os-fetch="reload">
+        <input type="hidden" name="_csrf" value="{{ csrf_token() }}"><input type="hidden" name="an" value="{{ '0' if a.direkt else '1' }}">
+        <button class="os-btn small {{ 'ink' if a.direkt else 'quiet' }}" data-testid="agent-direkt">{{ 'An' if a.direkt else 'Aus' }}</button></form>
+      {% else %}<span class="os-caption">{{ 'An' if a.direkt else 'Aus' }}</span>{% endif %}
+    </div>
   </section>
 
   <section class="os-section">

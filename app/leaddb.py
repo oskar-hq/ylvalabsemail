@@ -204,6 +204,8 @@ MIGRATIONS = [
     # Stufe 13: Antworten über Slack, WhatsApp, LinkedIn warten auf den Versand durch einen Agent
     "ALTER TABLE messages ADD COLUMN versand TEXT",
     "ALTER TABLE leads ADD COLUMN chat_aus TEXT",
+    # Agents mit „Intern direkt ändern“: interne Daten ohne Freigabe (nach außen bleibt alles Freigabe)
+    "ALTER TABLE agenten ADD COLUMN direkt INTEGER NOT NULL DEFAULT 0",
 ]
 
 # Laufen genau einmal (Zähler in kv „data_version“). Nur hinten anfügen.
@@ -283,6 +285,8 @@ DATA_MIGRATIONS = [
     *arbeitsbereiche.SEED,
     # Stufe 12: die vier Grok-Bots als Agenten-Konten (Rechte, Bereich und Limits danach unter Einstellungen → Agenten)
     *agenten.SEED,
+    # 26.11.2026, Oskar: Claude soll im OS umfangreich selbst eintragen und ändern dürfen
+    "UPDATE agenten SET direkt=1 WHERE key='claude'",
 ]
 
 # Tabellen, deren neue Zeilen automatisch den aktiven Arbeitsbereich bekommen (Trigger in connect)

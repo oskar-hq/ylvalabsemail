@@ -352,6 +352,23 @@ def alles_erlauben(c, wer, key):
               "(nicht freigeben)", {"rechte": "alle_bearbeiten"})
 
 
+def direkt(c, wer):
+    """Darf dieser Agent interne Daten (Projektphase, Projektdaten, Lead-Stufe) ohne Freigabe ändern?
+    Nach außen (Mails, Nachrichten, Angebote) gilt das nie."""
+    a = get(c, wer)
+    return bool(a and a["status"] == "aktiv" and a.get("direkt"))
+
+
+def direkt_setzen(c, wer, key, an):
+    from . import firma
+    a = get(c, key)
+    if not a:
+        raise AgentError("Diesen Agent gibt es nicht.")
+    c.execute("UPDATE agenten SET direkt=? WHERE key=?", (1 if an else 0, a["key"]))
+    firma.log(c, wer, "agent", "agent", a["key"], f"Agent {a['name']}: interne Daten "
+              + ("direkt ändern erlaubt" if an else "nur noch über Freigaben"), {"direkt": bool(an)})
+
+
 def status_setzen(c, wer, key, status):
     from . import firma
     a = get(c, key)

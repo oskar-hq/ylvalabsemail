@@ -458,7 +458,7 @@ def w_lead_stufe(c, wer, a):
         stufe = "C"
     else:
         stufe = freigaben.stufe(c, "agent_lead_stufe")
-    if stufe == "A":
+    if stufe == "A" or (agenten.direkt(c, wer) and a["stufe"] != "kunde"):
         crm.set_stage(c, lead["id"], a["stufe"], author=agenten.name_von(c, wer), note=a.get("begruendung") or "")
         return {"gesetzt": True, "stufe": a["stufe"]}
     aktion = {"typ": "lead_stufe", "lead_id": lead["id"], "ziel": a["stufe"]}
@@ -512,6 +512,13 @@ def w_projekt_status(c, wer, a):
                 daten[k] = projekte._datum(daten[k])
             except projekte.ProjektError as exc:
                 raise Werkzeugfehler(f"{k}: {exc}") from exc
+    if agenten.direkt(c, wer):  # „Intern direkt ändern“: sofort, ohne Karte
+        try:
+            neu = projekte.stand_setzen(c, wer, p["id"], a["ziel"], daten, a.get("begruendung") or "", erlaubt=True)
+        except projekte.ProjektError as exc:
+            raise Werkzeugfehler(str(exc)) from exc
+        return {"gesetzt": True, "phase": neu["status"], "projekt": {k: neu.get(k) for k in (
+            "beauftragt_am", "bau_start", "bau_ende_plan", "live_am", "betrieb_am", "preis_einmal", "pauschale_monat")}}
     aktion = {"typ": "projekt_status", "projekt_id": p["id"], "ziel": a["ziel"], **({"daten": daten} if daten else {})}
     naechster = projekte.STATUS_KEYS.index(p["status"]) + 1 == projekte.STATUS_KEYS.index(a["ziel"]) \
         if p["status"] in projekte.STATUS_KEYS else False
@@ -756,7 +763,8 @@ WERKZEUGE = {
               "begruendung": S, "nur_ansehen": B}, ["behalten_lead_ids"]), w_aufraeumen, "einstellungen", 2, True),
     "projekt_status_vorschlagen": (
         "Projekt weiterschalten (Vorschlag)",
-        "Schlägt vor, ein Projekt in eine Phase zu schalten. Immer als Freigabe; nach dem Ja schaltet das OS selbst. "
+        "Schlägt vor, ein Projekt in eine Phase zu schalten. Als Freigabe; nach dem Ja schaltet das OS selbst (darf der "
+        "Agent „intern direkt ändern“, sofort). Ziel = aktuelle Phase plus Daten: nur Daten nachtragen. "
         "Ist das Ziel nicht der nächste Schritt (Projekt lief schon vor dem OS), übernimmt das OS den Stand direkt, "
         "mit den optionalen Daten (JJJJ-MM-TT) und Preisen.",
         _obj({"projekt_id": I, "ziel": S, "begruendung": S, "frist": S, "dringlichkeit": DRING,
