@@ -3109,6 +3109,39 @@ class AgentenTest(unittest.TestCase):
         self.assertTrue(leaddb.get_lead(c, rech, alle=True))  # Rechnung: bleibt immer
         self.assertEqual(aufraeumen.plan(c, [bleibt])["leads_weg"], [])
 
+    def test_projekt_stand_uebernehmen(self):
+        from app import agenten, mcp_server, projekte
+        c = self.c
+        agenten.alles_erlauben(c, "oskar", "ops")
+        lid = lead_anlegen(c, "Alter Kunde", stage="kunde")
+        pid = projekte.anlegen(c, "oskar", lid, verantwortlich="oskar", technik="finn")
+        projekte.weiter(c, "oskar", pid)  # Anforderung: OS legt zwei Schritt-Aufgaben an
+        schritt = lambda: [a["titel"] for a in aufgaben.zum_objekt(c, "projekt", pid)  # noqa: E731
+                           if a["status"] == "offen" and a["titel"].startswith(("Anforderung schreiben", "Aufwand"))]
+        self.assertEqual(len(schritt()), 2)
+        _, f = mcp_server.aufrufen(c, "agent:ops", "projekt_status_vorschlagen",
+                                   {"projekt_id": pid, "ziel": "betrieb", "live_am": "3.10."})
+        self.assertTrue(f)  # Datum falsch: gleich abgelehnt
+        d, f = mcp_server.aufrufen(c, "agent:ops", "projekt_status_vorschlagen",
+                                   {"projekt_id": pid, "ziel": "betrieb", "beauftragt_am": "2026-10-03",
+                                    "live_am": "2026-10-21", "preis_einmal": 415, "anforderung": "Outreach-Software"})
+        self.assertFalse(f, d)
+        self.assertEqual(projekte.get(c, pid)["status"], "anforderung")  # erst nach dem Ja
+        for f_ in c.execute("SELECT id, pruefer FROM freigaben WHERE angefragt_von='agent:ops' AND status='offen' "
+                            "AND vorschlag LIKE '%projekt_status%'").fetchall():
+            agenten.entscheiden(c, f_["pruefer"], f_["id"], True)
+        p = projekte.get(c, pid)
+        self.assertEqual(p["status"], "betrieb")
+        self.assertEqual((p["live_am"], p["betrieb_am"], p["beauftragt_am"]), ("2026-10-21", "2026-10-21", "2026-10-03"))
+        self.assertEqual((p["preis_einmal"], p["anforderung"]), (415, "Outreach-Software"))
+        self.assertTrue(p["kunde_bestaetigt_am"])
+        self.assertEqual(schritt(), [])  # Schritt-Aufgaben zu; AV-Vertrag u. Ä. aus „Beauftragt“ bleiben
+        # Mensch direkt: nur verantwortlich oder Kunden verwalten
+        with self.assertRaises(projekte.ProjektError):
+            projekte.stand_setzen(c, "agent:ops", pid, "abnahme")
+        self.assertEqual(projekte.stand_setzen(c, "oskar", pid, "abnahme")["status"], "abnahme")
+        self.assertTrue(projekte.get(c, pid)["punkte"])  # Checkliste steht
+
     def test_zustaendig_und_standard_person(self):
         from app import agenten, mcp_server
         c = self.c
