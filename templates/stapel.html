@@ -8,8 +8,10 @@
   <div class="st-zahl" aria-live="polite"><b>{{ n }}</b><span>{{ 'Freigabe wartet' if n == 1 else 'Freigaben warten' }} auf dich</span></div>
   {% if zahlen|length > 1 %}<p class="st-teile">{% for z in zahlen %}<span><b>{{ z.n }}</b> {{ z.label }}</span>{% endfor %}</p>{% endif %}
   {% if einrichten %}<a class="st-hinweis" href="{{ url_for('agenten.einrichten') }}">{{ i('link') }}<span><b>Agents einrichten</b> · in 5 Schritten verbunden</span></a>{% endif %}
-  {% if startklar_offen %}<a class="st-hinweis" href="{{ url_for('settings.startklar_seite') }}">{{ i('check') }}<span><b>Noch {{ startklar_offen }} Punkt{{ 'e' if startklar_offen != 1 }}</b> bis zum Start</span></a>
-  {% elif spaeter %}<p class="st-hinweis">{{ i('kalender') }}<span><b>{{ spaeter }}</b> auf später gelegt · kommen morgen früh wieder</span></p>{% endif %}
+  {% if startklar_offen %}<a class="st-hinweis" href="{{ url_for('settings.startklar_seite') }}">{{ i('check') }}<span><b>Noch {{ startklar_offen }} Punkt{{ 'e' if startklar_offen != 1 }}</b> bis zum Start</span></a>{% endif %}
+  {% if spaeter %}<form method="post" action="{{ url_for('stapel.zurueckholen') }}" class="st-hinweis-form">
+    <input type="hidden" name="_csrf" value="{{ csrf_token() }}">
+    <button class="st-hinweis" data-testid="freigaben-zurueckholen">{{ i('kalender') }}<span><b>{{ spaeter }}</b> auf später gelegt · kommen morgen früh wieder · <u>jetzt zeigen</u></span></button></form>{% endif %}
   {% if n %}<a class="st-start-knopf" href="{{ url_for('stapel.fokus', neu='1') }}" data-taste="Enter">Starten {{ i('pfeil') }}<kbd>↵</kbd></a>
   {% else %}<p class="st-leer">Nichts zu entscheiden. Neue Freigaben der Agents kommen von selbst hierher.
     <a class="os-link" href="{{ url_for('aufgaben.start') }}">Zu den Aufgaben</a></p>{% endif %}

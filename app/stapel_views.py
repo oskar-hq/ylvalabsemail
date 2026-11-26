@@ -89,6 +89,16 @@ def weiter():
     return redirect(safe_next(request.form.get("next", "")) or url_for("stapel.fokus"))
 
 
+@bp.post("/freigaben/zurueckholen")
+@login_required
+def zurueckholen():
+    """Auf „Später“ gelegte Freigaben sofort wieder zeigen."""
+    from . import agenten
+    n = agenten.zurueckholen(db(), me())
+    flash(f"{n} Freigabe{'n' if n != 1 else ''} wieder da." if n else "Nichts auf später gelegt.")
+    return redirect(url_for("stapel.start"))
+
+
 @bp.post("/freigaben/fokus/spaeter")
 @login_required
 def spaeter():

@@ -258,7 +258,7 @@ def login_required(view):
 # Seiten ohne eigenes Modul (Mein Tag, Profil, Glocke, Web-App) darf jede angemeldete Person öffnen.
 FREI = {"index", "arbeitsbereich_wechseln", "leads.manifest", "leads.service_worker", "leads.push_key", "leads.push_subscribe",
         "leads.push_unsubscribe", "leads.push_test", "crm.notices_json", "crm.notices_read", "palette.search",
-        "uploaded", "band_svg", "stapel.start", "stapel.alt_start", "stapel.fokus", "stapel.weiter", "stapel.spaeter", "aufgaben.start",
+        "uploaded", "band_svg", "stapel.start", "stapel.alt_start", "stapel.fokus", "stapel.weiter", "stapel.spaeter", "stapel.zurueckholen", "aufgaben.start",
         "pipeline.seite"}
 # Mit dem Postfach angemeldet, aber noch keine Person gewählt: nur der Mailer und die Auswahl
 OHNE_PERSON = {"compose", "preview", "send", "upload", "history", "history_html", "uploaded", "band_svg",
