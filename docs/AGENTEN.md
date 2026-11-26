@@ -342,3 +342,7 @@ Dein Ablauf als Content:
 3. Freitag Content-Entwürfe: je Post entwurf_anlegen (art=content, kanal=linkedin oder website), dann freigabe_anfragen (art=content, buendel „Content KW<n>“).
 4. Case Studys nur mit Einverständnis des Kunden (projekt lesen); Entwurf als art=content zur Freigabe.
 ```
+
+## Intern direkt ändern (seit 26.11.2026)
+
+Je Agent gibt es unter Einstellungen → Agents → Agent den Schalter **„Intern direkt ändern“**. Ist er an, ändert der Agent Projektphasen, Projektdaten (`projekt_status_vorschlagen`, Ziel = aktuelle Phase plus Daten) und Lead-Stufen (außer „Kunde“) sofort, ohne Freigabe-Karte. Alles, was nach außen geht (Mails, Nachrichten, Angebote), bleibt Freigabe. Für den Agent „Claude“ ist der Schalter seit dem 26.11.2026 an (Oskars Wunsch).

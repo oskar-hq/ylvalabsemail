@@ -3142,6 +3142,29 @@ class AgentenTest(unittest.TestCase):
         self.assertEqual(projekte.stand_setzen(c, "oskar", pid, "abnahme")["status"], "abnahme")
         self.assertTrue(projekte.get(c, pid)["punkte"])  # Checkliste steht
 
+    def test_intern_direkt_aendern(self):
+        from app import agenten, mcp_server, projekte
+        c = self.c
+        agenten.alles_erlauben(c, "oskar", "ops")
+        lid = lead_anlegen(c, "Direkt Kunde", stage="kunde")
+        pid = projekte.anlegen(c, "oskar", lid, verantwortlich="oskar", technik="finn")
+        self.assertFalse(agenten.direkt(c, "agent:ops"))
+        agenten.direkt_setzen(c, "oskar", "ops", True)
+        d, f = mcp_server.aufrufen(c, "agent:ops", "projekt_status_vorschlagen",
+                                   {"projekt_id": pid, "ziel": "abnahme", "beauftragt_am": "2026-11-10",
+                                    "preis_einmal": 200})
+        self.assertFalse(f, d)
+        self.assertTrue(d["gesetzt"])
+        p = projekte.get(c, pid)
+        self.assertEqual((p["status"], p["preis_einmal"], p["beauftragt_am"]), ("abnahme", 200, "2026-11-10"))
+        self.assertFalse(c.execute("SELECT 1 FROM freigaben WHERE angefragt_von='agent:ops' AND status='offen' AND "
+                                   "vorschlag LIKE '%projekt_status%'").fetchone())
+        andere = lead_anlegen(c, "Direkt Lead", stage="neu")
+        d, f = mcp_server.aufrufen(c, "agent:ops", "lead_stufe_setzen", {"lead_id": andere, "stufe": "kontaktiert"})
+        self.assertTrue(d["gesetzt"], d)
+        agenten.direkt_setzen(c, "oskar", "ops", False)
+        self.assertFalse(agenten.direkt(c, "agent:ops"))
+
     def test_zustaendig_und_standard_person(self):
         from app import agenten, mcp_server
         c = self.c

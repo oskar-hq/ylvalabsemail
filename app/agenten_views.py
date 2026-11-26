@@ -354,6 +354,21 @@ def alles(key):
     return _fertig("Darf jetzt alles lesen und bearbeiten. Freigeben bleibt bei euch.", ziel)
 
 
+@bp.post("/einstellungen/agenten/<key>/direkt")
+@login_required
+def direkt(key):
+    ziel = url_for("agenten.detail", key=key)
+    if not _verwalten():
+        return _fertig("Ändern darf, wer Personen und Rechte verwaltet.", ziel, ok=False)
+    an = request.form.get("an") == "1"
+    try:
+        agenten.direkt_setzen(db(), me(), key, an)
+    except agenten.AgentError as exc:
+        return _fertig(str(exc), ziel, ok=False)
+    return _fertig("Ändert interne Daten jetzt direkt. Nach außen bleibt alles Freigabe." if an else
+                   "Interne Änderungen laufen wieder über Freigaben.", ziel)
+
+
 @bp.post("/einstellungen/agenten/<key>/status")
 @login_required
 def status(key):

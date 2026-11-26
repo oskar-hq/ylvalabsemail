@@ -346,7 +346,7 @@ def _datum(v):
         raise ProjektError("Datum bitte als JJJJ-MM-TT.") from exc
 
 
-def stand_setzen(c, wer, pid, ziel, daten=None, notiz=""):
+def stand_setzen(c, wer, pid, ziel, daten=None, notiz="", erlaubt=False):
     """Stand übernehmen: ein Projekt, das schon vor dem OS lief (oder weiter ist als eingetragen), direkt auf seine
     echte Phase setzen, ohne die Schritte einzeln zu durchlaufen. Trägt Daten (Beauftragt, Live, Betrieb …),
     Preise und Anforderung mit nach. Aufgaben übersprungener Schritte schließt das OS. Nur Menschen mit
@@ -357,7 +357,7 @@ def stand_setzen(c, wer, pid, ziel, daten=None, notiz=""):
         raise ProjektError("Dieses Projekt gibt es nicht.")
     if ziel not in STATUS_KEYS or ziel == "beendet":
         raise ProjektError("Phase: " + ", ".join(k for k in STATUS_KEYS if k != "beendet") + ".")
-    if wer != p["verantwortlich"] and not firma.darf(c, wer, "kunden", firma.VERWALTEN):
+    if not erlaubt and wer != p["verantwortlich"] and not firma.darf(c, wer, "kunden", firma.VERWALTEN):
         raise ProjektError("Den Stand setzt die verantwortliche Person.")
     daten = daten or {}
     extra = {k: _datum(daten.get(k)) for k in STAND_DATEN if daten.get(k)}
