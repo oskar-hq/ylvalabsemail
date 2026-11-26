@@ -506,6 +506,8 @@ body.os-sheet-open .os-page,body.os-sheet-open main.page{transform:scale(.94);bo
   background:var(--surface-sunken);color:var(--text-secondary);font:500 15px/20px var(--sans);text-decoration:none;max-width:100%}
 .st-hinweis b{color:var(--text-primary);font-weight:600}
 .st-hinweis svg{flex:none;width:16px;height:16px;color:var(--link)}
+button.st-hinweis{border:0;cursor:pointer}
+button.st-hinweis u{text-decoration:none;color:var(--link)}
 .st-start-knopf{display:flex;width:fit-content;align-items:center;gap:14px;margin:28px auto 0;height:60px;padding:0 20px 0 28px;border-radius:var(--radius-md);
   background:var(--ink-solid);color:var(--on-ink);font:600 19px/1 var(--sans);text-decoration:none;box-shadow:var(--shadow-float);
   transition:transform var(--t-snappy) var(--spring-snappy)}

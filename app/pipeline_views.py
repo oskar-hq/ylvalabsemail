@@ -18,10 +18,12 @@ ARTEN = {"aufgabe": ("Aufgabe", "blau"), "anfrage": ("Aufgabe", "blau"), "kommen
          "projekt": ("Projekt", "lila"), "entscheidung": ("Entscheidung", "orange")}
 
 
-def _agent_status(offen, zuletzt, heute_n):
+def _agent_status(offen, zuletzt, heute_n, spaeter=0):
     jetzt = datetime.now()
     if offen:
         return "wartet", "wartet auf euch"
+    if spaeter:
+        return "heute", f"{spaeter} auf später gelegt"
     if zuletzt and jetzt - datetime.fromisoformat(zuletzt) < timedelta(minutes=20):
         return "arbeitet", "arbeitet gerade"
     if heute_n:
@@ -42,11 +44,14 @@ def agents_ueberblick(c):
             if h in je_stunde:
                 je_stunde[h] += 1
         hoch = max(je_stunde.values()) or 1
-        offen = c.execute("SELECT COUNT(*) FROM freigaben WHERE angefragt_von=? AND status='offen'",
-                          (a["wer"],)).fetchone()[0]
-        bei = [r[0] for r in c.execute("SELECT DISTINCT pruefer FROM freigaben WHERE angefragt_von=? AND status='offen'",
-                                       (a["wer"],))]
-        status, label = _agent_status(offen, a["zuletzt_aktiv"], len(ev))
+        jetzt = datetime.now().isoformat(timespec="seconds")
+        offen = c.execute("SELECT COUNT(*) FROM freigaben WHERE angefragt_von=? AND status='offen' AND "
+                          "IFNULL(spaeter_bis, '') <= ?", (a["wer"], jetzt)).fetchone()[0]
+        spaeter = c.execute("SELECT COUNT(*) FROM freigaben WHERE angefragt_von=? AND status='offen' AND "
+                            "spaeter_bis > ?", (a["wer"], jetzt)).fetchone()[0]
+        bei = [r[0] for r in c.execute("SELECT DISTINCT pruefer FROM freigaben WHERE angefragt_von=? AND status='offen' "
+                                       "AND IFNULL(spaeter_bis, '') <= ?", (a["wer"], jetzt))]
+        status, label = _agent_status(offen, a["zuletzt_aktiv"], len(ev), spaeter)
         if a["status"] != "aktiv":
             status, label = "gesperrt", "gesperrt"
         elif a["key"] not in verbunden and not ev:
@@ -95,7 +100,8 @@ def seite():
     c = db()
     woche = (date.today() - timedelta(days=date.today().weekday())).isoformat()
     kacheln = [
-        ("Freigaben offen", c.execute("SELECT COUNT(*) FROM freigaben WHERE status='offen'").fetchone()[0], "/freigaben?alle=1"),
+        ("Freigaben offen", c.execute("SELECT COUNT(*) FROM freigaben WHERE status='offen' AND IFNULL(spaeter_bis, '') <= ?",
+                                      (datetime.now().isoformat(timespec="seconds"),)).fetchone()[0], "/freigaben"),
         ("Antworten warten", len(posteingang.wartend(c)), "/chat"),
         ("Aufgaben überfällig", c.execute("SELECT COUNT(*) FROM aufgaben WHERE status='offen' AND faellig < ?",
                                           (date.today().isoformat(),)).fetchone()[0], "/aufgaben/alle?ansicht=alle"),

@@ -997,6 +997,16 @@ def spaeter(c, wer, fid, bis=None):
     firma.log(c, wer, "freigabe", f["objekt_typ"], f["objekt_id"], f"Auf später gelegt: {_json(f['vorschlag'], {}).get('titel')}")
 
 
+def zurueckholen(c, wer):
+    """Alle auf „Später“ gelegten Freigaben dieser Person sofort wieder in den Stapel holen."""
+    from . import firma
+    n = c.execute("UPDATE freigaben SET spaeter_bis=NULL WHERE art='agent' AND status='offen' AND pruefer=? AND "
+                  "spaeter_bis IS NOT NULL", (wer,)).rowcount
+    if n:
+        firma.log(c, wer, "freigabe", None, None, f"{n} auf später gelegte Freigabe{'n' if n != 1 else ''} zurückgeholt")
+    return n
+
+
 def entscheiden(c, wer, fid, ok, option=None, grund="", text=None, betreff=None, an=None, data_dir=None):
     """Eine Agent-Freigabe entscheiden. Nur Menschen, nie ein Agent (hart im Code). Bei Freigaben mit Entwurf gilt
     genau der Inhalt, den die Person sieht (oder hier ändert); ausgeführt wird nur, wenn er noch dazu passt."""

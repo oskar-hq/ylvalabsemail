@@ -3186,6 +3186,17 @@ class AgentenTest(unittest.TestCase):
         self.assertFalse(f, d)
         self.assertTrue((ordner / "update-requested").exists())
 
+    def test_spaeter_zurueckholen(self):
+        from app import agenten
+        c = self.c
+        fid = _agent_freigabe(c)[0]
+        pruefer = c.execute("SELECT pruefer FROM freigaben WHERE id=?", (fid,)).fetchone()[0]
+        agenten.spaeter(c, pruefer, fid)
+        self.assertEqual(agenten.karten(c, pruefer)[1], 1)
+        self.assertEqual(agenten.zurueckholen(c, pruefer), 1)
+        self.assertEqual(agenten.karten(c, pruefer)[1], 0)
+        self.assertEqual(len(agenten.karten(c, pruefer)[0]), 1)
+
     def test_zustaendig_und_standard_person(self):
         from app import agenten, mcp_server
         c = self.c
