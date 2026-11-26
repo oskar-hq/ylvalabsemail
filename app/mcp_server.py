@@ -518,10 +518,11 @@ def w_projekt_status(c, wer, a):
     text = a.get("begruendung") or (f"{p['kunde']}: weiter auf „{projekte.STATUS_LABEL[a['ziel']]}“." if naechster else
                                     f"{p['kunde']}: Stand übernehmen, {p['status_label']} → "
                                     f"{projekte.STATUS_LABEL[a['ziel']]}.")
-    if daten:
-        text += " Daten: " + ", ".join(f"{k}={v}" for k, v in daten.items() if k != "anforderung") \
-            + (" + Anforderung" if "anforderung" in daten else "")
-    r = agenten.anfragen(c, wer, "status", f"Projekt: {projekte.STATUS_LABEL[a['ziel']]}"[:60], text,
+    details = "\n".join(f"{k}: {v}" for k, v in daten.items() if k != "anforderung")
+    if daten.get("anforderung"):
+        details += "\n\nAnforderung:\n" + daten["anforderung"]
+    r = agenten.anfragen(c, wer, "status", f"Projekt: {projekte.STATUS_LABEL[a['ziel']]}"[:60], text[:240],
+                         details=details.strip(),
                          projekt_id=p["id"], aktion=aktion, frist=a.get("frist"),
                          dringlichkeit=a.get("dringlichkeit") or "normal")
     return {"als_freigabe": r}
