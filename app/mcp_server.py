@@ -495,6 +495,35 @@ def w_aufraeumen(c, wer, a):
             "Ergebnis."}
 
 
+def w_software(c, wer, a):
+    """Software-Stand lesen und – für Agents mit „Intern direkt ändern“ – nach Updates suchen oder das Update
+    einspielen. Gleicher Weg wie Einstellungen → Software und Updates (Austauschordner mit dem Update-Dienst)."""
+    from . import agent, firma, updater
+    from .main import SETTINGS
+    control = SETTINGS["CONTROL_DIR"]
+    aktion = a.get("aktion") or "status"
+    if aktion not in ("status", *updater.KINDS):
+        raise Werkzeugfehler("aktion: status, check oder update.")
+    if aktion == "status":
+        return updater.state(control)
+    if not agenten.direkt(c, wer):
+        raise Werkzeugfehler("Keine Berechtigung: Updates starten darf nur ein Agent mit „Intern direkt ändern“ "
+                             "(Einstellungen → Agents).")
+    if not updater.available(control):
+        raise Werkzeugfehler("Der Update-Dienst ist auf diesem Server nicht eingerichtet.")
+    if aktion == "update" and agent.RUN.get("id"):
+        raise Werkzeugfehler("Gerade läuft ein Lauf. Später noch einmal versuchen.")
+    try:
+        updater.request(control, aktion, wer)
+    except OSError as exc:
+        raise Werkzeugfehler(f"Der Austauschordner ist nicht beschreibbar ({exc}).") from exc
+    firma.log(c, wer, "einstellung", "software", aktion, {"update": "Update gestartet (Agent).",
+                                                           "check": "Nach Updates gesucht (Agent)."}[aktion])
+    return {"ok": True, "hinweis": "Nach Updates wird gesucht. Mit aktion=status in einer Minute nachsehen." if
+            aktion == "check" else "Update startet. Das OS ist gleich kurz weg (auch diese Verbindung) und kommt "
+            "von selbst wieder; danach mit aktion=status prüfen."}
+
+
 def w_projekt_status(c, wer, a):
     from . import projekte
     p = projekte.get(c, int(a["projekt_id"]))
@@ -761,6 +790,13 @@ WERKZEUGE = {
         "Nur auf ausdrücklichen Wunsch von Oskar oder Finn.",
         _obj({"behalten_lead_ids": {"type": "array", "items": I}, "aufgaben_entfernen": {"type": "array", "items": I},
               "begruendung": S, "nur_ansehen": B}, ["behalten_lead_ids"]), w_aufraeumen, "einstellungen", 2, True),
+    "software_update": (
+        "Software-Update",
+        "Stand der Software (aktion=status: Version, neue Änderungen, letztes Update) oder, für Agents mit „Intern "
+        "direkt ändern“, nach Updates suchen (check) bzw. das Update einspielen (update). Nach einem Merge ins "
+        "Repo: erst check, dann update. Das OS ist dabei kurz weg.",
+        _obj({"aktion": {"type": "string", "enum": ["status", "check", "update"]}}), w_software, "einstellungen", 1,
+        False),
     "projekt_status_vorschlagen": (
         "Projekt weiterschalten (Vorschlag)",
         "Schlägt vor, ein Projekt in eine Phase zu schalten. Als Freigabe; nach dem Ja schaltet das OS selbst (darf der "
