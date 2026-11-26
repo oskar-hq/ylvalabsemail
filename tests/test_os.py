@@ -3165,6 +3165,27 @@ class AgentenTest(unittest.TestCase):
         agenten.direkt_setzen(c, "oskar", "ops", False)
         self.assertFalse(agenten.direkt(c, "agent:ops"))
 
+    def test_software_update_per_agent(self):
+        import tempfile
+        from pathlib import Path
+        from app import agenten, mcp_server
+        from app.main import SETTINGS
+        c = self.c
+        agenten.alles_erlauben(c, "oskar", "ops")
+        ordner = Path(tempfile.mkdtemp())
+        alt = SETTINGS.get("CONTROL_DIR")
+        SETTINGS["CONTROL_DIR"] = ordner
+        self.addCleanup(lambda: SETTINGS.__setitem__("CONTROL_DIR", alt))
+        d, f = mcp_server.aufrufen(c, "agent:ops", "software_update", {"aktion": "status"})
+        self.assertFalse(f, d)
+        _, f = mcp_server.aufrufen(c, "agent:ops", "software_update", {"aktion": "update"})
+        self.assertTrue(f)  # ohne „Intern direkt ändern“ nicht
+        self.assertFalse((ordner / "update-requested").exists())
+        agenten.direkt_setzen(c, "oskar", "ops", True)
+        d, f = mcp_server.aufrufen(c, "agent:ops", "software_update", {"aktion": "update"})
+        self.assertFalse(f, d)
+        self.assertTrue((ordner / "update-requested").exists())
+
     def test_zustaendig_und_standard_person(self):
         from app import agenten, mcp_server
         c = self.c
