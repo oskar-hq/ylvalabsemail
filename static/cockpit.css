@@ -782,3 +782,10 @@ dd.social-links{margin-left:0}
 .festhalten>summary{list-style:none;cursor:pointer;display:inline-flex}
 .festhalten>summary::-webkit-details-marker{display:none}
 .festhalten .from-pick input[type=datetime-local]{width:auto;min-height:34px;padding:4px 10px}
+
+/* Als App auf dem Homescreen (iPhone, viewport-fit=cover) liegt die Seite unter der Statusleiste:
+   Kopfleiste um den sicheren Bereich nach unten schieben, damit Glocke, Suche und Konto erreichbar sind. */
+.top{box-sizing:border-box;padding-top:var(--safe-top);height:calc(64px + var(--safe-top));
+  padding-left:max(var(--gut),env(safe-area-inset-left,0px));padding-right:max(var(--gut),env(safe-area-inset-right,0px))}
+@media (max-width:639px){.top{height:calc(52px + var(--safe-top))}}
+:root{--safe-top:env(safe-area-inset-top,0px)}
