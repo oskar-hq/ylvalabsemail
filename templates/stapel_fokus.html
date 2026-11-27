@@ -30,9 +30,11 @@
     {% if item.typ == 'agent' and item.mehrere %}
       <form method="post" action="{{ url_for('agenten.buendel') }}" id="st-form">
         <input type="hidden" name="_csrf" value="{{ csrf }}"><input type="hidden" name="next" value="{{ hier }}">
+        <p class="os-caption st-buendel-hinweis">Häkchen weg = bleibt offen und kommt danach einzeln wieder.</p>
         <ul class="os-list st-buendel">{% for k in item.gruppe.eintraege %}
           <li><label class="os-akarte-zeile"><input type="checkbox" name="ids" value="{{ k.id }}" checked>
             <span class="os-txt"><b>{{ k.titel }}</b><span>{{ k.was }}</span></span></label>
+            {% if k.typ == 'entscheidung' and k.optionen %}<select class="os-akarte-option" name="option_{{ k.id }}" aria-label="Antwort für {{ k.titel }}">{% for o in k.optionen %}<option value="{{ o.key }}" {{ 'selected' if o.key == k.empfehlung }}>{{ o.key }}: {{ o.text }}{{ ' (Empfehlung)' if o.key == k.empfehlung }}</option>{% endfor %}</select>{% endif %}
             {% if k.entwurf %}<details class="os-akarte-details"><summary class="os-link">Entwurf ansehen</summary>
               {% if k.entwurf.betreff %}<p class="os-caption">An {{ k.entwurf.an }} · {{ k.entwurf.betreff }}</p>{% endif %}
               <p class="os-akarte-text">{{ k.entwurf.text }}</p></details>{% endif %}</li>{% endfor %}

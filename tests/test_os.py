@@ -3471,6 +3471,18 @@ class AgentenWebTest(WebBasis):
         self.assertTrue(r.get_json()["ok"], r.get_json())
         self.assertEqual({x[0] for x in c.execute(f"SELECT status FROM freigaben WHERE id IN ({ids[0]},{ids[1]})")},
                          {"angenommen"})
+        # Bündel aus Entscheidungen: nur eine freigeben, Option aus der Auswahl bzw. der Empfehlung
+        ids = [_agent_freigabe(c, "ops", titel=f"Idee {n}", buendel="Ideen")[0] for n in range(2)]
+        self.assertIn("option_" + str(ids[0]), self.client.get("/freigaben/alle").get_data(as_text=True))
+        r = self.post("/freigaben/agent/buendel", {"ids": [str(ids[0])], "aktion": "freigeben",
+                                                   f"option_{ids[0]}": "B"}, headers={"X-Requested-With": "fetch"})
+        self.assertTrue(r.get_json()["ok"], r.get_json())
+        self.assertNotIn("Nicht geklappt", r.get_json().get("message", ""))
+        self.assertEqual(json.loads(c.execute("SELECT geaendert FROM freigaben WHERE id=?", (ids[0],))
+                                    .fetchone()[0])["option"], "B")
+        self.assertEqual(c.execute("SELECT status FROM freigaben WHERE id=?", (ids[1],)).fetchone()[0], "offen")
+        c.execute("DELETE FROM entscheidungen WHERE titel LIKE 'Idee%'")
+        c.commit()
         # Hamza sieht Oskars Karten nicht und kann sie nicht entscheiden
         fid = _agent_freigabe(c, "ops", titel="Nur für Oskar")[0]
         self.als("hamza")

@@ -534,7 +534,11 @@ def buendel():
             elif aktion == "spaeter":
                 agenten.spaeter(c, me(), fid)
             else:
-                erg = agenten.entscheiden(c, me(), fid, True)
+                f = c.execute("SELECT vorschlag FROM freigaben WHERE id=?", (fid,)).fetchone()
+                v = json.loads(f["vorschlag"] or "{}") if f else {}
+                option = request.form.get(f"option_{fid}") or v.get("empfehlung") or (
+                    v["optionen"][0]["key"] if len(v.get("optionen") or []) == 1 else None)
+                erg = agenten.entscheiden(c, me(), fid, True, option=option)
                 if erg.get("status") == "fehler":
                     fehler.append(erg.get("text"))
                     continue
