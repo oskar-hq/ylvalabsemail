@@ -732,3 +732,5 @@ button.st-hinweis u{text-decoration:none;color:var(--link)}
 .er-leer p{margin:6px 0 0;font:600 20px/26px var(--sans)}
 .er-leer .os-check{width:48px;height:48px}
 .er-leer .os-check svg{inset:8px;width:28px;height:28px}
+.os-akarte-option{margin:6px 0 4px 32px;max-width:calc(100% - 32px);padding:6px 10px;border-radius:var(--radius-sm);border:1px solid var(--border-hairline);background:var(--surface);color:var(--text-primary);font:500 14px/20px var(--sans)}
+.st-buendel-hinweis{text-align:center;margin-bottom:8px}
